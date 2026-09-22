@@ -1,0 +1,7 @@
+# Kernafhankelijkheden voor het fundament (sectie A). sqlite3 en dataclasses
+# zijn standaardbibliotheek, dus nog geen entries nodig voor storage/schema.py.
+# Domain agents (sectie B/C) voegen hun eigen databronnen toe zodra ze
+# gebouwd worden (o.a. anthropic voor de LLM-synthese in deep-dive mode).
+
+# Alleen voor tests
+pytest
