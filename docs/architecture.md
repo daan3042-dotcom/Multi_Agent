@@ -11,7 +11,7 @@ alleen wat er al staat.
 | `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health | A.2 |
 | `health/data_health.py` | Staleness/onbereikbaarheid per databron, vóór de trigger-laag | A.3 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
-| `qc/qc.py` | Deterministische consistentiecheck + optionele lichte LLM-review, `NEEDS_REVIEW` | A.5 |
+| `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
 
 ## Datastroom (zoals sectie A hem vastlegt)
@@ -56,13 +56,29 @@ manager.manager.dispatch()  ── groepeert TriggerEvents tot een DispatchPlan
   `analyst_agent.ai`'s eigen regel ("don't let `NEEDS_REVIEW` reports be
   treated as a bug to fix away") — een lichte, pluggable review (géén 4
   parallelle reviewers, dat past niet bij doorlopend achtergronddraaien),
-  die een vlag zet in plaats van iets tegenhoudt.
+  die een vlag zet in plaats van iets tegenhoudt. `qc.qc.default_llm_review()`
+  is de concrete default-implementatie daarvan: dependency-injected
+  `client`-parameter (zelfde patroon als `self_consistency.py`), en geeft
+  bij een mislukte call altijd minstens één issue-string terug — nooit
+  stilzwijgend een lege lijst, want dat zou "gereviewd, niets gevonden"
+  claimen zonder dat er echt gereviewd is.
 - **SQLite via de standaardbibliotheek.** Geen nieuwe, mogelijk
   gecompileerde dependency — zelfde principe als `ADR-003` in
   `analyst_agent.ai` (geen gecompileerde dependencies waar vermijdbaar).
+
+## Bewijs dat het fundament samenhangt
+
+`tests/test_integration_section_a.py` doorloopt het volledige pad hierboven
+end-to-end met synthetische data (er is nog geen echte domain agent — dat is
+sectie B): claim opslaan → data-health-check → trigger-evaluatie → manager-
+dispatch → QC op een gesimuleerde deep-dive → deep-dive-output opslaan. Ook
+het stille-faalscenario dat A.3 specifiek moet voorkomen (een verouderde
+databron die zonder A.3 gewoon "geen trigger" zou opleveren) heeft een eigen
+test.
 
 ## Wat hierna komt
 
 Sectie B (`docs/roadmap.md`): monetary policy + currency agent als eerste
 twee domain agents, elk met monitoring- en deep-dive-mode, gebouwd bovenop
-dit fundament.
+dit fundament. Dat is ook de eerste keer dat `qc.qc.default_llm_review()`
+tegen een echte Anthropic-call draait in plaats van tegen een fake client.

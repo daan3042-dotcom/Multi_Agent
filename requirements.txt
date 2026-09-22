@@ -1,7 +1,10 @@
 # Kernafhankelijkheden voor het fundament (sectie A). sqlite3 en dataclasses
-# zijn standaardbibliotheek, dus nog geen entries nodig voor storage/schema.py.
-# Domain agents (sectie B/C) voegen hun eigen databronnen toe zodra ze
-# gebouwd worden (o.a. anthropic voor de LLM-synthese in deep-dive mode).
+# zijn standaardbibliotheek. anthropic is nodig voor qc.qc.default_llm_review()
+# (A.5) -- de daadwerkelijke API-call wordt pas gedaan door de client die de
+# aanroeper meegeeft (dependency injection), dus deze dependency is alleen
+# nodig als je de default-implementatie ECHT aanroept, niet om de tests te
+# draaien (die gebruiken een fake client).
+anthropic
 
 # Alleen voor tests
 pytest
