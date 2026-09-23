@@ -131,7 +131,39 @@ API) — is nog niet gebouwd. `AnalystAgentReport` is het contract daarvoor.
 trigger-laag de ene ticker per ongeluk tegen een andere ticker afzetten
 (zie `docs/architecture.md` voor de volledige uitleg).
 
-## Belangrijk voorbehoud, voor alle drie agents
+## Financial agent (`agents/financial_agent.py`)
+
+**Wat het volgt:** financiële-marktcondities — marktstress/liquiditeit,
+niet bedrijfsfundamentals (dat is de equity agent hierboven) en niet
+Fed-beleid zelf (dat is de monetary policy agent). Vier reeksen, alle van
+FRED, elk gezien als "vers" tot 10 dagen oud (afgestemd op de traagste,
+wekelijkse reeks — de andere drie zijn dagelijks):
+
+| Metric | FRED-reeks | Wat het meet |
+|---|---|---|
+| Financial Conditions Index | NFCI | Chicago Fed's samengestelde maatstaf voor krappe/ruime financiële condities |
+| High-yield credit spread | BAMLH0A0HYM2 | Kredietrisico-opslag — een snelle stijging is een klassiek stress-signaal |
+| VIX | VIXCLS | Impliciete volatiliteit ("angstindex") |
+| 10Y-2Y yield curve | T10Y2Y | Yield-curve-vorm, relevant voor recessierisico-inschatting |
+
+**Wanneer het triggert:** zelfde delta-aanpak als de andere agents:
+
+| Metric | Afwijking die triggert | Severity |
+|---|---|---|
+| Financial Conditions Index | > 0,1 punt | high |
+| High-yield credit spread | > 0,5 procentpunt | high |
+| VIX | > 5 punten | medium |
+| 10Y-2Y yield curve | > 0,15 procentpunt | medium |
+
+**Waar de deep-dive over gaat:** duidt wat de cijfers betekenen voor
+marktstress/liquiditeit — bijv. verkrappende financiële condities of een
+toegenomen kredietrisico-opslag — alleen als de cijfers dat zelf
+rechtvaardigen.
+
+**Bijzonderheid:** één instantie (net als monetary policy/currency), geen
+per-ticker-namespacing nodig zoals bij equity.
+
+## Belangrijk voorbehoud, voor alle vier agents
 
 Alle tolerances in de tabellen hierboven zijn **illustratieve
 plaatshouders** — geen door DD gevalideerde drempels. Welk absoluut niveau

@@ -5,10 +5,12 @@
 ## Current architecture
 
 Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
-domain agents + synthesizer), en C.1 (equity-adapter) uit `docs/roadmap.md`
-staan volledig, plus een tussentijdse verbetering: een gedeelde
-kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`) die elke
-deep-dive automatisch meekrijgt. 95 tests groen (`pytest`).
+domain agents + synthesizer), en C.1-C.2 (equity-adapter, financial agent)
+uit `docs/roadmap.md` staan volledig, plus een tussentijdse verbetering: een
+gedeelde kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`)
+die elke deep-dive automatisch meekrijgt, en een leesbaar overzicht per
+agent (`docs/agents.md`) zodat je nooit de code hoeft te lezen om te weten
+wat een agent doet. 101 tests groen (`pytest`).
 
 ## Completed
 
@@ -53,13 +55,23 @@ deep-dive automatisch meekrijgt. 95 tests groen (`pytest`).
   vergelijkt — deze fix hergebruikt `agents/base.py`'s nieuw uitgepakte
   `evaluate_deltas()`, en bewijst dat equity-triggers zonder enige
   aanpassing door dezelfde `manager.dispatch()` gaan als B.1/B.2.
+- C.2 `src/agents/financial_agent.py` — financiële-marktcondities (NFCI,
+  high-yield credit spread, VIX, 10Y-2Y yield curve, allemaal FRED), zelfde
+  opzet als B.1/B.2. Losstaand van equity (bedrijfsfundamentals) en
+  monetary policy (Fed-beleid zelf) — scope bevestigd met DD voordat
+  gebouwd, want "financial" was zonder die check een dubbelzinnige naam.
+- `docs/agents.md` — leesbaar overzicht per agent (wat volgt hij, wanneer
+  triggert hij, waar gaat de deep-dive over), tegenhanger van
+  `analyst_agent.ai`'s `framework.py`. Nieuwe regel in `CLAUDE.md`: een
+  agent is pas "af" met een sectie hierin.
 
-95 tests groen (`pytest`).
+101 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B + gedeelde kwaliteitsregels + C.1 (equity-adapter) afgerond. Nog
-  niet gestart: C.2-C.5 (financial/sector/commodity/economic agents).
+- Sectie B + gedeelde kwaliteitsregels + C.1-C.2 (equity-adapter, financial
+  agent) + `docs/agents.md` afgerond. Nog niet gestart: C.3-C.5 (sector/
+  commodity/economic agents).
 
 ## Known problems
 
@@ -86,8 +98,8 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 
 ## Next priorities
 
-1. C.2-C.5 (financial, sector, commodity, economic agents), in de volgorde
-   die `docs/roadmap.md` aangeeft.
+1. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
+   `docs/roadmap.md` aangeeft.
 2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
    praktisch te valideren, niet alleen met fake clients.

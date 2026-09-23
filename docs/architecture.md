@@ -1,4 +1,4 @@
-# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1 (equity)
+# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1/C.2 (equity, financial)
 
 Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
 alleen wat er al staat.
@@ -18,6 +18,7 @@ alleen wat er al staat.
 | `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) — alleen vakinhoudelijke deep-dive-prompt | B.2 |
 | `synthesizer/synthesizer.py` | Legt gelijktijdige deep-dives naast elkaar (nog geen cross-domein-synthese) | B.3 |
 | `agents/equity_agent.py` | Adapter: analyst_agent.ai-output (`AnalystAgentReport`) → Claims/DomainOutput, per ticker genamespaced (`equity:<TICKER>`) | C.1 |
+| `agents/financial_agent.py` | FRED (NFCI, high-yield credit spread, VIX, 10Y-2Y yield curve) — financiële-marktcondities, losstaand van equity/monetary policy | C.2 |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 

@@ -52,7 +52,11 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
       daadwerkelijke koppeling (hoe een analyst_agent.ai-run hier
       terechtkomt) is nog niet gebouwd — `AnalystAgentReport` is het
       contract daarvoor.
-- [ ] 2. Financial agent.
+- [x] 2. Financial agent (`src/agents/financial_agent.py`): financiële-
+      marktcondities (Chicago Fed NFCI, high-yield credit spread, VIX,
+      10Y-2Y yield curve) — losstaand van bedrijfsfundamentals (equity) en
+      Fed-beleid zelf (monetary policy). Zelfde opzet als B.1/B.2, één
+      instantie via FRED.
 - [ ] 3. Sector agent.
 - [ ] 4. Commodity agent.
 - [ ] 5. Economic agent.
