@@ -42,6 +42,7 @@ Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
 | Volledige planning | `docs/roadmap.md` |
 | Huidige status | `docs/project-state.md` |
 | Architectuur/datastroom van het fundament | `docs/architecture.md` |
+| **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
 | Tests | `tests/` |
 
 ## Voordat je iets verandert
@@ -55,6 +56,11 @@ Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
   regressiegeval waar relevant).
 - Vink een roadmap-item pas af in `docs/roadmap.md` als de bijbehorende
   tests groen zijn.
+- Een nieuwe domain agent is pas "af" als hij ook een sectie heeft in
+  `docs/agents.md` (wat volgt hij, wanneer triggert hij, waar gaat de
+  deep-dive over) — DD moet nooit de code hoeven lezen om te weten wat een
+  agent doet. Wijzig je een bestaande agent (databron, tolerances,
+  deep-dive-onderwerp)? Werk dan ook zijn sectie in `docs/agents.md` bij.
 
 ## Wat NIET te doen zonder te vragen
 

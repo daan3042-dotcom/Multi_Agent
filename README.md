@@ -8,11 +8,14 @@ marktintelligentie — incl. een dagelijkse Nasdaq/NQ-regime-agent en een news
 monitor agent.
 
 Volledige planning: `docs/roadmap.md`. Huidige status: `docs/project-state.md`.
+**Wat elke agent daadwerkelijk doet (zonder code te lezen): `docs/agents.md`.**
 
 ## Status
 
-Sectie A (fundament) staat: elke domain agent zal straks tegen hetzelfde
-contract, dezelfde database, dezelfde trigger- en QC-laag draaien.
+Fundament (sectie A) + de eerste drie domain agents staan: monetary policy,
+currency (sectie B) en equity (C.1, een adapter over `analyst_agent.ai`'s
+bestaande output). Zie `docs/agents.md` voor wat elk van hen concreet volgt
+en wanneer ze triggeren.
 
 ## Setup
 
@@ -20,8 +23,9 @@ contract, dezelfde database, dezelfde trigger- en QC-laag draaien.
 pip install -r requirements.txt
 ```
 
-Geen API-keys nodig voor het fundament zelf (sectie A) — die komen met de
-eerste domain agents (sectie B).
+Voor de monetary policy en currency agent: `FRED_API_KEY` resp.
+`ALPHAVANTAGE_API_KEY` in de environment. Voor een echte deep-dive-call
+(i.p.v. de fake client die de tests gebruiken): `ANTHROPIC_API_KEY`.
 
 ## Tests
 
@@ -34,7 +38,8 @@ pytest
 ## Project structure & documentation
 
 - `CLAUDE.md` — projectbriefing
-- `docs/architecture.md` — modulekaart en datastroom van sectie A
+- `docs/agents.md` — wat elke agent doet, in gewone taal (start hier)
+- `docs/architecture.md` — modulekaart en datastroom
 - `docs/roadmap.md` — volledige planning (levend document, afvinkbaar)
 - `docs/project-state.md` — actuele status
 
