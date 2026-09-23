@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import SHARED_QUALITY_RULES, MetricSpec, run_deep_dive, run_monitoring
 from contract.output_contract import Mode
 from storage.schema import init_db
 
@@ -125,3 +125,45 @@ def test_run_deep_dive_llm_failure_is_never_silent(tmp_path):
     deep_dive_output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
     assert deep_dive_output.needs_review is True
     assert any("Deep-dive mislukt" in c.claim for c in deep_dive_output.claims)
+
+
+def test_run_deep_dive_prepends_shared_quality_rules_to_domain_prompt(tmp_path):
+    """Bewijst dat elke domain agent de gedeelde huisstijl-regels ECHT
+    meekrijgt in de daadwerkelijke API-call, niet alleen dat het los
+    getest is -- geen enkele domain agent kan dit per ongeluk overslaan,
+    want dit gebeurt in run_deep_dive() zelf, niet in de aanroeper."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output, _ = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "x"}}, SPECS, timedelta(days=35), now=now)
+
+    client = MagicMock()
+    response = MagicMock()
+    response.content = [MagicMock(type="text", text="Neutrale duiding.")]
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        return response
+
+    client.messages.create = fake_create
+
+    domain_specific_prompt = "Je bent een unieke, domeinspecifieke testinstructie."
+    run_deep_dive(conn, client, "monetary_policy", domain_specific_prompt, output.claims, [], now=now)
+
+    # run_deep_dive doet ZELF ook een LLM-review-call (qc.default_llm_review) na
+    # de deep-dive-call zelf -- expliciet de deep-dive-call opzoeken (die met de
+    # domeinspecifieke instructie) in plaats van blind de laatste call te pakken.
+    deep_dive_call = next(c for c in calls if domain_specific_prompt in c["system"])
+    sent_system_prompt = deep_dive_call["system"]
+    assert SHARED_QUALITY_RULES in sent_system_prompt
+    assert sent_system_prompt.index(SHARED_QUALITY_RULES) < sent_system_prompt.index(domain_specific_prompt)
+
+
+def test_shared_quality_rules_bans_directional_advice_language():
+    """Vangnet tegen zelf een keer per ongeluk de kernregels verzwakken --
+    dit zijn de concrete, niet-onderhandelbare eisen uit de afspraak in
+    CLAUDE.md ('Werkwijze met DD'), niet alleen losse sfeerbewoording."""
+    assert "koop/verkoop-advies" in SHARED_QUALITY_RULES
+    assert "VERBODEN patronen" in SHARED_QUALITY_RULES
+    assert "ALLEEN DE AANGELEVERDE CLAIMS" in SHARED_QUALITY_RULES
+    assert "ONZEKERHEID EXPLICIET" in SHARED_QUALITY_RULES

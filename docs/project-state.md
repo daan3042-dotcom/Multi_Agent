@@ -5,8 +5,11 @@
 ## Current architecture
 
 Zie `docs/architecture.md`. Sectie A (fundament) en sectie B (eerste twee
-domain agents + synthesizer) uit `docs/roadmap.md` staan volledig. 77 tests
-groen (`pytest`).
+domain agents + synthesizer) uit `docs/roadmap.md` staan volledig, plus een
+tussentijdse verbetering: een gedeelde kwaliteitsregels-module
+(`agents/base.py::SHARED_QUALITY_RULES`) die elke deep-dive automatisch
+meekrijgt, i.p.v. dat elke domain agent zijn eigen neutraliteits-/
+kwaliteitsregels dupliceert. 79 tests groen (`pytest`).
 
 ## Completed
 
@@ -32,12 +35,21 @@ groen (`pytest`).
   naast elkaar (nog geen cross-domein-synthese, dat is F).
 - B.4 `tests/test_integration_section_b.py` — end-to-end met het
   Fed-besluit-scenario (raakt monetary policy + currency tegelijk).
+- `agents/base.py::SHARED_QUALITY_RULES` — centrale, niet-onderhandelbare
+  schrijfregels (neutraliteit + verboden formuleringen, alleen aangeleverde
+  claims, onzekerheid expliciet, aanleiding-zonder-overinterpretatie),
+  automatisch door `run_deep_dive()` vóór elke domein-specifieke prompt
+  geplakt. `monetary_policy_agent.py`/`currency_agent.py`'s
+  `DEEP_DIVE_SYSTEM_PROMPT` bevat nu alleen nog vakinhoud — de gedupliceerde
+  neutraliteitszinnen zijn eruit. Naar aanleiding van DD's vraag of alle
+  agents straks goed kunnen samenwerken en hoe we de analysekwaliteit
+  structureel hoog houden (zie `CLAUDE.md`, "Werkwijze met DD").
 
-77 tests groen (`pytest`).
+79 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B (skeleton met eerste twee domeinen) afgerond. Nog niet gestart:
+- Sectie B afgerond + de gedeelde kwaliteitsregels-module. Nog niet gestart:
   sectie C (equity/financial/sector/commodity/economic agents).
 
 ## Known problems

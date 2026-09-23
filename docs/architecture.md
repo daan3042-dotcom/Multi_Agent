@@ -13,9 +13,9 @@ alleen wat er al staat.
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
-| `agents/base.py` | Gedeelde scaffolding: `run_monitoring()` (databron → claims → delta-trigger) + `run_deep_dive()` (LLM-synthese → QC → opslag) | B.1/B.2 |
-| `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) | B.1 |
-| `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) | B.2 |
+| `agents/base.py` | Gedeelde scaffolding: `run_monitoring()` (databron → claims → delta-trigger) + `run_deep_dive()` (LLM-synthese → QC → opslag) + `SHARED_QUALITY_RULES` (centrale schrijfregels, voor élke deep-dive) | B.1/B.2 |
+| `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) — alleen vakinhoudelijke deep-dive-prompt | B.1 |
+| `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) — alleen vakinhoudelijke deep-dive-prompt | B.2 |
 | `synthesizer/synthesizer.py` | Legt gelijktijdige deep-dives naast elkaar (nog geen cross-domein-synthese) | B.3 |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
@@ -35,7 +35,8 @@ manager.manager.dispatch(alle TriggerEvents uit deze cyclus, over alle domeinen)
        │  groepeert per domein tot een DispatchPlan; is_simultaneous als >1 domein escaleert
        ▼
 agents.base.run_deep_dive()  (per geëscaleerd domein, met zijn eigen TriggerEvents + Claims)
-       │  Claude-call (system-prompt per domein, dependency-injected client)
+       │  system-prompt = SHARED_QUALITY_RULES + domein-specifieke DEEP_DIVE_SYSTEM_PROMPT
+       │  Claude-call (dependency-injected client)
        │  qc.qc.apply_qc() incl. qc.qc.default_llm_review() → NEEDS_REVIEW
        │  narrative-Claim (value=deep-dive-tekst) toegevoegd aan de claims
        │  storage.schema.save_domain_output() (mode=DEEP_DIVE)
@@ -89,6 +90,34 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   hardgecodeerd "hoog/laag"-niveau — welk absoluut niveau significant is,
   is een bewust open beslissing (sectie H). De `tolerance`-waarden in
   `METRIC_SPECS` zijn illustratieve plaatshouders.
+
+## Gedeelde kwaliteitsregels voor élke deep-dive (`agents/base.py::SHARED_QUALITY_RULES`)
+
+Elke domain agent schreef eerst zijn eigen neutraliteits-/kwaliteitsregels
+los in zijn `DEEP_DIVE_SYSTEM_PROMPT` — dat zou bij elke nieuwe agent
+(sectie C+) verder uit elkaar gaan lopen. Nu geldt: `run_deep_dive()` plakt
+`SHARED_QUALITY_RULES` automatisch vóór de domein-specifieke prompt; een
+domain agent levert alleen nog vakinhoud. Tegenhanger van
+`analyst_agent.ai`'s `framework.py::SYSTEM_PROMPT` (concrete, verboden
+formuleringen i.p.v. vage "wees neutraal"-instructies), hier centraal
+gehouden in plaats van per rapport-sectie herhaald.
+
+Wat de regels concreet afdwingen:
+- **Geen koop/verkoop-advies of koersdoel**, met expliciet verboden
+  formuleringen (zelfde stijl als `framework.py`'s "VERBODEN patronen").
+- **Alleen de aangeleverde claims** — geen zelf berekende of verzonnen
+  cijfers; ontbrekende afleidbaarheid moet met zoveel woorden benoemd
+  worden in plaats van gegokt.
+- **Onzekerheid expliciet** — een lage confidence-score op een claim
+  rechtvaardigt geen stellige formulering in de tekst.
+- **Aanleiding, geen overinterpretatie** — de trigger-reden mag verklaard
+  worden, maar één afwijkende observatie is nog geen trend.
+
+Voordeel: een kwaliteitsverbetering hier geldt meteen voor alle domeinen
+(ook toekomstige, sectie C+), en een nieuwe agent kan de regels niet per
+ongeluk vergeten — `run_deep_dive()` voegt ze toe, niet de aanroeper.
+`tests/test_agents_base.py::test_run_deep_dive_prepends_shared_quality_rules_to_domain_prompt`
+bewijst dat dit ook daadwerkelijk in de verstuurde API-call terechtkomt.
 
 ## Bewijs dat het fundament + B samenhangen
 

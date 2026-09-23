@@ -20,6 +20,16 @@ is, staat bewust nog open (zie docs/roadmap.md sectie H). Een delta-check is
 zinvol ongeacht dat besluit: gebruikt geen aannames over wat een "hoog" of
 "laag" niveau is, alleen "is dit meer veranderd dan normaal sinds de vorige
 keer".
+
+KWALITEIT VAN DE DEEP-DIVES (zie CLAUDE.md, "Werkwijze met DD"): elk domain
+agent's DEEP_DIVE_SYSTEM_PROMPT bevat ALLEEN vakinhoudelijke context --
+SHARED_QUALITY_RULES hieronder wordt door run_deep_dive() automatisch
+ervoor geplakt en geldt dus voor ELKE deep-dive, ongeacht domein. Dit is de
+tegenhanger van analyst_agent.ai's framework.py::SYSTEM_PROMPT (dezelfde
+soort concrete, niet-onderhandelbare schrijfregels), hier centraal gehouden
+in plaats van per domein gedupliceerd -- zodat een kwaliteitsverbetering op
+één plek meteen voor alle domeinen geldt, en nieuwe domeinen (sectie C+)
+'m niet zelf hoeven te herschrijven of kunnen vergeten.
 """
 
 from __future__ import annotations
@@ -36,6 +46,32 @@ from storage.schema import load_latest_claims, record_data_health, save_domain_o
 from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_surprise
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
+
+SHARED_QUALITY_RULES = """Dit is een korte deep-dive-synthese binnen een doorlopend \
+marktintelligentie-systeem, geen los rapport -- onderstaande regels gelden daarom voor \
+ELKE domain agent, ongeacht vakgebied, en zijn niet onderhandelbaar. Je specifieke \
+instructie hieronder vult alleen het vakinhoudelijke onderwerp in, niet deze regels.
+
+NEUTRALITEIT, concreet (dit wordt vaak toch geschreven, dus expliciet): schrijf nooit een \
+koop/verkoop-advies, koersdoel, of stellige richting-voorspelling. VERBODEN patronen: \
+"lijkt onder-/overgewaardeerd", "de cijfers ondersteunen een stijging/daling", "zal \
+waarschijnlijk stijgen/dalen naar X" zonder expliciete bron/voorbehoud. Vervang dit door \
+feitelijke, vergelijkende taal: in plaats van "dit wijst op verdere verkrapping" schrijf \
+bijvoorbeeld "dit is de op-een-na grootste stijging in de beschikbare data, alleen de \
+observatie op [datum indien in de claims] was groter".
+
+ALLEEN DE AANGELEVERDE CLAIMS: gebruik uitsluitend de cijfers die je expliciet krijgt \
+aangereikt. Bereken, extrapoleer of verzin zelf geen cijfers -- als iets niet uit de \
+claims valt af te leiden, benoem dat expliciet ("dit is niet af te leiden uit de \
+beschikbare data") in plaats van te gokken.
+
+ONZEKERHEID EXPLICIET: elke claim heeft een confidence-score en een bron; een lage \
+confidence rechtvaardigt geen stellige formulering. Noem de bron bij een cijfer als dat de \
+tekst leesbaarder maakt, en benoem expliciete twijfel als die er is.
+
+AANLEIDING, GEEN OVERINTERPRETATIE: leg uit waarom dit een trigger opleverde (de afwijking \
+t.o.v. de vorige observatie, zoals aangeleverd), maar trek geen grotere conclusie dan de \
+cijfers zelf rechtvaardigen -- één afwijkende observatie is geen trend."""
 
 
 @dataclass(frozen=True)
@@ -158,11 +194,17 @@ def run_deep_dive(
     self_consistency.py -- test baar met een fake client, geen hardcoded
     Anthropic-afhankelijkheid.
 
+    `system_prompt` is de VAKINHOUDELIJKE instructie van de aanroepende
+    domain agent -- SHARED_QUALITY_RULES wordt hier automatisch ervoor
+    geplakt, dus de aanroeper hoeft neutraliteit/bronvermelding/onzekerheid
+    niet zelf te herhalen (en kan dat ook niet per ongeluk overslaan).
+
     Een mislukte call wordt NOOIT stilzwijgend een lege/ontbrekende output --
     het wordt een eigen DomainOutput met needs_review=True en een claim die
     de fout zelf benoemt, zodat het zichtbaar blijft voor de manager/
     synthesizer in plaats van gewoon te verdwijnen."""
     now = now or now_utc()
+    full_system_prompt = f"{SHARED_QUALITY_RULES}\n\n{system_prompt}"
 
     claims_summary = (
         "\n".join(f"- {c.claim}: {c.value} (bron: {c.source}, metric_key: {c.metric_key})" for c in claims)
@@ -183,7 +225,7 @@ def run_deep_dive(
         response = client.messages.create(
             model=model,
             max_tokens=800,
-            system=system_prompt,
+            system=full_system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
         deep_dive_text = "".join(b.text for b in response.content if b.type == "text").strip()

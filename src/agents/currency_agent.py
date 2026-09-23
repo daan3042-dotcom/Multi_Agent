@@ -13,6 +13,11 @@ sectie E/I, niet hier.
 
 Tolerances in METRIC_SPECS zijn illustratieve plaatshouders -- zie
 agents/base.py's docstring en docs/roadmap.md sectie H.
+
+DEEP_DIVE_SYSTEM_PROMPT hieronder bevat ALLEEN vakinhoud -- de algemene
+schrijfregels (neutraliteit, alleen aangeleverde cijfers, onzekerheid
+expliciet) staan centraal in agents/base.py::SHARED_QUALITY_RULES en worden
+door run_deep_dive() automatisch ervoor geplakt.
 """
 
 from __future__ import annotations
@@ -41,11 +46,12 @@ METRIC_SPECS = {
     "gbp_usd": MetricSpec(label="GBP/USD", tolerance=0.01, severity="medium"),
 }
 
-DEEP_DIVE_SYSTEM_PROMPT = """Je bent een valuta-analist die kort en neutraal duidt wat een \
-significante wisselkoersbeweging betekent. Puur feitelijk: geen koop/verkoop-advies, geen \
-koersvoorspelling. Je mag een mogelijk verband met monetair beleid benoemen als de \
-aangeleverde cijfers daar aanleiding toe geven, maar verzin geen causaliteit die niet uit \
-die cijfers blijkt. Gebruik UITSLUITEND de aangeleverde cijfers."""
+DEEP_DIVE_SYSTEM_PROMPT = """Je bent een valuta-analist gespecialiseerd in majeure \
+wisselkoersen: EUR/USD, USD/JPY, GBP/USD. Duid wat de aangeleverde beweging betekent, en \
+benoem een mogelijk verband met monetair beleid ALLEEN als de aangeleverde cijfers daar \
+zelf aanleiding toe geven -- verzin geen causaliteit die er niet expliciet uit blijkt. \
+(De algemene schrijfregels -- neutraliteit, alleen aangeleverde cijfers, onzekerheid \
+expliciet -- staan al vóór dit stuk; dit is alleen de vakinhoudelijke aanvulling.)"""
 
 
 def _fetch_pair(from_currency: str, to_currency: str, api_key: str) -> dict | None:

@@ -13,6 +13,11 @@ analyst_agent.ai, geen import ervan (zie CLAUDE.md).
 
 Tolerances in METRIC_SPECS zijn illustratieve plaatshouders -- zie
 agents/base.py's docstring en docs/roadmap.md sectie H.
+
+DEEP_DIVE_SYSTEM_PROMPT hieronder bevat ALLEEN vakinhoud -- de algemene
+schrijfregels (neutraliteit, alleen aangeleverde cijfers, onzekerheid
+expliciet) staan centraal in agents/base.py::SHARED_QUALITY_RULES en worden
+door run_deep_dive() automatisch ervoor geplakt.
 """
 
 from __future__ import annotations
@@ -43,11 +48,13 @@ METRIC_SPECS = {
     "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.3, severity="high"),
 }
 
-DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist die kort en neutraal duidt wat een \
-verandering in Amerikaans monetair beleid (Fed funds rate, 10-jaars yield, CPI-index, \
-werkloosheid) betekent. Puur feitelijk: geen koop/verkoop-advies, geen koersvoorspelling, \
-geen stellige richting zonder expliciete onderbouwing uit de aangeleverde cijfers. \
-Gebruik UITSLUITEND de aangeleverde cijfers -- bereken of verzin er zelf niets bij."""
+DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaans \
+monetair beleid: Fed funds rate, 10-jaars Treasury yield, CPI-index, werkloosheid. Duid \
+wat de aangeleverde cijfers betekenen in hun macro-context (bijv. verkrappend/verruimend \
+beleidssignaal, een mogelijk verband tussen de aangeleverde reeksen onderling) -- alleen \
+als de cijfers dat zelf rechtvaardigen. (De algemene schrijfregels -- neutraliteit, alleen \
+aangeleverde cijfers, onzekerheid expliciet -- staan al vóór dit stuk; dit is alleen de \
+vakinhoudelijke aanvulling.)"""
 
 
 def _fetch_series(series_id: str, api_key: str) -> dict | None:
