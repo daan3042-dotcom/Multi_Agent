@@ -67,6 +67,21 @@ Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
   `docs/roadmap.md` te checken (bijv. sectie C.1 kan pas nadat sectie B
   bewijst dat het monitoring→trigger→deep-dive→database-pad werkt).
 
+## Werkwijze met DD
+
+- Na elke coderonde: een korte samenvatting van welke bestanden zijn
+  toegevoegd/gewijzigd en wat dat betekent — niet pas aan het einde van een
+  hele sectie, maar elke keer dat er iets gecodeerd is.
+- Alle domain agents delen bewust hetzelfde framework (`contract/`,
+  `agents/base.py`) zodat de manager/synthesizer ze uniform kunnen
+  behandelen — zie `docs/architecture.md`. Nieuwe agents haken hierop aan,
+  ze bouwen geen eigen losstaande monitoring/deep-dive-logica.
+- Kwaliteit van de deep-dive-analyses is een expliciet, doorlopend
+  aandachtspunt — niet alleen "werkt het", maar "is de analyse oprecht
+  goed". Bij twijfel over een kwaliteitsafweging (bijv. hoeveel regels
+  centraal vastleggen vs. per domein vrij laten): eerst voorleggen, niet
+  in stilte kiezen.
+
 ## Taal
 
 Inline comments en documentatie zijn in het Nederlands, consistent met
