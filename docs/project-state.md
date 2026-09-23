@@ -64,14 +64,27 @@ wat een agent doet. 101 tests groen (`pytest`).
   triggert hij, waar gaat de deep-dive over), tegenhanger van
   `analyst_agent.ai`'s `framework.py`. Nieuwe regel in `CLAUDE.md`: een
   agent is pas "af" met een sectie hierin.
+- `src/analysis/` (nieuw, mirrors `analyst_agent.ai/src/analysis/`): eerste
+  bestand `nfci_interpretation.py`, de Chicago Fed's eigen gepubliceerde
+  NFCI-interpretatie i.p.v. de LLM zelf te laten inschatten wat "krap"/
+  "ruim" betekent. `financial_agent.py::deep_dive()` gebruikt dit al.
+  Naar aanleiding van DD's kernvraag: hoe weet ik dat deze agents
+  betrouwbare analyses doen? Antwoord: door onderbouwing in citeerbare,
+  Python-berekende modellen te bouwen (zoals equity al had via Altman Z/
+  Piotroski), niet alleen "cijfer veranderde, LLM schrijft erover".
+- Neutraliteitsregel expliciet ge-scoped (`agents/base.py`'s docstring):
+  geldt voor de automatische monitoring/deep-dive-laag, niet als blokkade
+  voor een toekomstige, apart te bouwen "thesis-mode" (sectie G.3) — DD wil
+  daar wél expliciet gevraagde directionele/probabilistische antwoorden
+  (zijn FOMC-voorbeeld). Vastgelegd in `docs/roadmap.md` sectie G.3 en I.
 
-101 tests groen (`pytest`).
+106 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
 - Sectie B + gedeelde kwaliteitsregels + C.1-C.2 (equity-adapter, financial
-  agent) + `docs/agents.md` afgerond. Nog niet gestart: C.3-C.5 (sector/
-  commodity/economic agents).
+  agent) + `docs/agents.md` + eerste `src/analysis/`-model afgerond. Nog
+  niet gestart: C.3-C.5 (sector/commodity/economic agents).
 
 ## Known problems
 
@@ -95,15 +108,23 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   nog geen code die een analyst_agent.ai-run daadwerkelijk uitvoert en zijn
   output in die vorm hierheen stuurt (subprocess, bestand, API — nog niet
   gekozen). Bewust uit scope van "de adapter bouwen"; zie `docs/architecture.md`.
+- Alleen `financial_agent.py` heeft tot nu toe een echt Python-berekend
+  model achter de deep-dive (NFCI-interpretatie). `monetary_policy_agent.py`
+  en `currency_agent.py` draaien nog puur op "cijfer veranderde meer dan
+  een geraden drempel" — de Taylor Rule voor monetary policy staat klaar om
+  gebouwd te worden zodra DD de modelaanname (r*, de lange-termijn
+  neutrale reële rente) heeft afgetikt, zie "Open questions" hieronder.
 
 ## Next priorities
 
-1. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
+1. Taylor Rule voor `monetary_policy_agent.py` — de eerstvolgende
+   onderbouwing (na NFCI), zodra de r*-aanname bevestigd is.
+2. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
    `docs/roadmap.md` aangeeft.
-2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
+3. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
    praktisch te valideren, niet alleen met fake clients.
-3. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
+4. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
    output naar `AnalystAgentReport` vertaald krijgt) — nog geen concrete
    trigger wanneer dit relevant wordt.
 
@@ -115,3 +136,14 @@ mid-term (lang), aangezien dat de volgorde van sectie C kan beïnvloeden.
 Ook: zijn de illustratieve tolerance-waarden in B.1/B.2 bruikbaar als
 startpunt, of moeten die eerst vervangen worden voordat dit tegen live data
 draait?
+
+**Taylor Rule voor monetary_policy_agent.py — concreet gevraagd aan DD:**
+de formule (Taylor, 1993) is `i = r* + π + 0.5(π − π*) + 0.5(output gap)`.
+π* (Fed-inflatiedoel, 2%) is een gepubliceerd, onomstreden gegeven. r*
+(lange-termijn neutrale reële rente) is een AANNAME — gangbaar is 2%, maar
+dat is een modelkeuze die om DD's fiat vraagt (net als ROIC's "aanname:
+25% belastingtarief" bij `analyst_agent.ai`), niet iets Claude zelf hoort
+te beslissen. Ook nog te bepalen: welke inflatiemaatstaf (CPI, dat we al
+ophalen, of core PCE, preciezer maar een nieuwe databron) en hoe de
+frequentie-mismatch op te lossen (GDP-data is kwartaalcijfers, de rest van
+deze agent is maandelijks/direct).

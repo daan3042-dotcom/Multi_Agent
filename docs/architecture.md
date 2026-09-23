@@ -19,6 +19,7 @@ alleen wat er al staat.
 | `synthesizer/synthesizer.py` | Legt gelijktijdige deep-dives naast elkaar (nog geen cross-domein-synthese) | B.3 |
 | `agents/equity_agent.py` | Adapter: analyst_agent.ai-output (`AnalystAgentReport`) → Claims/DomainOutput, per ticker genamespaced (`equity:<TICKER>`) | C.1 |
 | `agents/financial_agent.py` | FRED (NFCI, high-yield credit spread, VIX, 10Y-2Y yield curve) — financiële-marktcondities, losstaand van equity/monetary policy | C.2 |
+| `analysis/nfci_interpretation.py` | Eerste bestand in een groeiende `analysis/`-map (één citeerbaar model per bestand, zelfde patroon als `analyst_agent.ai/src/analysis/`) — NFCI's eigen gepubliceerde interpretatie | C.2-uitbreiding |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 
@@ -120,6 +121,41 @@ Voordeel: een kwaliteitsverbetering hier geldt meteen voor alle domeinen
 ongeluk vergeten — `run_deep_dive()` voegt ze toe, niet de aanroeper.
 `tests/test_agents_base.py::test_run_deep_dive_prepends_shared_quality_rules_to_domain_prompt`
 bewijst dat dit ook daadwerkelijk in de verstuurde API-call terechtkomt.
+
+**Scope van de neutraliteitsregel (expliciet met DD besproken):** dit geldt
+voor de AUTOMATISCHE, onbeheerde monitoring/deep-dive-laag hier in sectie
+B/C — niet als permanente blokkade op elke directionele/probabilistische
+uitspraak in het hele systeem. Sectie G.3 (on-demand vraag-interface)
+krijgt een aparte "thesis-mode" die WEL expliciet gevraagde directionele
+antwoorden mag geven (DD's voorbeeld: "wat is de kans dat de Fed de rente
+verhoogt, met een thesis") — analoog aan `analyst_agent.ai`'s sectie 18
+(Variant Perception): overal elders strikt neutraal, met één duidelijk
+gelabeld, geïsoleerd kanaal voor opinie. Zie `agents/base.py`'s docstring
+voor de volledige onderbouwing, en `docs/roadmap.md` sectie G.3.
+
+## Onderbouwing van deep-dives met echte modellen (`src/analysis/`)
+
+Tot nu toe waren de deep-dives van monetary_policy/currency/financial
+"cijfer veranderde meer dan een geraden drempel, laat de LLM erover
+schrijven" — geen vakinhoudelijke methode erachter, in tegenstelling tot
+equity (C.1), die leunt op gepubliceerde, citeerbare modellen (Altman
+Z-Score, Piotroski F-Score, reverse-DCF). `src/analysis/` is waar dat voor
+de andere domeinen ook komt te staan — zelfde patroon als
+`analyst_agent.ai/src/analysis/`: één citeerbaar, deterministisch model per
+bestand, dat een domain agent's `deep_dive()` als extra claim meegeeft
+zodat de LLM het NARREERT in plaats van zelf INSCHAT.
+
+Eerste voorbeeld: `analysis/nfci_interpretation.py::classify_nfci()` — de
+NFCI's eigen, door de Chicago Fed gepubliceerde interpretatie (0 =
+historisch gemiddelde, teken bepaalt krapper/ruimer), geen zelfbedachte
+tussenband. `financial_agent.py::deep_dive()` voegt die classificatie toe
+als aparte claim vóór de LLM-call.
+
+Geplande volgende modellen (zie `docs/roadmap.md` sectie I, DD's eigen
+voorbeelden): een Taylor Rule voor monetary policy (impliciete "passende"
+Fed funds rate o.b.v. inflatie/output gap, i.p.v. alleen een delta-check),
+een Phillips-curve-model voor de nog te bouwen economic agent. Elk nieuw
+model: een nieuw bestand hier, geen herstructurering van bestaande agents.
 
 ## Bewijs dat het fundament + B samenhangen
 

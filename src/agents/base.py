@@ -30,6 +30,21 @@ soort concrete, niet-onderhandelbare schrijfregels), hier centraal gehouden
 in plaats van per domein gedupliceerd -- zodat een kwaliteitsverbetering op
 één plek meteen voor alle domeinen geldt, en nieuwe domeinen (sectie C+)
 'm niet zelf hoeven te herschrijven of kunnen vergeten.
+
+SCOPE VAN DE NEUTRALITEITSREGEL (belangrijk, expliciet besproken met DD):
+SHARED_QUALITY_RULES geldt voor de AUTOMATISCHE, ONBEHEERDE monitoring/
+deep-dive-laag hier in sectie B/C -- niemand kijkt live mee als dit
+triggert, dus een voorbarige directionele claim is hier het gevaarlijkst.
+Dit is NIET bedoeld als permanente blokkade op elke vorm van directionele/
+probabilistische redenering in het hele systeem: sectie G.3 (on-demand
+vraag-interface, nog te bouwen) krijgt een aparte "thesis-mode" die WEL
+expliciet gevraagde directionele/probabilistische antwoorden mag geven
+(bijv. "wat is de kans dat de Fed de rente verhoogt, met een thesis") --
+analoog aan analyst_agent.ai's sectie 18 (Variant Perception): overal
+elders strikt neutraal, met ÉÉN duidelijk gelabeld, geïsoleerd kanaal voor
+opinie. SHARED_QUALITY_RULES hieronder blijft ongewijzigd voor de
+bestaande automatische agents; de thesis-mode wordt een NIEUWE, aparte
+bevoegdheid bij G.3, geen aanpassing van deze regels.
 """
 
 from __future__ import annotations

@@ -160,6 +160,17 @@ marktstress/liquiditeit — bijv. verkrappende financiële condities of een
 toegenomen kredietrisico-opslag — alleen als de cijfers dat zelf
 rechtvaardigen.
 
+**Onderbouwing (niet alleen "het cijfer veranderde"):** als er een NFCI-
+waarde binnenkomt, berekent Python (`src/analysis/nfci_interpretation.py`)
+eerst de classificatie volgens de Chicago Fed's EIGEN gepubliceerde
+methodologie (0 = historisch gemiddelde sinds 1973, positief = krapper,
+negatief = ruimer) — geen zelfbedachte tussenbanden. De LLM krijgt die
+classificatie als kant-en-klare claim en moet 'm letterlijk gebruiken, niet
+zelf inschatten wat de waarde betekent. Eerste toepassing van het patroon
+"Python berekent een citeerbaar model, de LLM narrate het resultaat" —
+zie `docs/roadmap.md` sectie I voor waar dit naartoe groeit (bijv. een
+Taylor Rule voor monetary policy).
+
 **Bijzonderheid:** één instantie (net als monetary policy/currency), geen
 per-ticker-namespacing nodig zoals bij equity.
 

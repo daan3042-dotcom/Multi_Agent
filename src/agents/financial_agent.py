@@ -29,6 +29,14 @@ agents/base.py's docstring en docs/roadmap.md sectie H.
 DEEP_DIVE_SYSTEM_PROMPT bevat ALLEEN vakinhoud -- de algemene schrijfregels
 staan centraal in agents/base.py::SHARED_QUALITY_RULES en worden door
 run_deep_dive() automatisch ervoor geplakt.
+
+EERSTE GEBRUIK VAN analysis/ (zie die map se docstring): deep_dive()
+voegt, als er een NFCI-claim aanwezig is, de EIGEN gepubliceerde
+interpretatie van de Chicago Fed toe (analysis/nfci_interpretation.py) als
+extra, deterministisch berekende claim -- de LLM narrate die classificatie
+dan alleen, in plaats van zelf te moeten inschatten of een NFCI-waarde
+"krap" of "ruim" betekent (zie CLAUDE.md-regel 1: Python berekent, de LLM
+vertelt).
 """
 
 from __future__ import annotations
@@ -39,6 +47,8 @@ from datetime import timedelta
 import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from analysis.nfci_interpretation import classify_nfci
+from contract.output_contract import Claim, Confidence, now_utc
 
 DOMAIN = "financial"
 SOURCE_NAME = "FRED"
@@ -64,8 +74,11 @@ marktcondities: de Chicago Fed National Financial Conditions Index (NFCI), \
 high-yield credit spreads, VIX, en de 10-jaars-min-2-jaars yield curve. Duid wat de \
 aangeleverde cijfers betekenen voor marktstress/liquiditeit (bijv. verkrappende/ \
 verruimende financiële condities, toegenomen kredietrisico-opslag, een veranderende \
-curve-vorm) -- alleen als de cijfers dat zelf rechtvaardigen. (De algemene schrijfregels \
--- neutraliteit, alleen aangeleverde cijfers, onzekerheid expliciet -- staan al vóór dit \
+curve-vorm) -- alleen als de cijfers dat zelf rechtvaardigen. Krijg je een claim met een \
+NFCI-interpretatie aangeleverd, gebruik dan LETTERLIJK die classificatie (krapper/ruimer \
+dan het historisch gemiddelde) -- baseer je duiding niet op een eigen inschatting van wat \
+een NFCI-waarde betekent, dat is al voor je berekend. (De algemene schrijfregels -- \
+neutraliteit, alleen aangeleverde cijfers, onzekerheid expliciet -- staan al vóór dit \
 stuk; dit is alleen de vakinhoudelijke aanvulling.)"""
 
 
@@ -111,5 +124,23 @@ def monitor(conn, now=None):
 
 
 def deep_dive(conn, client, claims, trigger_events, now=None):
-    """Deep-dive mode na een trigger. Zie agents.base.run_deep_dive."""
-    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, claims, trigger_events, now=now)
+    """Deep-dive mode na een trigger. Voegt, als er een NFCI-claim tussen
+    zit, de NFCI's eigen gepubliceerde interpretatie toe als extra claim
+    (zie moduledocstring en analysis/nfci_interpretation.py) -- puur
+    Python, geen LLM-inschatting."""
+    now = now or now_utc()
+    enriched_claims = list(claims)
+    nfci_claim = next((c for c in claims if c.metric_key == "financial_conditions_index"), None)
+    if nfci_claim is not None and isinstance(nfci_claim.value, (int, float)):
+        enriched_claims.append(
+            Claim(
+                domain=DOMAIN,
+                claim="NFCI-interpretatie (Chicago Fed, gepubliceerde methodologie)",
+                value=classify_nfci(nfci_claim.value),
+                source="Chicago Fed NFCI-methodologie",
+                confidence=Confidence.VERY_HIGH,
+                timestamp=now,
+                note="0 = historisch gemiddelde sinds 1973; positief = krapper, negatief = ruimer",
+            )
+        )
+    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now)

@@ -84,3 +84,35 @@ def test_deep_dive_wires_into_run_deep_dive(tmp_path, monkeypatch):
 
     deep_dive_output = fa.deep_dive(conn, client, output.claims, triggers, now=now)
     assert deep_dive_output.domain == "financial"
+
+
+def test_deep_dive_adds_nfci_interpretation_claim_when_nfci_present(tmp_path, monkeypatch):
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(fa, "fetch_snapshot", lambda: {"financial_conditions_index": {"value": "0.35", "date": "x"}})
+    output, triggers = fa.monitor(conn, now=now)
+
+    client = MagicMock()
+    response = MagicMock()
+    response.content = [MagicMock(type="text", text="Duiding van krappere financiele condities.")]
+    client.messages.create = lambda **kwargs: response
+
+    deep_dive_output = fa.deep_dive(conn, client, output.claims, triggers, now=now)
+    interpretation = next((c for c in deep_dive_output.claims if c.claim.startswith("NFCI-interpretatie")), None)
+    assert interpretation is not None
+    assert interpretation.value == "krapper dan het historisch gemiddelde (sinds 1973)"
+
+
+def test_deep_dive_no_nfci_interpretation_claim_when_nfci_absent(tmp_path, monkeypatch):
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(fa, "fetch_snapshot", lambda: {"vix": {"value": "18.5", "date": "x"}})
+    output, triggers = fa.monitor(conn, now=now)
+
+    client = MagicMock()
+    response = MagicMock()
+    response.content = [MagicMock(type="text", text="Duiding van de VIX.")]
+    client.messages.create = lambda **kwargs: response
+
+    deep_dive_output = fa.deep_dive(conn, client, output.claims, triggers, now=now)
+    assert not any(c.claim.startswith("NFCI-interpretatie") for c in deep_dive_output.claims)

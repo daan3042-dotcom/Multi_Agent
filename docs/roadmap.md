@@ -94,7 +94,18 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
 
 - [ ] 1. Alert-mechanisme bij trigger/escalatie.
 - [ ] 2. Dashboard (dagelijkse stand van zaken per domein + Nasdaq-bias).
-- [ ] 3. On-demand query-interface over het hele systeem heen.
+- [ ] 3. On-demand query-interface over het hele systeem heen. Bevat een
+      aparte "thesis-mode": in tegenstelling tot de automatische monitoring/
+      deep-dive-laag (sectie B/C, die strikt neutraal blijft, zie
+      `agents/base.py`'s docstring) mag deze mode WEL expliciet gevraagde
+      directionele/probabilistische antwoorden geven — bijv. "ik denk dat
+      de Fed de rente gaat verhogen om deze en deze reden, hoe groot is
+      die kans en wat is de thesis ervoor/ertegen, met alle dynamische
+      redenen goed beschreven" (DD's eigen FOMC-voorbeeld). Analoog aan
+      `analyst_agent.ai`'s sectie 18 (Variant Perception): overal elders
+      neutraal, met één duidelijk gelabeld, geïsoleerd kanaal voor opinie.
+      Nog te ontwerpen — pas zinvol zodra er genoeg domeinen zijn om
+      daadwerkelijk iets te bevragen (zie sectie C/D).
 
 ## H. Open beslissingen (bewust nog niet dichtgetimmerd)
 
@@ -111,3 +122,24 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
       `analyst_agent.ai/src/analysis/reverse_dcf.py`.
 - [ ] Thesis-tracking per domein (zoals `track_record.py` voor equity, maar
       voor macro/currency-theses).
+- [ ] **Kwantitatieve modellen per agent, naarmate DD ze wil toevoegen.**
+      Zelfde patroon als `analyst_agent.ai/src/analysis/` (één model per
+      bestand) — hier al gestart met `src/analysis/nfci_interpretation.py`
+      (C.2). Concreet genoemd door DD: een Taylor Rule voor de monetary
+      policy agent (impliciete "passende" Fed funds rate o.b.v. inflatie/
+      output gap, i.p.v. alleen een delta-trigger), een Phillips-curve-model
+      voor de (nog te bouwen) economic agent, en een model voor 1e/2e/3e-
+      orde-inflatie-effecten bij monetary policy. Elk nieuw model: eigen
+      bestand in `src/analysis/`, gebruikt door de bijbehorende agent — geen
+      herstructurering nodig.
+- [ ] **Library + bronnen-hiërarchie per agent**, uiteindelijk uitgroeiend
+      tot een eigen database-hiërarchie: boeken > academische papers >
+      investor letters > artikelen > YouTube-video's > nieuwsberichten >
+      X-posts. Analoog aan `analyst_agent.ai/src/knowledge/`
+      (`library_index.py`/`library_search.py`, semantische RAG-search) —
+      dat project heeft dit zelf ook als open, onbeslist vraagstuk (zie
+      diens `docs/rejected-alternatives.md`, de evidence-tiering-vraag).
+      Zodra dit gebouwd wordt: waarschijnlijk relevant voor `Claim`'s
+      `confidence`-veld (A.1) — een claim uit een academisch paper zou een
+      andere confidence-anker moeten krijgen dan een claim uit een
+      X-post.
