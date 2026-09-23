@@ -56,6 +56,25 @@ macro-context — bijv. een verkrappend of verruimend beleidssignaal, of een
 mogelijk verband tussen de reeksen onderling — maar alléén als de cijfers
 dat zelf rechtvaardigen (geen speculatie voorbij de data).
 
+**Onderbouwing (niet alleen "het cijfer veranderde"):** als er een
+fed_funds_rate-claim binnenkomt, berekent Python
+(`src/analysis/taylor_rule.py`) de **Taylor Rule** (Taylor, 1993) — een
+gevestigde formule voor een "passende" beleidsrente:
+
+`i = r* + π + 0,5(π − π*) + 0,5(output gap)`
+
+waarbij π de YoY-inflatie is (uit CPI, 12 maanden terug opgehaald) en de
+output gap uit reëel vs. potentieel bbp (FRED: GDPC1/GDPPOT). π* = 2% is
+het Fed's eigen, officieel gepubliceerde inflatiedoel. **r* = 2%** is een
+AANNAME — de gangbare waarde in recente toepassingen van dit model,
+expliciet afgestemd met DD (zie `docs/project-state.md`), geen door
+Claude zelf gekozen getal. De LLM krijgt de impliciete rente én de
+afwijking t.o.v. de daadwerkelijke Fed funds rate als kant-en-klare claims
+en moet die letterlijk gebruiken, niet zelf inschatten of het beleid
+krap/ruim is. Deze bbp-data wordt bewust NIET meegenomen in de reguliere
+monitoring (andere, langzamere ververssnelheid — kwartaalcijfers versus de
+rest van deze agent) — puur een deep-dive-tijd-verrijking.
+
 **Bijzonderheid:** bewust als "duo" gestart met de currency agent
 hieronder, vanwege hun sterke onderlinge koppeling (renteveranderingen
 werken vaak direct door in wisselkoersen).

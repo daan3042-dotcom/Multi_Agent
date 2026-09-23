@@ -8,9 +8,11 @@ Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
 domain agents + synthesizer), en C.1-C.2 (equity-adapter, financial agent)
 uit `docs/roadmap.md` staan volledig, plus een tussentijdse verbetering: een
 gedeelde kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`)
-die elke deep-dive automatisch meekrijgt, en een leesbaar overzicht per
-agent (`docs/agents.md`) zodat je nooit de code hoeft te lezen om te weten
-wat een agent doet. 101 tests groen (`pytest`).
+die elke deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
+(`docs/agents.md`) zodat je nooit de code hoeft te lezen om te weten wat
+een agent doet, en `src/analysis/` — citeerbare, Python-berekende modellen
+(NFCI-interpretatie, Taylor Rule) die deep-dives onderbouwen i.p.v. alleen
+"het cijfer veranderde". 117 tests groen (`pytest`).
 
 ## Completed
 
@@ -77,14 +79,26 @@ wat een agent doet. 101 tests groen (`pytest`).
   voor een toekomstige, apart te bouwen "thesis-mode" (sectie G.3) — DD wil
   daar wél expliciet gevraagde directionele/probabilistische antwoorden
   (zijn FOMC-voorbeeld). Vastgelegd in `docs/roadmap.md` sectie G.3 en I.
+- `src/analysis/taylor_rule.py` — de Taylor Rule (Taylor, 1993), tweede
+  onderbouwingsmodel. `monetary_policy_agent.py::deep_dive()` haalt hiervoor
+  op deep-dive-tijd extra data op (CPI 12 maanden terug voor YoY-inflatie,
+  via `_fetch_series()`'s nieuwe `lag_observations`-parameter; GDPC1/GDPPOT
+  voor de output gap) en voegt de impliciete "passende" Fed funds rate + de
+  afwijking t.o.v. de daadwerkelijke rente toe als claims. r*=2% is een
+  AANNAME, expliciet met DD afgestemd (was de openstaande vraag hieronder,
+  nu beantwoord); π*=2% is het Fed's eigen, gepubliceerde doel. Bewust
+  losstaand van de reguliere `FRED_SERIES`-monitoring — bbp-data is
+  kwartaalcijfers, andere ververssnelheid, zou de gedeelde
+  staleness-check verstoren.
 
-106 tests groen (`pytest`).
+117 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
 - Sectie B + gedeelde kwaliteitsregels + C.1-C.2 (equity-adapter, financial
-  agent) + `docs/agents.md` + eerste `src/analysis/`-model afgerond. Nog
-  niet gestart: C.3-C.5 (sector/commodity/economic agents).
+  agent) + `docs/agents.md` + `src/analysis/` (NFCI-interpretatie, Taylor
+  Rule) afgerond. Nog niet gestart: C.3-C.5 (sector/commodity/economic
+  agents).
 
 ## Known problems
 
@@ -108,23 +122,24 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   nog geen code die een analyst_agent.ai-run daadwerkelijk uitvoert en zijn
   output in die vorm hierheen stuurt (subprocess, bestand, API — nog niet
   gekozen). Bewust uit scope van "de adapter bouwen"; zie `docs/architecture.md`.
-- Alleen `financial_agent.py` heeft tot nu toe een echt Python-berekend
-  model achter de deep-dive (NFCI-interpretatie). `monetary_policy_agent.py`
-  en `currency_agent.py` draaien nog puur op "cijfer veranderde meer dan
-  een geraden drempel" — de Taylor Rule voor monetary policy staat klaar om
-  gebouwd te worden zodra DD de modelaanname (r*, de lange-termijn
-  neutrale reële rente) heeft afgetikt, zie "Open questions" hieronder.
+- `currency_agent.py` heeft nog geen eigen onderbouwingsmodel (draait nog
+  puur op "cijfer veranderde meer dan een geraden drempel") — een
+  rentedifferentieel/carry-raamwerk (uncovered interest rate parity) zou
+  hier de tegenhanger van de Taylor Rule kunnen zijn, maar vraagt extra
+  databronnen (ECB/BOJ/BOE-rentes) die we nu niet hebben. Nog niet
+  opgepakt.
+- Taylor Rule's inflatiemaatstaf is CPI YoY (wat we al ophalen) i.p.v.
+  core PCE (preciezer, maar een nieuwe databron) — een bewuste, praktische
+  keuze om geen nieuwe dependency toe te voegen voor het eerste model.
 
 ## Next priorities
 
-1. Taylor Rule voor `monetary_policy_agent.py` — de eerstvolgende
-   onderbouwing (na NFCI), zodra de r*-aanname bevestigd is.
-2. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
+1. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
    `docs/roadmap.md` aangeeft.
-3. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
+2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
    praktisch te valideren, niet alleen met fake clients.
-4. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
+3. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
    output naar `AnalystAgentReport` vertaald krijgt) — nog geen concrete
    trigger wanneer dit relevant wordt.
 
@@ -136,14 +151,3 @@ mid-term (lang), aangezien dat de volgorde van sectie C kan beïnvloeden.
 Ook: zijn de illustratieve tolerance-waarden in B.1/B.2 bruikbaar als
 startpunt, of moeten die eerst vervangen worden voordat dit tegen live data
 draait?
-
-**Taylor Rule voor monetary_policy_agent.py — concreet gevraagd aan DD:**
-de formule (Taylor, 1993) is `i = r* + π + 0.5(π − π*) + 0.5(output gap)`.
-π* (Fed-inflatiedoel, 2%) is een gepubliceerd, onomstreden gegeven. r*
-(lange-termijn neutrale reële rente) is een AANNAME — gangbaar is 2%, maar
-dat is een modelkeuze die om DD's fiat vraagt (net als ROIC's "aanname:
-25% belastingtarief" bij `analyst_agent.ai`), niet iets Claude zelf hoort
-te beslissen. Ook nog te bepalen: welke inflatiemaatstaf (CPI, dat we al
-ophalen, of core PCE, preciezer maar een nieuwe databron) en hoe de
-frequentie-mismatch op te lossen (GDP-data is kwartaalcijfers, de rest van
-deze agent is maandelijks/direct).

@@ -122,16 +122,15 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
       `analyst_agent.ai/src/analysis/reverse_dcf.py`.
 - [ ] Thesis-tracking per domein (zoals `track_record.py` voor equity, maar
       voor macro/currency-theses).
-- [ ] **Kwantitatieve modellen per agent, naarmate DD ze wil toevoegen.**
+- [x]/[ ] **Kwantitatieve modellen per agent, naarmate DD ze wil toevoegen.**
       Zelfde patroon als `analyst_agent.ai/src/analysis/` (één model per
-      bestand) — hier al gestart met `src/analysis/nfci_interpretation.py`
-      (C.2). Concreet genoemd door DD: een Taylor Rule voor de monetary
-      policy agent (impliciete "passende" Fed funds rate o.b.v. inflatie/
-      output gap, i.p.v. alleen een delta-trigger), een Phillips-curve-model
-      voor de (nog te bouwen) economic agent, en een model voor 1e/2e/3e-
-      orde-inflatie-effecten bij monetary policy. Elk nieuw model: eigen
-      bestand in `src/analysis/`, gebruikt door de bijbehorende agent — geen
-      herstructurering nodig.
+      bestand). Gerealiseerd: `src/analysis/nfci_interpretation.py` (C.2)
+      en `src/analysis/taylor_rule.py` (monetary policy — r*=2% afgestemd
+      met DD, zie `docs/project-state.md`). Nog te doen: een Phillips-
+      curve-model voor de (nog te bouwen) economic agent, en een model
+      voor 1e/2e/3e-orde-inflatie-effecten bij monetary policy. Elk nieuw
+      model: eigen bestand in `src/analysis/`, gebruikt door de
+      bijbehorende agent — geen herstructurering nodig.
 - [ ] **Library + bronnen-hiërarchie per agent**, uiteindelijk uitgroeiend
       tot een eigen database-hiërarchie: boeken > academische papers >
       investor letters > artikelen > YouTube-video's > nieuwsberichten >

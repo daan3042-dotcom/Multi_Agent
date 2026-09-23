@@ -20,6 +20,7 @@ alleen wat er al staat.
 | `agents/equity_agent.py` | Adapter: analyst_agent.ai-output (`AnalystAgentReport`) → Claims/DomainOutput, per ticker genamespaced (`equity:<TICKER>`) | C.1 |
 | `agents/financial_agent.py` | FRED (NFCI, high-yield credit spread, VIX, 10Y-2Y yield curve) — financiële-marktcondities, losstaand van equity/monetary policy | C.2 |
 | `analysis/nfci_interpretation.py` | Eerste bestand in een groeiende `analysis/`-map (één citeerbaar model per bestand, zelfde patroon als `analyst_agent.ai/src/analysis/`) — NFCI's eigen gepubliceerde interpretatie | C.2-uitbreiding |
+| `analysis/taylor_rule.py` | Taylor Rule (Taylor, 1993) — impliciete "passende" Fed funds rate uit YoY-inflatie + output gap; r*=2% aanname afgestemd met DD, π*=2% is Fed's eigen doel | B.1-uitbreiding |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 
@@ -145,17 +146,30 @@ de andere domeinen ook komt te staan — zelfde patroon als
 bestand, dat een domain agent's `deep_dive()` als extra claim meegeeft
 zodat de LLM het NARREERT in plaats van zelf INSCHAT.
 
-Eerste voorbeeld: `analysis/nfci_interpretation.py::classify_nfci()` — de
+**Eerste model:** `analysis/nfci_interpretation.py::classify_nfci()` — de
 NFCI's eigen, door de Chicago Fed gepubliceerde interpretatie (0 =
 historisch gemiddelde, teken bepaalt krapper/ruimer), geen zelfbedachte
 tussenband. `financial_agent.py::deep_dive()` voegt die classificatie toe
 als aparte claim vóór de LLM-call.
 
+**Tweede model:** `analysis/taylor_rule.py::compute_taylor_rule_rate()` —
+de Taylor Rule (Taylor, 1993): `i = r* + π + 0,5(π−π*) + 0,5(output gap)`.
+`monetary_policy_agent.py::deep_dive()` haalt hiervoor, ALLEEN op
+deep-dive-tijd (niet via de reguliere `FRED_SERIES`-monitoring, want
+bbp-data is kwartaalcijfers met een andere ververssnelheid dan de rest van
+de agent — zou de gedeelde `MAX_AGE`-staleness-check verstoren), de
+YoY-inflatie (CPI nu vs. 12 maanden terug, via `_fetch_series()`'s nieuwe
+`lag_observations`-parameter) en de output gap (GDPC1 vs. GDPPOT) op, en
+voegt de impliciete rente + de afwijking t.o.v. de daadwerkelijke Fed
+funds rate toe als claims. r*=2% is een AANNAME, expliciet met DD
+afgestemd (zie `docs/project-state.md`) — niet een door Claude zelf
+gekozen getal; π*=2% is het Fed's eigen, gepubliceerde doel.
+
 Geplande volgende modellen (zie `docs/roadmap.md` sectie I, DD's eigen
-voorbeelden): een Taylor Rule voor monetary policy (impliciete "passende"
-Fed funds rate o.b.v. inflatie/output gap, i.p.v. alleen een delta-check),
-een Phillips-curve-model voor de nog te bouwen economic agent. Elk nieuw
-model: een nieuw bestand hier, geen herstructurering van bestaande agents.
+voorbeelden): een Phillips-curve-model voor de nog te bouwen economic
+agent, een model voor 1e/2e/3e-orde-inflatie-effecten bij monetary policy.
+Elk nieuw model: een nieuw bestand hier, geen herstructurering van
+bestaande agents.
 
 ## Bewijs dat het fundament + B samenhangen
 
