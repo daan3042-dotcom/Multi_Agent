@@ -28,11 +28,18 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
 
 ## B. Skeleton met eerste twee domeinen (monetary policy + currency)
 
-- [ ] 1. Monetary policy agent: monitoring mode + deep-dive mode.
-- [ ] 2. Currency agent: zelfde tweeledige opzet.
-- [ ] 3. Synthesizer eerste versie: legt de twee deep-dives naast elkaar.
-- [ ] 4. End-to-end testen: monitoring → trigger → escalatie → synthese →
-      database.
+- [x] 1. Monetary policy agent (`src/agents/monetary_policy_agent.py`):
+      monitoring mode (FRED) + deep-dive mode, op gedeelde scaffolding
+      (`src/agents/base.py`).
+- [x] 2. Currency agent (`src/agents/currency_agent.py`): zelfde
+      tweeledige opzet, Alpha Vantage FX.
+- [x] 3. Synthesizer eerste versie (`src/synthesizer/synthesizer.py`): legt
+      de twee deep-dives naast elkaar bij gelijktijdige triggers — nog geen
+      cross-domein-synthese, dat is F.
+- [x] 4. End-to-end testen (`tests/test_integration_section_b.py`):
+      monitoring → trigger → escalatie → synthese → database, met het
+      Fed-besluit-scenario uit A.6 zelf (raakt monetary policy + currency
+      tegelijk).
 
 ## C. Domain Agents
 

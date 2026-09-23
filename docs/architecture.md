@@ -1,4 +1,4 @@
-# Architecture — sectie A (fundament)
+# Architecture — sectie A (fundament) + sectie B (eerste domain agents)
 
 Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
 alleen wat er al staat.
@@ -13,27 +13,37 @@ alleen wat er al staat.
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
+| `agents/base.py` | Gedeelde scaffolding: `run_monitoring()` (databron → claims → delta-trigger) + `run_deep_dive()` (LLM-synthese → QC → opslag) | B.1/B.2 |
+| `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) | B.1 |
+| `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) | B.2 |
+| `synthesizer/synthesizer.py` | Legt gelijktijdige deep-dives naast elkaar (nog geen cross-domein-synthese) | B.3 |
 
-## Datastroom (zoals sectie A hem vastlegt)
+## Datastroom (zoals sectie A + B hem nu vastleggen)
 
 ```
-domain agent (monitoring mode, buiten scope van dit fundament — sectie B+)
-       │  produceert Claim(s), leest data-health voor de bronnen die het gebruikt
-       ▼
-storage.schema.save_domain_output()      ── source of truth
+agents.<domain>_agent.fetch_snapshot()  ── eigen databron (FRED / Alpha Vantage FX)
        │
        ▼
-health.data_health.check_source()  ──►  triggers.trigger_engine.evaluate_data_health()
-storage.schema.load_latest_claims() ──► triggers.trigger_engine.evaluate_threshold() /
-                                          evaluate_surprise()
-       │  (TriggerEvent, of None als niets significant is)
+agents.base.run_monitoring()
+       │  record_data_health() → health.data_health.check_source()
+       │       └─► triggers.trigger_engine.evaluate_data_health()  (STALE/UNREACHABLE → eigen trigger, A.3)
+       │  bouwt Claim(s) per metric → storage.schema.save_domain_output() (mode=MONITORING)
+       │  vergelijkt elke nieuwe claim tegen de vorige observatie (load_latest_claims(), VÓÓR opslaan opgehaald)
+       │       └─► triggers.trigger_engine.evaluate_surprise()  (delta > tolerance → TriggerEvent)
        ▼
-manager.manager.dispatch()  ── groepeert TriggerEvents tot een DispatchPlan
-       │  (welke domain agent(s) moeten escaleren naar deep-dive mode,
-       │   is_simultaneous voor de synthesizer)
+manager.manager.dispatch(alle TriggerEvents uit deze cyclus, over alle domeinen)
+       │  groepeert per domein tot een DispatchPlan; is_simultaneous als >1 domein escaleert
        ▼
-[buiten scope van sectie A: domain agent deep-dive mode → qc.qc.apply_qc() →
- storage.schema.save_domain_output() (mode=DEEP_DIVE) → synthesizer (sectie F)]
+agents.base.run_deep_dive()  (per geëscaleerd domein, met zijn eigen TriggerEvents + Claims)
+       │  Claude-call (system-prompt per domein, dependency-injected client)
+       │  qc.qc.apply_qc() incl. qc.qc.default_llm_review() → NEEDS_REVIEW
+       │  narrative-Claim (value=deep-dive-tekst) toegevoegd aan de claims
+       │  storage.schema.save_domain_output() (mode=DEEP_DIVE)
+       ▼
+synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output, ...})
+       │  legt de deep-dives van de domeinen in plan.domains naast elkaar
+       ▼
+[buiten scope van sectie B: cross-domein-synthese, confidence-weging → sectie F]
 ```
 
 ## Ontwerpkeuzes die van `analyst_agent.ai` zijn overgenomen (en waarom)
@@ -65,20 +75,37 @@ manager.manager.dispatch()  ── groepeert TriggerEvents tot een DispatchPlan
 - **SQLite via de standaardbibliotheek.** Geen nieuwe, mogelijk
   gecompileerde dependency — zelfde principe als `ADR-003` in
   `analyst_agent.ai` (geen gecompileerde dependencies waar vermijdbaar).
+- **Eigen databron-implementatie per domain agent, geen import van
+  `analyst_agent.ai`.** `agents/monetary_policy_agent.py` en
+  `agents/currency_agent.py` volgen dezelfde conventie als diens
+  `fred_data.py`/`commodity_data.py` (env-var API-key, `{"error": ...}` bij
+  volledige mislukking, ontbrekende reeksen overslaan i.p.v. gokken) maar
+  zijn zelfstandige code — dit is een nieuw systeem náást `analyst_agent.ai`
+  (zie `CLAUDE.md`), alleen de equity agent (C.1) adapteert straks diens
+  bestaande output rechtstreeks.
+- **Trigger op delta, niet op een vaste absolute drempel.** B.1/B.2
+  vergelijken elke nieuwe observatie tegen de vorige (`evaluate_surprise()`
+  met `expected_value` = de vorige claim) in plaats van tegen een
+  hardgecodeerd "hoog/laag"-niveau — welk absoluut niveau significant is,
+  is een bewust open beslissing (sectie H). De `tolerance`-waarden in
+  `METRIC_SPECS` zijn illustratieve plaatshouders.
 
-## Bewijs dat het fundament samenhangt
+## Bewijs dat het fundament + B samenhangen
 
-`tests/test_integration_section_a.py` doorloopt het volledige pad hierboven
-end-to-end met synthetische data (er is nog geen echte domain agent — dat is
-sectie B): claim opslaan → data-health-check → trigger-evaluatie → manager-
-dispatch → QC op een gesimuleerde deep-dive → deep-dive-output opslaan. Ook
-het stille-faalscenario dat A.3 specifiek moet voorkomen (een verouderde
-databron die zonder A.3 gewoon "geen trigger" zou opleveren) heeft een eigen
-test.
+`tests/test_integration_section_a.py` doorloopt het A-pad end-to-end met
+synthetische data. `tests/test_integration_section_b.py` bouwt daarop voort
+met de twee echte domain agents (B.1/B.2, fetch en LLM-client beide
+monkeypatched/fake — geen netwerk of API-key nodig): een baseline-run per
+domein, dan een gesimuleerd Fed-besluit dat beide tegelijk raakt (het
+voorbeeld dat het stappenplan zelf voor de manager noemt), door dispatch,
+deep-dive en de synthesizer heen, met een check dat alles — monitoring-
+claims én deep-dive-claims — daadwerkelijk in de database staat.
 
 ## Wat hierna komt
 
-Sectie B (`docs/roadmap.md`): monetary policy + currency agent als eerste
-twee domain agents, elk met monitoring- en deep-dive-mode, gebouwd bovenop
-dit fundament. Dat is ook de eerste keer dat `qc.qc.default_llm_review()`
-tegen een echte Anthropic-call draait in plaats van tegen een fake client.
+Sectie C (`docs/roadmap.md`): C.1, de equity agent als dunne adapter over
+`analyst_agent.ai`'s bestaande pipeline-output — de eerste domain agent die
+wél op die bestaande code voortbouwt in plaats van een eigen databron te
+implementeren. Ook de eerste gelegenheid om `qc.qc.default_llm_review()` en
+`agents.base.run_deep_dive()` tegen een échte Anthropic-call te draaien in
+plaats van tegen een fake client.

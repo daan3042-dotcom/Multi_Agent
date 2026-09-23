@@ -6,5 +6,9 @@
 # draaien (die gebruiken een fake client).
 anthropic
 
+# Sectie B: domain agents halen hun databron zelf op (FRED, Alpha Vantage FX)
+# -- zelfde conventie als analyst_agent.ai's data/-modules.
+requests
+
 # Alleen voor tests
 pytest
