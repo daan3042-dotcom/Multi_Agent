@@ -1,4 +1,4 @@
-# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1/C.2 (equity, financial)
+# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1/C.2/C.3 (equity, financial, sector)
 
 Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
 alleen wat er al staat.
@@ -21,6 +21,8 @@ alleen wat er al staat.
 | `agents/financial_agent.py` | FRED (NFCI, high-yield credit spread, VIX, 10Y-2Y yield curve) — financiële-marktcondities, losstaand van equity/monetary policy | C.2 |
 | `analysis/nfci_interpretation.py` | Eerste bestand in een groeiende `analysis/`-map (één citeerbaar model per bestand, zelfde patroon als `analyst_agent.ai/src/analysis/`) — NFCI's eigen gepubliceerde interpretatie | C.2-uitbreiding |
 | `analysis/taylor_rule.py` | Taylor Rule (Taylor, 1993) — impliciete "passende" Fed funds rate uit YoY-inflatie + output gap; r*=2% aanname afgestemd met DD, π*=2% is Fed's eigen doel | B.1-uitbreiding |
+| `agents/sector_agent.py` | Alpha Vantage (alle 11 SPDR Select Sector-ETF's) — trigger op ruwe prijs, één plat domain (`sector`) | C.3 |
+| `analysis/relative_strength.py` | Relatieve sterkte van een sector-ETF t.o.v. SPY (S&P 500) — onderscheidt sector-rotatie van een bredere marktbeweging | C.3-uitbreiding |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 
@@ -164,6 +166,16 @@ voegt de impliciete rente + de afwijking t.o.v. de daadwerkelijke Fed
 funds rate toe als claims. r*=2% is een AANNAME, expliciet met DD
 afgestemd (zie `docs/project-state.md`) — niet een door Claude zelf
 gekozen getal; π*=2% is het Fed's eigen, gepubliceerde doel.
+
+**Derde model:** `analysis/relative_strength.py::compute_relative_strength_pct()`
+— het verschil tussen een sector-ETF's dagverandering en die van de S&P
+500 (via SPY). `sector_agent.py::deep_dive()` haalt hiervoor SPY's
+dagverandering ÉÉN keer op (niet per sector, ook al triggeren er soms
+meerdere tegelijk), berekent per getriggerde sector het verschil, en voegt
+de classificatie (outperform/underperform) toe als claim. Onderscheidt zo
+een sector-specifieke beweging (mogelijke rotatie) van een bredere
+marktbeweging — DD's eigen voorbeeld ("XLB daalt t.o.v. S&P 500") is hier
+letterlijk het ontwerp geweest.
 
 Geplande volgende modellen (zie `docs/roadmap.md` sectie I, DD's eigen
 voorbeelden): een Phillips-curve-model voor de nog te bouwen economic

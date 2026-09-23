@@ -57,7 +57,12 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
       10Y-2Y yield curve) — losstaand van bedrijfsfundamentals (equity) en
       Fed-beleid zelf (monetary policy). Zelfde opzet als B.1/B.2, één
       instantie via FRED.
-- [ ] 3. Sector agent.
+- [x] 3. Sector agent (`src/agents/sector_agent.py`): alle 11 SPDR Select
+      Sector-ETF's via Alpha Vantage, trigger op ruwe prijs (delta-
+      mechanisme). Onderbouwing: relatieve sterkte t.o.v. SPY/S&P 500
+      (`analysis/relative_strength.py`) bij deep-dive, om sector-rotatie
+      te onderscheiden van een bredere marktbeweging — bevestigd met DD
+      als "eigen databron", niet een aggregatie van al-gevolgde tickers.
 - [ ] 4. Commodity agent.
 - [ ] 5. Economic agent.
 

@@ -193,7 +193,58 @@ Taylor Rule voor monetary policy).
 **Bijzonderheid:** één instantie (net als monetary policy/currency), geen
 per-ticker-namespacing nodig zoals bij equity.
 
-## Belangrijk voorbehoud, voor alle vier agents
+## Sector agent (`agents/sector_agent.py`)
+
+**Wat het volgt:** alle 11 SPDR Select Sector-ETF's (de standaard,
+GICS-uitgelijnde sector-taxonomie) — bewust ALLE elf, niet een kleine
+selectie, want een arbitraire keuze zou precies Materials (relevant voor
+DD's eigen ERO Copper-positie) kunnen missen. Data via Alpha Vantage,
+elk gezien als "vers" tot 5 dagen oud (dagelijkse slotkoersen, buffer voor
+een weekend + feestdag):
+
+| Ticker | Sector |
+|---|---|
+| XLK | Technology |
+| XLF | Financials |
+| XLE | Energy |
+| XLV | Health Care |
+| XLY | Consumer Discretionary |
+| XLP | Consumer Staples |
+| XLI | Industrials |
+| XLB | Materials |
+| XLU | Utilities |
+| XLRE | Real Estate |
+| XLC | Communication Services |
+
+**Wanneer het triggert:** op de RUWE PRIJS van elke ETF (zelfde
+delta-mechanisme als de andere agents), tolerances per ETF ruwweg
+gekalibreerd op ~3% van een typisch prijsniveau (ETF's hebben sterk
+verschillende prijsniveaus — XLK rond de $200, XLRE rond de $40 — een
+uniforme dollartolerantie zou niet kloppen). Belangrijker voorbehoud dan
+bij de andere agents: een vast dollarbedrag veroudert sneller dan bijv.
+een rentepercentage, omdat ETF-prijsniveaus over maanden kunnen wegdriften
+— een goede kandidaat voor jouw eigen latere finetuning.
+
+**Waar de deep-dive over gaat:** duidt wat een significante prijsbeweging
+in een sector betekent — alleen als de cijfers dat rechtvaardigen.
+
+**Onderbouwing (jouw eigen voorbeeld, letterlijk gebouwd):** bij een
+trigger berekent Python (`src/analysis/relative_strength.py`) de
+**relatieve sterkte** van die sector t.o.v. de S&P 500 (via SPY) — het
+verschil tussen de dagverandering van de sector-ETF en die van SPY.
+Positief = de sector outperformt de brede markt (mogelijk rotatie
+ernaartoe), negatief = underperformt (mogelijk rotatie ervandaan). Dit
+onderscheidt een sector-specifieke beweging van een bredere marktbeweging
+(als de hele markt 3% daalt, is een sector die ook 3% daalt NIET aan het
+roteren, ondanks de trigger) — precies het "XLB daalt t.o.v. S&P 500"
+-voorbeeld waarmee dit agent is afgestemd. SPY wordt maar één keer
+opgehaald per deep-dive, ook als meerdere sectoren tegelijk triggeren.
+
+**Bijzonderheid:** één plat domain (`sector`), net als currency's drie
+FX-paren — geen per-ticker-namespacing nodig zoals bij equity, want elke
+sector-ETF heeft van nature een unieke metric_key (geen collision-risico).
+
+## Belangrijk voorbehoud, voor alle vijf agents
 
 Alle tolerances in de tabellen hierboven zijn **illustratieve
 plaatshouders** — geen door DD gevalideerde drempels. Welk absoluut niveau

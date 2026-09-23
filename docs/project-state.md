@@ -5,14 +5,15 @@
 ## Current architecture
 
 Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
-domain agents + synthesizer), en C.1-C.2 (equity-adapter, financial agent)
-uit `docs/roadmap.md` staan volledig, plus een tussentijdse verbetering: een
-gedeelde kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`)
-die elke deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
-(`docs/agents.md`) zodat je nooit de code hoeft te lezen om te weten wat
-een agent doet, en `src/analysis/` — citeerbare, Python-berekende modellen
-(NFCI-interpretatie, Taylor Rule) die deep-dives onderbouwen i.p.v. alleen
-"het cijfer veranderde". 117 tests groen (`pytest`).
+domain agents + synthesizer), en C.1-C.3 (equity-adapter, financial agent,
+sector agent) uit `docs/roadmap.md` staan volledig, plus een tussentijdse
+verbetering: een gedeelde kwaliteitsregels-module
+(`agents/base.py::SHARED_QUALITY_RULES`) die elke deep-dive automatisch
+meekrijgt, een leesbaar overzicht per agent (`docs/agents.md`) zodat je
+nooit de code hoeft te lezen om te weten wat een agent doet, en
+`src/analysis/` — citeerbare, Python-berekende modellen (NFCI-
+interpretatie, Taylor Rule, relatieve sterkte) die deep-dives onderbouwen
+i.p.v. alleen "het cijfer veranderde". 131 tests groen (`pytest`).
 
 ## Completed
 
@@ -90,15 +91,25 @@ een agent doet, en `src/analysis/` — citeerbare, Python-berekende modellen
   losstaand van de reguliere `FRED_SERIES`-monitoring — bbp-data is
   kwartaalcijfers, andere ververssnelheid, zou de gedeelde
   staleness-check verstoren.
+- C.3 `src/agents/sector_agent.py` — alle 11 SPDR Select Sector-ETF's via
+  Alpha Vantage, één plat domain (`sector`, zoals currency's FX-paren —
+  geen per-ticker-namespacing nodig, elke ETF heeft een unieke metric_key).
+  Trigger op ruwe prijs (delta-mechanisme); scope ("eigen databron", niet
+  een aggregatie van al-gevolgde tickers) bevestigd met DD voordat
+  gebouwd. Derde onderbouwingsmodel: `src/analysis/relative_strength.py`
+  — het verschil tussen een sector-ETF's dagverandering en die van SPY
+  (S&P 500), onderscheidt sector-rotatie van een bredere marktbeweging.
+  DD's eigen voorbeeld ("XLB daalt t.o.v. S&P 500") is hier letterlijk het
+  ontwerp geweest.
 
-117 tests groen (`pytest`).
+131 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B + gedeelde kwaliteitsregels + C.1-C.2 (equity-adapter, financial
-  agent) + `docs/agents.md` + `src/analysis/` (NFCI-interpretatie, Taylor
-  Rule) afgerond. Nog niet gestart: C.3-C.5 (sector/commodity/economic
-  agents).
+- Sectie B + gedeelde kwaliteitsregels + C.1-C.3 (equity-adapter, financial
+  agent, sector agent) + `docs/agents.md` + `src/analysis/` (NFCI-
+  interpretatie, Taylor Rule, relatieve sterkte) afgerond. Nog niet
+  gestart: C.4-C.5 (commodity/economic agents).
 
 ## Known problems
 
@@ -131,10 +142,23 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 - Taylor Rule's inflatiemaatstaf is CPI YoY (wat we al ophalen) i.p.v.
   core PCE (preciezer, maar een nieuwe databron) — een bewuste, praktische
   keuze om geen nieuwe dependency toe te voegen voor het eerste model.
+- `sector_agent.py`'s tolerances zijn dollarbedragen per ETF, ruwweg op
+  ~3% gekalibreerd — deze verouderen sneller dan bijv. een rentepercentage
+  omdat ETF-prijsniveaus over maanden kunnen wegdriften. Een percentage-
+  gebaseerde tolerantie zou robuuster zijn; expliciet genoemd als
+  kandidaat voor DD's eigen latere finetuning, niet stilzwijgend als
+  "goed genoeg" gepresenteerd.
+- `sector_agent.py` triggert op de RUWE PRIJS van elke ETF, niet op de
+  relatieve sterkte zelf (die wordt pas bij de deep-dive berekend) — een
+  bewuste keuze om agents/base.py's gedeelde trigger-machinery niet te
+  hoeven uitbreiden. Zie `docs/architecture.md` voor de volledige
+  afweging; mocht DD liever een trigger ZIEN OP relatieve sterkte zelf,
+  is dat een grotere wijziging (raakt gedeelde infrastructuur) die eerst
+  besproken moet worden.
 
 ## Next priorities
 
-1. C.3-C.5 (sector, commodity, economic agents), in de volgorde die
+1. C.4-C.5 (commodity, economic agents), in de volgorde die
    `docs/roadmap.md` aangeeft.
 2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
