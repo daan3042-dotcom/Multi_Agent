@@ -63,7 +63,14 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
       (`analysis/relative_strength.py`) bij deep-dive, om sector-rotatie
       te onderscheiden van een bredere marktbeweging — bevestigd met DD
       als "eigen databron", niet een aggregatie van al-gevolgde tickers.
-- [ ] 4. Commodity agent.
+- [x] 4. Commodity agent (`src/agents/commodity_agent.py`): 10 grondstoffen
+      via Alpha Vantage, 1-op-1 uit `analyst_agent.ai`'s bestaande
+      `SUPPORTED_COMMODITIES`-lijst (incl. koper — ERO Copper). Trigger op
+      ruwe prijs. Onderbouwing: afwijking t.o.v. het 6-maands
+      voortschrijdend gemiddelde (`analysis/moving_average_deviation.py`),
+      berekend uit dezelfde API-respons als de huidige prijs. Eerste
+      databron zonder overlap met B/C.1-C.3 ("prijzen"-helft van C.4;
+      supply-chain-signalen horen bij de news monitor agent, sectie D).
 - [ ] 5. Economic agent.
 
 ## D. News monitor agent

@@ -1,4 +1,4 @@
-# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1/C.2/C.3 (equity, financial, sector)
+# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1-C.4 (equity, financial, sector, commodity)
 
 Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
 alleen wat er al staat.
@@ -23,6 +23,8 @@ alleen wat er al staat.
 | `analysis/taylor_rule.py` | Taylor Rule (Taylor, 1993) — impliciete "passende" Fed funds rate uit YoY-inflatie + output gap; r*=2% aanname afgestemd met DD, π*=2% is Fed's eigen doel | B.1-uitbreiding |
 | `agents/sector_agent.py` | Alpha Vantage (alle 11 SPDR Select Sector-ETF's) — trigger op ruwe prijs, één plat domain (`sector`) | C.3 |
 | `analysis/relative_strength.py` | Relatieve sterkte van een sector-ETF t.o.v. SPY (S&P 500) — onderscheidt sector-rotatie van een bredere marktbeweging | C.3-uitbreiding |
+| `agents/commodity_agent.py` | Alpha Vantage (10 grondstoffen, 1-op-1 uit analyst_agent.ai's SUPPORTED_COMMODITIES, incl. koper) — eerste databron zonder overlap met B/C.1-C.3 | C.4 |
+| `analysis/moving_average_deviation.py` | Procentuele afwijking t.o.v. een 6-maands voortschrijdend gemiddelde — mean-reversion/trend-signaal | C.4-uitbreiding |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 
@@ -176,6 +178,16 @@ de classificatie (outperform/underperform) toe als claim. Onderscheidt zo
 een sector-specifieke beweging (mogelijke rotatie) van een bredere
 marktbeweging — DD's eigen voorbeeld ("XLB daalt t.o.v. S&P 500") is hier
 letterlijk het ontwerp geweest.
+
+**Vierde model:** `analysis/moving_average_deviation.py::compute_deviation_from_average_pct()`
+— de procentuele afwijking van een grondstofprijs t.o.v. het 6-maands
+voortschrijdend gemiddelde. Bijzonderheid t.o.v. de andere drie modellen:
+Alpha Vantage's commodity-endpoint geeft de historische punten die dit
+model nodig heeft AL terug in dezelfde respons als de huidige prijs (geen
+los kwartaal-/dagcijfer zoals bij GDP/SPY) — `commodity_agent.py::deep_dive()`
+haalt die historie desondanks opnieuw op (voor verse data op deep-dive-
+tijd), maar had 'm in theorie ook uit de oorspronkelijke monitoring-pull
+kunnen bewaren.
 
 Geplande volgende modellen (zie `docs/roadmap.md` sectie I, DD's eigen
 voorbeelden): een Phillips-curve-model voor de nog te bouwen economic

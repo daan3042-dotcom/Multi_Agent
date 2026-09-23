@@ -5,15 +5,16 @@
 ## Current architecture
 
 Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
-domain agents + synthesizer), en C.1-C.3 (equity-adapter, financial agent,
-sector agent) uit `docs/roadmap.md` staan volledig, plus een tussentijdse
-verbetering: een gedeelde kwaliteitsregels-module
+domain agents + synthesizer), en C.1-C.4 (equity-adapter, financial agent,
+sector agent, commodity agent) uit `docs/roadmap.md` staan volledig, plus
+een tussentijdse verbetering: een gedeelde kwaliteitsregels-module
 (`agents/base.py::SHARED_QUALITY_RULES`) die elke deep-dive automatisch
 meekrijgt, een leesbaar overzicht per agent (`docs/agents.md`) zodat je
 nooit de code hoeft te lezen om te weten wat een agent doet, en
 `src/analysis/` — citeerbare, Python-berekende modellen (NFCI-
-interpretatie, Taylor Rule, relatieve sterkte) die deep-dives onderbouwen
-i.p.v. alleen "het cijfer veranderde". 131 tests groen (`pytest`).
+interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-gemiddelde-
+afwijking) die deep-dives onderbouwen i.p.v. alleen "het cijfer
+veranderde". 143 tests groen (`pytest`).
 
 ## Completed
 
@@ -101,15 +102,24 @@ i.p.v. alleen "het cijfer veranderde". 131 tests groen (`pytest`).
   (S&P 500), onderscheidt sector-rotatie van een bredere marktbeweging.
   DD's eigen voorbeeld ("XLB daalt t.o.v. S&P 500") is hier letterlijk het
   ontwerp geweest.
+- C.4 `src/agents/commodity_agent.py` — 10 grondstoffen via Alpha Vantage,
+  1-op-1 uit `analyst_agent.ai`'s bestaande `SUPPORTED_COMMODITIES`-lijst
+  (incl. koper — ERO Copper). Eén plat domain (`commodity`). Trigger op
+  ruwe prijs. Vierde onderbouwingsmodel:
+  `src/analysis/moving_average_deviation.py` — afwijking t.o.v. het
+  6-maands voortschrijdend gemiddelde, berekend uit dezelfde API-respons
+  als de huidige prijs (geen extra databron nodig, in tegenstelling tot
+  de andere drie modellen). Eerste agent met een databron die écht geen
+  overlap heeft met B/C.1-C.3.
 
-131 tests groen (`pytest`).
+143 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B + gedeelde kwaliteitsregels + C.1-C.3 (equity-adapter, financial
-  agent, sector agent) + `docs/agents.md` + `src/analysis/` (NFCI-
-  interpretatie, Taylor Rule, relatieve sterkte) afgerond. Nog niet
-  gestart: C.4-C.5 (commodity/economic agents).
+- Sectie B + gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial
+  agent, sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
+  (NFCI-interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-
+  gemiddelde-afwijking) afgerond. Nog niet gestart: C.5 (economic agent).
 
 ## Known problems
 
@@ -155,11 +165,15 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   afweging; mocht DD liever een trigger ZIEN OP relatieve sterkte zelf,
   is dat een grotere wijziging (raakt gedeelde infrastructuur) die eerst
   besproken moet worden.
+- `commodity_agent.py`'s tolerances zijn NOG minder zeker dan
+  `sector_agent.py`'s — grondstofprijzen/eenheden zijn hier niet met
+  zekerheid geverifieerd tegen actuele marktdata (in tegenstelling tot de
+  ETF-prijzen, waar de schattingen redelijk vertrouwd zijn). Sterkste
+  kandidaat tot nu toe voor DD's eigen latere finetuning.
 
 ## Next priorities
 
-1. C.4-C.5 (commodity, economic agents), in de volgorde die
-   `docs/roadmap.md` aangeeft.
+1. C.5 (economic agent), in de volgorde die `docs/roadmap.md` aangeeft.
 2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
    praktisch te valideren, niet alleen met fake clients.

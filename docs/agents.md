@@ -244,7 +244,55 @@ opgehaald per deep-dive, ook als meerdere sectoren tegelijk triggeren.
 FX-paren — geen per-ticker-namespacing nodig zoals bij equity, want elke
 sector-ETF heeft van nature een unieke metric_key (geen collision-risico).
 
-## Belangrijk voorbehoud, voor alle vijf agents
+## Commodity agent (`agents/commodity_agent.py`)
+
+**Wat het volgt:** 10 grondstoffen via Alpha Vantage, 1-op-1 overgenomen
+van `analyst_agent.ai`'s bestaande `SUPPORTED_COMMODITIES`-lijst (geen
+eigen selectie) — inclusief koper, relevant voor DD's eigen ERO
+Copper-positie. Elk gezien als "vers" tot 40 dagen oud (maandelijkse data,
+zelfde keuze als `analyst_agent.ai` voor dit endpoint):
+
+| Metric | Grondstof |
+|---|---|
+| WTI | Ruwe olie (WTI) |
+| Brent | Ruwe olie (Brent) |
+| Natural gas | Aardgas |
+| Copper | Koper |
+| Aluminum | Aluminium |
+| Wheat | Tarwe |
+| Corn | Maïs |
+| Cotton | Katoen |
+| Sugar | Suiker |
+| Coffee | Koffie |
+
+**Wanneer het triggert:** op de ruwe prijs (zelfde delta-mechanisme als de
+andere agents). Tolerances zijn hier **minder zeker** dan bij sector_agent
+— grondstofprijzen/eenheden (dollar/vat, dollar/pond, dollar/bushel, ...)
+zijn hier niet met zekerheid geverifieerd tegen actuele marktdata. Nog
+sterker een kandidaat voor jouw eigen latere finetuning dan de andere
+agents.
+
+**Waar de deep-dive over gaat:** duidt wat een significante prijsbeweging
+betekent — alleen als de cijfers dat rechtvaardigen.
+
+**Onderbouwing:** bij een trigger berekent Python
+(`src/analysis/moving_average_deviation.py`) de procentuele afwijking van
+de huidige prijs t.o.v. het 6-maands-gemiddelde — een gevestigd, eenvoudig
+technisch-analyse-concept (mean reversion/trend-sterkte). Bijzonderheid:
+de historische punten voor dit gemiddelde zitten al in dezelfde
+API-respons als de huidige prijs (Alpha Vantage's commodity-endpoint geeft
+een lijst terug, geen los kwartaal/dagcijfer) — kost dus geen extra
+databron t.o.v. de andere modellen, wel een extra API-call per grondstof
+op deep-dive-tijd.
+
+**Bijzonderheid:** dit is de eerste agent met een databron die ECHT geen
+overlap heeft met sectie B/C.1-C.3 (prijzen van fysieke grondstoffen,
+i.p.v. rentes/koersen/bedrijfsfundamentals) — zie ook `docs/roadmap.md`
+C.4's eigen bewoording. Supply-chain-signalen (bijv. een mijnverstoring)
+horen bewust NIET hier — dat is kwalitatief/nieuws-vormig en hoort bij de
+nog te bouwen news monitor agent (sectie D).
+
+## Belangrijk voorbehoud, voor alle zes agents
 
 Alle tolerances in de tabellen hierboven zijn **illustratieve
 plaatshouders** — geen door DD gevalideerde drempels. Welk absoluut niveau
