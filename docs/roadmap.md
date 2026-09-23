@@ -43,8 +43,15 @@ een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
 
 ## C. Domain Agents
 
-- [ ] 1. Equity agent: dunne adapter die `analyst_agent.ai`'s bestaande
-      output in het A-contract giet.
+- [x] 1. Equity agent (`src/agents/equity_agent.py`): dunne adapter die
+      `analyst_agent.ai`'s bestaande output (verified_metrics, Altman/
+      Piotroski/reverse-DCF, rapporttekst) in het A-contract giet. Eigen
+      `needs_review` wordt 1-op-1 overgenomen (geen eigen QC eroverheen).
+      Elke ticker krijgt zijn eigen domain (`equity:<TICKER>`) om
+      cross-ticker-vervuiling van de delta-trigger te voorkomen. De
+      daadwerkelijke koppeling (hoe een analyst_agent.ai-run hier
+      terechtkomt) is nog niet gebouwd — `AnalystAgentReport` is het
+      contract daarvoor.
 - [ ] 2. Financial agent.
 - [ ] 3. Sector agent.
 - [ ] 4. Commodity agent.

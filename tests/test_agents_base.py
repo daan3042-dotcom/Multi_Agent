@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from agents.base import SHARED_QUALITY_RULES, MetricSpec, run_deep_dive, run_monitoring
-from contract.output_contract import Mode
+from agents.base import SHARED_QUALITY_RULES, MetricSpec, evaluate_deltas, run_deep_dive, run_monitoring
+from contract.output_contract import Claim, Confidence, Mode
 from storage.schema import init_db
 
 SPECS = {"fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.25, severity="high")}
@@ -61,6 +61,35 @@ def test_run_monitoring_total_failure_produces_data_health_trigger_no_output(tmp
     assert output is None
     assert len(triggers) == 1
     assert triggers[0].reason.startswith("data_health:")
+
+
+def _claim(metric_key, value, now):
+    return Claim(domain="monetary_policy", claim="test", value=value, source="test", confidence=Confidence.HIGH, timestamp=now, metric_key=metric_key)
+
+
+def test_evaluate_deltas_triggers_on_significant_change():
+    now = datetime.now(timezone.utc)
+    new_claim = _claim("fed_funds_rate", 5.85, now)
+    previous_by_metric = {"fed_funds_rate": [_claim("fed_funds_rate", 5.50, now - timedelta(days=1))]}
+
+    triggers = evaluate_deltas("monetary_policy", [new_claim], SPECS, previous_by_metric, now=now)
+    assert len(triggers) == 1
+    assert triggers[0].metric_key == "fed_funds_rate"
+
+
+def test_evaluate_deltas_no_trigger_without_previous_observation():
+    now = datetime.now(timezone.utc)
+    new_claim = _claim("fed_funds_rate", 5.85, now)
+    triggers = evaluate_deltas("monetary_policy", [new_claim], SPECS, previous_by_metric={}, now=now)
+    assert triggers == []
+
+
+def test_evaluate_deltas_ignores_claims_without_a_spec():
+    now = datetime.now(timezone.utc)
+    new_claim = _claim("unspecced_metric", 999.0, now)
+    previous_by_metric = {"unspecced_metric": [_claim("unspecced_metric", 0.0, now - timedelta(days=1))]}
+    triggers = evaluate_deltas("monetary_policy", [new_claim], SPECS, previous_by_metric, now=now)
+    assert triggers == []
 
 
 def test_run_monitoring_fetch_exception_is_caught(tmp_path):

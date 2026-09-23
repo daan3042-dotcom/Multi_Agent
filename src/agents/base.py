@@ -154,6 +154,29 @@ def run_monitoring(
     output = DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=now, claims=claims)
     save_domain_output(conn, output)
 
+    triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
+
+    return output, triggers
+
+
+def evaluate_deltas(
+    domain: str,
+    claims: list[Claim],
+    metric_specs: dict[str, MetricSpec],
+    previous_by_metric: dict[str, list[Claim]],
+    now=None,
+) -> list[TriggerEvent]:
+    """De delta-trigger-vergelijking zelf, losgetrokken uit run_monitoring()
+    zodat ook een adapter die GEEN eigen fetch heeft (zie agents/
+    equity_agent.py, C.1: de data komt al kant-en-klaar uit een afgeronde
+    analyst_agent.ai-run) dezelfde triggerlogica kan hergebruiken in plaats
+    van 'm te herschrijven.
+
+    `previous_by_metric` moet VOOR het opslaan van `claims` zijn opgehaald
+    (zie run_monitoring hierboven) -- deze functie bemoeit zich niet met
+    volgorde/opslaan, alleen met de vergelijking zelf."""
+    now = now or now_utc()
+    triggers: list[TriggerEvent] = []
     for claim in claims:
         spec = metric_specs.get(claim.metric_key)
         if spec is None:
@@ -173,8 +196,7 @@ def run_monitoring(
         )
         if trigger is not None:
             triggers.append(trigger)
-
-    return output, triggers
+    return triggers
 
 
 def run_deep_dive(

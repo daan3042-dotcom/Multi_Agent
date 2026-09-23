@@ -4,12 +4,11 @@
 
 ## Current architecture
 
-Zie `docs/architecture.md`. Sectie A (fundament) en sectie B (eerste twee
-domain agents + synthesizer) uit `docs/roadmap.md` staan volledig, plus een
-tussentijdse verbetering: een gedeelde kwaliteitsregels-module
-(`agents/base.py::SHARED_QUALITY_RULES`) die elke deep-dive automatisch
-meekrijgt, i.p.v. dat elke domain agent zijn eigen neutraliteits-/
-kwaliteitsregels dupliceert. 79 tests groen (`pytest`).
+Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
+domain agents + synthesizer), en C.1 (equity-adapter) uit `docs/roadmap.md`
+staan volledig, plus een tussentijdse verbetering: een gedeelde
+kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`) die elke
+deep-dive automatisch meekrijgt. 95 tests groen (`pytest`).
 
 ## Completed
 
@@ -44,13 +43,23 @@ kwaliteitsregels dupliceert. 79 tests groen (`pytest`).
   neutraliteitszinnen zijn eruit. Naar aanleiding van DD's vraag of alle
   agents straks goed kunnen samenwerken en hoe we de analysekwaliteit
   structureel hoog houden (zie `CLAUDE.md`, "Werkwijze met DD").
+- C.1 `src/agents/equity_agent.py` — dunne adapter die analyst_agent.ai's
+  bestaande output (`AnalystAgentReport`: verified_metrics, Altman/
+  Piotroski/reverse-DCF, rapporttekst) in het A-contract giet. Geen eigen
+  LLM-deep-dive-call: `needs_review` wordt 1-op-1 overgenomen van
+  analyst_agent.ai's eigen QC. Elke ticker krijgt zijn eigen domain
+  (`equity:<TICKER>`) om te voorkomen dat de delta-trigger verschillende
+  tickers' gelijknamige metrics (bijv. "operating margin") met elkaar
+  vergelijkt — deze fix hergebruikt `agents/base.py`'s nieuw uitgepakte
+  `evaluate_deltas()`, en bewijst dat equity-triggers zonder enige
+  aanpassing door dezelfde `manager.dispatch()` gaan als B.1/B.2.
 
-79 tests groen (`pytest`).
+95 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B afgerond + de gedeelde kwaliteitsregels-module. Nog niet gestart:
-  sectie C (equity/financial/sector/commodity/economic agents).
+- Sectie B + gedeelde kwaliteitsregels + C.1 (equity-adapter) afgerond. Nog
+  niet gestart: C.2-C.5 (financial/sector/commodity/economic agents).
 
 ## Known problems
 
@@ -70,17 +79,21 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   praktisch gevalideerd zodra dit tegen een echte API-key draait.
 - B.3's synthesizer combineert nog niet inhoudelijk (geen tegenstrijdigheid-
   detectie, geen weging) — dat is sectie F, bewust nog niet hier.
+- C.1's `AnalystAgentReport` is een contract, geen werkende koppeling: er is
+  nog geen code die een analyst_agent.ai-run daadwerkelijk uitvoert en zijn
+  output in die vorm hierheen stuurt (subprocess, bestand, API — nog niet
+  gekozen). Bewust uit scope van "de adapter bouwen"; zie `docs/architecture.md`.
 
 ## Next priorities
 
-1. Sectie C.1: de equity agent als dunne adapter over `analyst_agent.ai`'s
-   bestaande pipeline-output — snelste winst, want het grootste deel
-   bestaat al.
-2. Daarna C.2-C.5 (financial, sector, commodity, economic agents), in de
-   volgorde die `docs/roadmap.md` aangeeft.
-3. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
+1. C.2-C.5 (financial, sector, commodity, economic agents), in de volgorde
+   die `docs/roadmap.md` aangeeft.
+2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
    deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
    praktisch te valideren, niet alleen met fake clients.
+3. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
+   output naar `AnalystAgentReport` vertaald krijgt) — nog geen concrete
+   trigger wanneer dit relevant wordt.
 
 ## Open questions needing the project owner's input
 

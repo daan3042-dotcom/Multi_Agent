@@ -1,4 +1,4 @@
-# Architecture — sectie A (fundament) + sectie B (eerste domain agents)
+# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1 (equity)
 
 Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
 alleen wat er al staat.
@@ -13,10 +13,11 @@ alleen wat er al staat.
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
-| `agents/base.py` | Gedeelde scaffolding: `run_monitoring()` (databron → claims → delta-trigger) + `run_deep_dive()` (LLM-synthese → QC → opslag) + `SHARED_QUALITY_RULES` (centrale schrijfregels, voor élke deep-dive) | B.1/B.2 |
+| `agents/base.py` | Gedeelde scaffolding: `run_monitoring()`, `evaluate_deltas()` (delta-trigger, losgetrokken zodat C.1 'm ook kan gebruiken), `run_deep_dive()`, `SHARED_QUALITY_RULES` | B.1/B.2 |
 | `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) — alleen vakinhoudelijke deep-dive-prompt | B.1 |
 | `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) — alleen vakinhoudelijke deep-dive-prompt | B.2 |
 | `synthesizer/synthesizer.py` | Legt gelijktijdige deep-dives naast elkaar (nog geen cross-domein-synthese) | B.3 |
+| `agents/equity_agent.py` | Adapter: analyst_agent.ai-output (`AnalystAgentReport`) → Claims/DomainOutput, per ticker genamespaced (`equity:<TICKER>`) | C.1 |
 
 ## Datastroom (zoals sectie A + B hem nu vastleggen)
 
@@ -130,11 +131,58 @@ voorbeeld dat het stappenplan zelf voor de manager noemt), door dispatch,
 deep-dive en de synthesizer heen, met een check dat alles — monitoring-
 claims én deep-dive-claims — daadwerkelijk in de database staat.
 
+## C.1: de equity-adapter — anders dan B, en waarom
+
+`agents/equity_agent.py` is de eerste domain agent die op `analyst_agent.ai`'s
+bestaande output voortbouwt in plaats van een eigen databron te
+implementeren — letterlijk de stappenplan-bewoording ("dunne adapter").
+Twee dingen wijken daardoor bewust af van het B-patroon:
+
+- **Geen eigen LLM-deep-dive-call.** `analyst_agent.ai`'s rapporttekst is al
+  gegenereerd, mét zijn eigen 4-reviewer-QC — dat IS de deep-dive.
+  `ingest_report()` neemt `needs_review` 1-op-1 over in plaats van er
+  `qc.qc.apply_qc()` overheen te draaien (zie CLAUDE.md: "Geen 4-parallelle-
+  reviewers-QC hier overnemen" — dat geldt ook omgekeerd: niet een lichte
+  review overheen draaien op iets dat al zwaar gereviewd is).
+- **Per-ticker domain-namespacing.** Monetary policy en currency hebben elk
+  ÉÉN instantie; equity heeft er evenveel als er tickers gevolgd worden, en
+  verschillende tickers delen dezelfde metric_key-namen (`sec_operating_margin`
+  voor zowel NKE als AAPL). Zonder namespacing zou `evaluate_deltas()` de
+  ene ticker per ongeluk tegen de andere afzetten. Oplossing:
+  `equity_domain(ticker)` geeft elke ticker zijn eigen domain-string
+  (`equity:NKE`, `equity:AAPL`, ...) — dit werkt zonder ENIGE aanpassing in
+  `manager.py`, `synthesizer.py` of `storage/schema.py`, omdat "domain"
+  daar altijd al een kale string was, geen vaste enum over de zeven
+  benoemde domeinen. Een mooie bevestiging dat die oorspronkelijke A.1-keuze
+  klopte. `tests/test_equity_agent.py::test_ingest_report_different_tickers_never_cross_trigger`
+  bewijst dat de collision-bug die dit voorkomt ook echt niet optreedt, en
+  `test_equity_triggers_integrate_with_manager_dispatch` dat een
+  equity-trigger door dezelfde `manager.dispatch()` gaat als B.1/B.2 —
+  zonder wijziging daar.
+
+**Scope-grens (bewust):** `AnalystAgentReport` is het contract waar de
+adapter op werkt, maar dit bestand roept `analyst_agent.ai` niet zelf aan
+(geen subprocess, geen cross-repo import). Hoe de output van een
+daadwerkelijke run hier terechtkomt is de "latere koppeling" uit
+`CLAUDE.md` — nog niet gebouwd.
+
+## Bewijs dat het fundament + B + C.1 samenhangen
+
+`tests/test_integration_section_a.py` doorloopt het A-pad end-to-end met
+synthetische data. `tests/test_integration_section_b.py` bouwt daarop voort
+met de twee echte domain agents (B.1/B.2, fetch en LLM-client beide
+monkeypatched/fake — geen netwerk of API-key nodig): een baseline-run per
+domein, dan een gesimuleerd Fed-besluit dat beide tegelijk raakt (het
+voorbeeld dat het stappenplan zelf voor de manager noemt), door dispatch,
+deep-dive en de synthesizer heen, met een check dat alles — monitoring-
+claims én deep-dive-claims — daadwerkelijk in de database staat.
+`tests/test_equity_agent.py` bewijst hetzelfde voor C.1, plus specifiek de
+ticker-namespacing en de interoperabiliteit met de al-bestaande manager.
+
 ## Wat hierna komt
 
-Sectie C (`docs/roadmap.md`): C.1, de equity agent als dunne adapter over
-`analyst_agent.ai`'s bestaande pipeline-output — de eerste domain agent die
-wél op die bestaande code voortbouwt in plaats van een eigen databron te
-implementeren. Ook de eerste gelegenheid om `qc.qc.default_llm_review()` en
-`agents.base.run_deep_dive()` tegen een échte Anthropic-call te draaien in
-plaats van tegen een fake client.
+Sectie C.2-C.5 (`docs/roadmap.md`): financial, sector, commodity, economic
+agents, in die volgorde. Ook de eerste gelegenheid om `qc.qc.default_llm_review()`
+en `agents.base.run_deep_dive()` (B.1/B.2) tegen een échte Anthropic-call te
+draaien in plaats van tegen een fake client — dat gebeurt niet via C.1 zelf
+(die heeft geen eigen LLM-call, zie hierboven).
