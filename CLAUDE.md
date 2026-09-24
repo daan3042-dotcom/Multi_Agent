@@ -11,7 +11,16 @@ monitort en bij significante afwijkingen escaleert naar een LLM-deep-dive,
 gesynthetiseerd tot marktintelligentie. Bouwt naast, en later bovenop,
 [`analyst_agent.ai`](https://github.com/daan3042-dotcom/analyst_agent.ai)
 (de bestaande single-ticker equity-researchpijplijn voor **The Collective
-Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
+Edge (TCE)**).
+
+**Volledige planning (bron van waarheid): `docs/roadmap.md`.** Sinds
+24-09-2026 georganiseerd rond vijf pijlers — Infrastructuur & Data →
+Domain Agents → Synthese & Intelligence → Evaluatie & Learning Loop →
+Output & Interfaces — vertaald uit DD's artifact "Market Intelligence
+Platform — Systeemoverzicht". Geen deadline; **huidige prioriteit is
+pijler 1 (Infrastructuur & Data) echt solide maken vóórdat er verder
+gebouwd wordt aan pijler 2 (meer agents/modellen)** — zie `docs/roadmap.md`
+se "Huidige focus" en `docs/project-state.md`.
 
 ## De regels die uit `analyst_agent.ai` zijn overgenomen (en waarom)
 
@@ -48,8 +57,9 @@ Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
 ## Voordat je iets verandert
 
 - Lees `docs/roadmap.md` — de volgorde binnen elke sectie is een bewuste
-  afhankelijkheidsketen, geen willekeurige lijst. Sectie A moet blijven
-  werken voordat sectie B erop bouwt, enzovoort.
+  afhankelijkheidsketen, geen willekeurige lijst. Pijler 1 (Infrastructuur
+  & Data) moet solide staan voordat pijler 2 (agents) verder uitgebreid
+  wordt, enzovoort — zie "Huidige focus" bovenaan de roadmap.
 - Draai `pytest` voor en na elke wijziging.
 - Nieuwe deterministische logica krijgt een test in `tests/`, naar het
   patroon van de bestaande testbestanden (één "correct"-geval, één
@@ -69,9 +79,11 @@ Edge (TCE)**). Volledige planning: `docs/roadmap.md`.
   achtergronddraaien over meerdere domain agents. Zie `docs/architecture.md`.
 - Geen LLM-arithmetiek in de trigger-laag of manager — die blijven
   deterministisch.
-- Geen roadmap-secties overslaan of herordenen zonder de afhankelijkheid in
-  `docs/roadmap.md` te checken (bijv. sectie C.1 kan pas nadat sectie B
-  bewijst dat het monitoring→trigger→deep-dive→database-pad werkt).
+- Geen roadmap-pijlers overslaan of herordenen zonder de afhankelijkheid in
+  `docs/roadmap.md` te checken — met name: geen nieuwe agents/modellen
+  (pijler 2) toevoegen zolang pijler 1 (Infrastructuur & Data) nog
+  openstaande, niet-triviale items heeft (zie "Huidige focus" bovenaan de
+  roadmap). Twijfel over of iets bij pijler 1 hoort? Eerst voorleggen.
 
 ## Werkwijze met DD
 

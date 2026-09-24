@@ -1,7 +1,11 @@
-# Architecture — sectie A (fundament) + sectie B (eerste domain agents) + C.1-C.4 (equity, financial, sector, commodity)
+# Architecture — wat er nu staat (gebouwd tegen de oude, kleinere roadmap-scope)
 
-Zie `docs/roadmap.md` voor de volledige planning. Dit document beschrijft
-alleen wat er al staat.
+Zie `docs/roadmap.md` voor de volledige, huidige planning (vijf pijlers,
+sinds 24-09-2026). Dit document beschrijft alleen wat er al staat, nog
+grotendeels beschreven met de OUDE sectie-lettering (A/B/C.1-C.4) — zie de
+mapping-tabel bovenaan `docs/roadmap.md` voor hoe dat zich verhoudt tot de
+nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
+(gedeeltelijk) en de kernopzet van pijler 2's eerste vijf agents.
 
 ## Modulekaart (`src/`)
 

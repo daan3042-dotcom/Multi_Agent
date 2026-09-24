@@ -2,19 +2,33 @@
 
 **Last updated:** 2026-09-22
 
+## Belangrijke koerswijziging (24-09-2026)
+
+`docs/roadmap.md` is volledig herschreven rond een nieuwe, veel preciezere
+doelarchitectuur (DD's artifact "Market Intelligence Platform —
+Systeemoverzicht"), georganiseerd in vijf pijlers: Infrastructuur & Data →
+Domain Agents → Synthese & Intelligence → Evaluatie & Learning Loop →
+Output & Interfaces. De oude, eenvoudigere planning (secties A–I) is
+vervangen, niet aangevuld — zie de mapping-tabel bovenaan de nieuwe
+roadmap. Geen deadline meer; **huidige prioriteit is sectie 1
+(Infrastructuur & Data) écht solide maken vóórdat er verder gebouwd wordt
+aan sectie 2 (meer agents/modellen)**. Dit document (project-state.md)
+volgt hieronder nog de oude, kleinere scope tot het is bijgewerkt naar de
+nieuwe structuur.
+
 ## Current architecture
 
-Zie `docs/architecture.md`. Sectie A (fundament), sectie B (eerste twee
-domain agents + synthesizer), en C.1-C.4 (equity-adapter, financial agent,
-sector agent, commodity agent) uit `docs/roadmap.md` staan volledig, plus
-een tussentijdse verbetering: een gedeelde kwaliteitsregels-module
-(`agents/base.py::SHARED_QUALITY_RULES`) die elke deep-dive automatisch
-meekrijgt, een leesbaar overzicht per agent (`docs/agents.md`) zodat je
-nooit de code hoeft te lezen om te weten wat een agent doet, en
-`src/analysis/` — citeerbare, Python-berekende modellen (NFCI-
-interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-gemiddelde-
-afwijking) die deep-dives onderbouwen i.p.v. alleen "het cijfer
-veranderde". 143 tests groen (`pytest`).
+Zie `docs/architecture.md`. Wat hieronder staat is gebouwd tegen de OUDE,
+eenvoudigere roadmap-structuur (secties A–C.4) — inhoudelijk nog correct,
+maar dekt maar een deel van de nieuwe doelarchitectuur (zie hierboven). In
+de nieuwe telling: sectie 1.1/1.2/1.3(deels)/1.5(deels)/1.6/1.8/1.9 en
+sectie 2.1-2.6 (kernmodellen, geen Finetune-items) staan. Een gedeelde
+kwaliteitsregels-module (`agents/base.py::SHARED_QUALITY_RULES`) die elke
+deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
+(`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
+modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
+voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
+alleen "het cijfer veranderde". 143 tests groen (`pytest`).
 
 ## Completed
 
@@ -116,10 +130,14 @@ veranderde". 143 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
-- Sectie B + gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial
-  agent, sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
+- 24-09-2026: koerswijziging naar de nieuwe, vijf-pijler-doelarchitectuur
+  (zie bovenaan) — `docs/roadmap.md` herschreven. Volgende stap: sectie 1
+  (Infrastructuur & Data) daadwerkelijk uitbreiden, niet meer agents.
+- Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
+  gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
+  sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
   (NFCI-interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-
-  gemiddelde-afwijking) afgerond. Nog niet gestart: C.5 (economic agent).
+  gemiddelde-afwijking).
 
 ## Known problems
 
@@ -133,10 +151,17 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   tegen een externe marktverwachting (die data hebben we niet) — een
   bewuste, praktische invulling van "tegen verwachting/thresholds leggen"
   uit B.1.
-- `default_llm_review()` en `run_deep_dive()` zijn nog nooit tegen een
-  échte Anthropic-call getest (alleen fake clients in tests) — er is nog
-  geen ANTHROPIC_API_KEY in deze omgeving. Functioneel gedekt door tests;
-  praktisch gevalideerd zodra dit tegen een echte API-key draait.
+- **24-09-2026, live-validatiepoging:** FRED en Alpha Vantage zijn in de
+  Claude Code-sandbox-omgeving hard geblokkeerd op netwerkniveau
+  (organisatie-egress-policy, 403 op de CONNECT — "do not retry or route
+  around it"). Geen bug in onze code; niet oplosbaar vanuit deze sessie.
+  De Anthropic-API werkt wél (staat op de noProxy-allowlist) — key
+  gevalideerd, een echte `models`-lijst opgehaald. `default_llm_review()`/
+  `run_deep_dive()` zijn dus nog steeds nooit tegen ECHTE marktdata getest
+  (wel tegen een echte Anthropic-call, met handmatig ingevulde
+  voorbeeldclaims, mogelijk als vervolgstap). Volledige live-validatie
+  vraagt een omgeving met onbeperkt uitgaand netwerkverkeer — relevant
+  voor de nog openstaande deployment-vraag (waar draait dit straks 24/7).
 - B.3's synthesizer combineert nog niet inhoudelijk (geen tegenstrijdigheid-
   detectie, geen weging) — dat is sectie F, bewust nog niet hier.
 - C.1's `AnalystAgentReport` is een contract, geen werkende koppeling: er is
@@ -173,13 +198,27 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 
 ## Next priorities
 
-1. C.5 (economic agent), in de volgorde die `docs/roadmap.md` aangeeft.
-2. Zodra een echte ANTHROPIC_API_KEY beschikbaar is: één keer een echte
-   deep-dive-run doen om `default_llm_review()`/`run_deep_dive()` ook
-   praktisch te valideren, niet alleen met fake clients.
-3. De daadwerkelijke koppeling voor C.1 (hoe een analyst_agent.ai-run zijn
-   output naar `AnalystAgentReport` vertaald krijgt) — nog geen concrete
-   trigger wanneer dit relevant wordt.
+**Herzien op 24-09-2026 — sectie 1 (Infrastructuur & Data) eerst, niet
+meer agents.** Concreet, in volgorde:
+
+1. Sectie 1's openstaande items dichten (zie `docs/roadmap.md`): vier
+   tijdstempels op `Claim` (event/source/ingestion/analysis-time), een
+   rijker event-model in de database (observations/entities/measurements/
+   events i.p.v. alleen claims/triggers), de volledige data-quality-
+   dimensies (completeness/validity/consistency/continuity + revisie-
+   detectie), een Source Registry, en de QC-state-machine
+   (RAW→...→ARCHIVED). Nog te scopen: in welke volgorde/hoeveel ineens —
+   dit vraagt eerst een eigen ontwerpronde, niet blind doorbouwen.
+2. Live validatie tegen echte databronnen (FRED/Alpha Vantage), zodra
+   netwerktoegang dat toelaat — zie "Known problems" hieronder
+   (24-09-2026: beide geblokkeerd in de huidige sandbox-omgeving,
+   organisatie-egress-policy, 403). Anthropic-calls werken al wel
+   (gevalideerd op 24-09-2026).
+3. C.5 (economic agent) en verdere Finetune-modellen: bewust NA sectie 1,
+   niet ervoor.
+4. De daadwerkelijke koppeling voor C.1/2.3 (hoe een `analyst_agent.ai`-run
+   zijn output naar `AnalystAgentReport` vertaald krijgt) — nog geen
+   concrete trigger wanneer dit relevant wordt.
 
 ## Open questions needing the project owner's input
 

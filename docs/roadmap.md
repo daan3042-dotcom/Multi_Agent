@@ -1,156 +1,313 @@
-# Roadmap — Market Intelligence Multi-Agent Systeem
+# Roadmap — Market Intelligence Platform
 
-Levend document, gespiegeld vanuit de oorspronkelijke planning-artifact
-(`market-intelligence-roadmap.html`). Vink items af zodra ze klaar zijn en
-groen zijn in de testsuite; volgorde binnen elke sectie is uitvoeringsvolgorde,
-niet per se tijdsduur.
+**Bron van waarheid vanaf nu:** de artifact ["Market Intelligence Platform —
+Systeemoverzicht"](https://claude.ai/artifact/PpSZ4yrbWyHRVifuAjoffn) (DD,
+23-09-2026). Dit document is de vertaling daarvan naar de repo — dezelfde
+vijf pijlers, dezelfde volgorde (infrastructuur → agents → synthese →
+evaluatie → output), dezelfde onderdelen. Vink items af zodra ze klaar zijn
+én groen zijn in de testsuite.
 
-Nieuw systeem naast `analyst_agent.ai` (zie die repo), later gekoppeld als
-equity-subagent. Doel: doorlopende monitoring per vakgebied die on-demand
-deep-dives triggert, gesynthetiseerd tot bruikbare marktintelligentie — incl.
-een dagelijkse Nasdaq/NQ-regime-agent en een news monitor agent.
+De oorspronkelijke, eenvoudigere planning (`market-intelligence-roadmap.html`,
+secties A–I) is hiermee **vervangen, niet aangevuld** — dit is nu het
+volledige einddoel. Geen deadline; kwaliteit en een solide fundament wegen
+zwaarder dan snelheid.
 
-## A. Fundament — moet eerst, bindt alles samen
+**Mapping oud → nieuw** (voor wie een code-comment tegenkomt die naar de
+oude lettering verwijst, bijv. "stap B.1" of "sectie C.1" — die comments
+blijven inhoudelijk kloppen, alleen de sectie-nummers zijn vervangen):
 
-- [x] 1. Output-contract vastleggen (`src/contract/output_contract.py`) —
-      claim/waarde/bron/confidence/tijdstempel, zelfde principe als de
-      lineage-aanpak in `analyst_agent.ai/src/reporting/lineage.py`.
-- [x] 2. Database-schema als source of truth (`src/storage/schema.py`) —
-      SQLite, slaat het A.1-contract op.
-- [x] 3. Data-health/staleness-checks (`src/health/data_health.py`) — moet
-      staan vóórdat er triggers op die data gebouwd worden.
-- [x] 4. Trigger-laag (`src/triggers/trigger_engine.py`) — deterministisch,
-      geen LLM.
-- [x] 5. QC-principe (`src/qc/qc.py`) — deterministisch waar mogelijk, lichte
-      LLM-review per domain-deep-dive (pluggable), NEEDS_REVIEW-vlag.
-- [x] 6. Manager-agent (`src/manager/manager.py`) — dispatch-logica,
-      gelijktijdige triggers over meerdere domeinen.
+| Oud | Nieuw |
+|---|---|
+| A (Fundament) | 1. Infrastructuur & Data |
+| B (monetary+currency skeleton) + C (Domain Agents) | 2. Domain Agents |
+| D (News monitor) | 2.8 News Monitor Agent |
+| E (Nasdaq/NQ regime) | 2.9 Nasdaq/NQ Regime & Bias Agent |
+| F (Synthesizer volwassen maken) | 3.1 Cross-Domain Synthesizer |
+| G (Output & interface) | 5. Output & Interfaces |
+| H (Open beslissingen) | Open beslissingen (onderaan, ongewijzigd relevant) |
+| I (Later/optioneel) | Verwerkt in de Finetune-lijsten per agent (sectie 2) en 4.1 |
 
-## B. Skeleton met eerste twee domeinen (monetary policy + currency)
+## Huidige focus
 
-- [x] 1. Monetary policy agent (`src/agents/monetary_policy_agent.py`):
-      monitoring mode (FRED) + deep-dive mode, op gedeelde scaffolding
-      (`src/agents/base.py`).
-- [x] 2. Currency agent (`src/agents/currency_agent.py`): zelfde
-      tweeledige opzet, Alpha Vantage FX.
-- [x] 3. Synthesizer eerste versie (`src/synthesizer/synthesizer.py`): legt
-      de twee deep-dives naast elkaar bij gelijktijdige triggers — nog geen
-      cross-domein-synthese, dat is F.
-- [x] 4. End-to-end testen (`tests/test_integration_section_b.py`):
-      monitoring → trigger → escalatie → synthese → database, met het
-      Fed-besluit-scenario uit A.6 zelf (raakt monetary policy + currency
-      tegelijk).
+**Sectie 1 (Infrastructuur & Data) eerst écht solide maken, vóór er verder
+gebouwd wordt aan sectie 2 (meer agents/modellen).** Veel van sectie 1 is
+gebouwd in een eenvoudigere vorm dan wat hieronder staat (zie de
+niet-afgevinkte items in 1.1–1.8) — dat gat dichten heeft nu prioriteit
+boven C.5 (economic agent) of verdere Finetune-modellen. Testen (tegen
+echte databronnen, zodra netwerktoegang dat toelaat) hoort bij dit werk,
+niet erna.
 
-## C. Domain Agents
+---
 
-- [x] 1. Equity agent (`src/agents/equity_agent.py`): dunne adapter die
-      `analyst_agent.ai`'s bestaande output (verified_metrics, Altman/
-      Piotroski/reverse-DCF, rapporttekst) in het A-contract giet. Eigen
-      `needs_review` wordt 1-op-1 overgenomen (geen eigen QC eroverheen).
-      Elke ticker krijgt zijn eigen domain (`equity:<TICKER>`) om
-      cross-ticker-vervuiling van de delta-trigger te voorkomen. De
-      daadwerkelijke koppeling (hoe een analyst_agent.ai-run hier
-      terechtkomt) is nog niet gebouwd — `AnalystAgentReport` is het
-      contract daarvoor.
-- [x] 2. Financial agent (`src/agents/financial_agent.py`): financiële-
-      marktcondities (Chicago Fed NFCI, high-yield credit spread, VIX,
-      10Y-2Y yield curve) — losstaand van bedrijfsfundamentals (equity) en
-      Fed-beleid zelf (monetary policy). Zelfde opzet als B.1/B.2, één
-      instantie via FRED.
-- [x] 3. Sector agent (`src/agents/sector_agent.py`): alle 11 SPDR Select
-      Sector-ETF's via Alpha Vantage, trigger op ruwe prijs (delta-
-      mechanisme). Onderbouwing: relatieve sterkte t.o.v. SPY/S&P 500
-      (`analysis/relative_strength.py`) bij deep-dive, om sector-rotatie
-      te onderscheiden van een bredere marktbeweging — bevestigd met DD
-      als "eigen databron", niet een aggregatie van al-gevolgde tickers.
-- [x] 4. Commodity agent (`src/agents/commodity_agent.py`): 10 grondstoffen
-      via Alpha Vantage, 1-op-1 uit `analyst_agent.ai`'s bestaande
-      `SUPPORTED_COMMODITIES`-lijst (incl. koper — ERO Copper). Trigger op
-      ruwe prijs. Onderbouwing: afwijking t.o.v. het 6-maands
-      voortschrijdend gemiddelde (`analysis/moving_average_deviation.py`),
-      berekend uit dezelfde API-respons als de huidige prijs. Eerste
-      databron zonder overlap met B/C.1-C.3 ("prijzen"-helft van C.4;
-      supply-chain-signalen horen bij de news monitor agent, sectie D).
-- [ ] 5. Economic agent.
+## 1. Infrastructuur & Data — fundament, geen agents
 
-## D. News monitor agent
+### 1.1 Output Contract & Domain Ontologie
+- [x] Claim-contract: waarde, bron, confidence (`src/contract/output_contract.py`)
+- [ ] Vier tijdstempels: event_time / source_time / ingestion_time /
+      analysis_time (nu: één `timestamp`-veld)
+- [ ] Domain ontologie vastleggen (Equities, Rates, FX, Commodities,
+      Credit, Macro, Sectors, Companies)
 
-- [ ] 1. Nieuwsbronnen/feeds bepalen.
-- [ ] 2. Relevantie-filtering.
-- [ ] 3. Koppeling aan de trigger-laag (A) als aanvullende triggerbron.
-- [ ] 4. Dubbeltelling voorkomen.
+### 1.2 Database & Event Store
+- [x] Database-schema als source of truth (`src/storage/schema.py`)
+- [ ] Event-model: raw data → observation → event
+- [ ] Entiteiten: sources, observations, entities, measurements, events,
+      expectations, claims, evidence
+- [ ] Entiteiten: triggers, deep_dives, agent_runs, syntheses, alerts,
+      regimes, theses, predictions, evaluations
 
-## E. Nasdaq/NQ regime- en bias-agent
+### 1.3 Data Quality & Health Layer
+- [x] Basale freshness-check (`src/health/data_health.py`)
+- [ ] Completeness / validity / consistency / continuity checks
+- [ ] Revisie-detectie (macro-cijfers worden later herzien — bijv. een
+      eerste BBP-schatting wijkt af van de definitieve)
+- [ ] Statusmodel: HEALTHY / DEGRADED / INVALID (nu: OK/STALE/UNREACHABLE/
+      UNKNOWN — andere vocabulaire, vergelijkbaar idee)
 
-- [ ] 1. Beslissing: specifiek NQ of generieke "instrument regime/bias
-      agent".
-- [ ] 2. Kwantitatief regime: `analyst_agent.ai/src/analysis/simple_hmm.py`
-      hergebruiken op NQ-prijsdata.
-- [ ] 3. Kwalitatieve bias-synthese: LLM-call die HMM-regime combineert met
-      de staat van alle domain agents (B t/m D).
-- [ ] 4. Dagelijkse auto-update (monitoring mode).
-- [ ] 5. On-demand vraag-interface.
+### 1.4 Source Registry
+- [ ] Centraal register per databron: provider, frequency, latency, cost,
+      quality_score
+- [ ] Fallback-bron-logica per databron
 
-## F. Synthesizer volwassen maken
+### 1.5 Trigger Engine
+- [x] Deterministische thresholds, geen LLM (`src/triggers/trigger_engine.py`)
+- [ ] Trigger severity: INFO / WATCH / SIGNIFICANT / CRITICAL (nu:
+      low/medium/high)
+- [ ] Trigger-versioning (welke regel-versie was actief toen dit
+      triggerde)
+- [ ] Vier triggertypes: threshold, regime-transitie, event, cross-
+      variable/correlatiebreuk (nu: threshold + surprise + data-health —
+      regime-transitie en cross-variable ontbreken nog)
 
-- [ ] 1. Cross-agent tegenstrijdigheid-check.
-- [ ] 2. Confidence-weging (Bayesiaans: prior-gewicht per domain agent op
-      basis van track record, gewogen posterior).
-- [ ] 3. Omgaan met tegenstrijdige signalen tussen domain agents.
-- [ ] 4. Cross-domein implicaties combineren tot één leesbaar geheel.
-- [ ] 5. Trigger-kalibratie/validatie (backtesten); uitbreiding:
-      Beta-Binomiaal-model i.p.v. `analyst_agent.ai`'s huidige
-      held-vs-breached-telling in `compute_calibration_score()`.
+### 1.6 QC & State Machine
+- [x] Layer 1 — mechanische QC (`src/qc/qc.py::deterministic_consistency_check`)
+- [x] Layer 2 — domain QC, lichte LLM-review, geen 4 parallelle reviewers
+      (`src/qc/qc.py::default_llm_review`)
+- [ ] Statusmodel: RAW → VALIDATED → TRIGGERED → DEEP_DIVE_COMPLETE →
+      QC_PASSED/FAILED → NEEDS_REVIEW → ARCHIVED (nu: alleen een
+      `needs_review`-vlag, geen volledige state machine)
 
-## G. Output & interface
+### 1.7 Observability
+- [ ] System health per component (source, ingestion, database, trigger,
+      agent, LLM)
+- [x] Fail loudly, not silently — data-health-triggers i.p.v. een stille
+      "geen trigger" (A.3-principe, staat al in `health/data_health.py` +
+      `triggers/trigger_engine.py::evaluate_data_health`)
+- [ ] Idempotency: event_id + dedup-key tegen dubbele verwerking
 
-- [ ] 1. Alert-mechanisme bij trigger/escalatie.
-- [ ] 2. Dashboard (dagelijkse stand van zaken per domein + Nasdaq-bias).
-- [ ] 3. On-demand query-interface over het hele systeem heen. Bevat een
-      aparte "thesis-mode": in tegenstelling tot de automatische monitoring/
-      deep-dive-laag (sectie B/C, die strikt neutraal blijft, zie
-      `agents/base.py`'s docstring) mag deze mode WEL expliciet gevraagde
-      directionele/probabilistische antwoorden geven — bijv. "ik denk dat
-      de Fed de rente gaat verhogen om deze en deze reden, hoe groot is
-      die kans en wat is de thesis ervoor/ertegen, met alle dynamische
-      redenen goed beschreven" (DD's eigen FOMC-voorbeeld). Analoog aan
-      `analyst_agent.ai`'s sectie 18 (Variant Perception): overal elders
-      neutraal, met één duidelijk gelabeld, geïsoleerd kanaal voor opinie.
-      Nog te ontwerpen — pas zinvol zodra er genoeg domeinen zijn om
-      daadwerkelijk iets te bevragen (zie sectie C/D).
+### 1.8 Orchestrator / Manager
+- [x] Deterministische dispatch-logica (`src/manager/manager.py`)
+- [x] Gelijktijdige triggers over meerdere domeinen (bv. een Fed-besluit
+      dat monetary policy + currency tegelijk raakt — bewezen in
+      `tests/test_integration_section_b.py`)
+- [ ] LLM-taken-tabel expliciet vastleggen (wat mag wel/niet door een LLM
+      gedaan worden, systeembreed)
 
-## H. Open beslissingen (bewust nog niet dichtgetimmerd)
+### 1.9 Documentatie
+- [x] `docs/agents.md` — leesbaar overzicht per agent, geen code lezen nodig
+- [x] `docs/architecture.md` — modulekaart, datastroom, ontwerpkeuzes
+- [x] `docs/roadmap.md` — dit document
+- [x] `docs/project-state.md` — status, grenzen, openstaande vragen
+- [x] `CLAUDE.md` — projectbriefing + werkafspraken
 
-- [ ] Statische vs. adaptieve trigger-thresholds per domein.
-- [ ] Prioritering van domeinen: dagelijkse ICT-trading (kort) vs. macro/
-      mid-term-werk (lang).
+---
+
+## 2. Domain Agents — de reasoning-laag (interpretatie, niet berekening)
+
+Volgorde/diepte hier is bewust ONDERGESCHIKT aan sectie 1 — zie "Huidige
+focus" hierboven. Per agent eerst de kernmodellen (must-have), dan een
+Finetune-lijst (later, DD's eigen optimalisatieproces).
+
+### 2.1 Monetary Policy Agent
+- [x] Monitoring mode + deep-dive mode (`src/agents/monetary_policy_agent.py`)
+- [x] Taylor Rule (`src/analysis/taylor_rule.py`)
+- [ ] Yield curve spreads (2s10s, 3m10y)
+- [ ] Fed funds futures-implied rate & surprise-metric
+- [ ] Reële rente (nominaal − breakeven inflatie)
+- **Finetune (later):** Wu-Xia shadow rate, ACM term premium-model,
+  MOVE-index, FOMC dot-plot-dispersie, Fed-balansveranderingen
+  (QT/QE-tempo)
+
+### 2.2 Currency Agent
+- [x] Monitoring mode + deep-dive mode (`src/agents/currency_agent.py`)
+- [ ] UIP / carry-analyse
+- [ ] Interest Rate Parity forward-berekening
+- [ ] REER-afwijking (mean-reversion)
+- [ ] Carry-to-vol ratio
+- **Finetune (later):** PPP-afwijking, reëel renteverschil,
+  terms-of-trade-index, CFTC COT-positionering, risk reversal-skew
+
+### 2.3 Equity Agent (adapter)
+- [x] Dunne adapter: `analyst_agent.ai`'s output in het contract
+      (`src/agents/equity_agent.py`)
+- [ ] De daadwerkelijke koppeling (hoe een `analyst_agent.ai`-run hier
+      terechtkomt — bestand/subprocess/API, nog niet gekozen)
+- [ ] Koppeling aan Company Intelligence naast Market Intelligence (zie
+      5.5)
+
+### 2.4 Financial Agent
+- [x] Monitoring mode + deep-dive mode (`src/agents/financial_agent.py`)
+- [ ] Financial Conditions Index als samengestelde z-score (nu: alleen
+      NFCI's eigen teken-interpretatie, `src/analysis/nfci_interpretation.py`)
+- [ ] Credit spread level & verandering (IG/HY OAS) (nu: alleen HY-spread
+      ruw, geen IG-vergelijking)
+- [ ] SOFR-OIS-spread
+- **Finetune (later):** Senior Loan Officer Survey, VIX-termstructuur,
+  Absorption Ratio (Kritzman)
+
+### 2.5 Sector Agent
+- [x] Monitoring mode + deep-dive mode (`src/agents/sector_agent.py`)
+- [x] Relatieve sterkte t.o.v. de brede markt (`src/analysis/relative_strength.py`)
+- [ ] Sector breadth (% boven 200-daags gemiddelde)
+- [ ] Cycle-gebaseerd rotatiemodel (voedt uit de economic agent, 2.7)
+- **Finetune (later):** earnings revision breadth, Investment Clock-model,
+  sector-bèta's naar macro-factoren
+
+### 2.6 Commodity Agent
+- [x] Monitoring mode + deep-dive mode (`src/agents/commodity_agent.py`)
+- [x] Afwijking t.o.v. 6-maands voortschrijdend gemiddelde
+      (`src/analysis/moving_average_deviation.py`) — alternatieve, al
+      geïmplementeerde methode; onderstaande zijn de eigenlijke doelmodellen
+- [ ] Cost-of-carry-model (contango/backwardation)
+- [ ] Stocks-to-use ratio
+- [ ] Crack/crush/spark spread
+- [ ] WTI-Brent-spread & term-structure-slope
+- **Finetune (later):** CFTC COT-positionering, inventory
+  days-of-supply, seizoensindex, copper/gold-ratio
+
+### 2.7 Economic Agent — nog niet gestart
+- [ ] Monitoring mode + deep-dive mode
+- [ ] Sahm Rule (eerste implementatie, hoogste prioriteit binnen deze agent)
+- [ ] Output gap (HP-filter op bbp-reeks)
+- [ ] Misery Index
+- [ ] ISM-diffusie-interpretatie
+- [ ] Phillips Curve-residual
+- **Finetune (later):** Leading Economic Index (LEI), Okun's Law,
+  Beveridge Curve, soft-vs-hard-data-gap, regionale Fed-surveys (Philly
+  Fed, Empire State)
+
+### 2.8 News Monitor Agent — nog niet gestart
+- [ ] Nieuwsbronnen/feeds bepalen
+- [ ] Entity resolution (bv. "Apple" bedrijf vs. aandeel vs. tekstvermelding)
+- [ ] Event extraction (who/did what/when/expected impact)
+- [ ] Deduplicatie tussen bronnen
+- [ ] Novelty detection (voegt een later artikel iets nieuws toe?)
+- [ ] Koppeling aan de trigger-laag (1.5) als aanvullende triggerbron
+
+### 2.9 Nasdaq/NQ Regime & Bias Agent — nog niet gestart
+- [ ] Beslissing: specifiek NQ of generieke "instrument regime/bias agent"
+- [ ] Kwantitatief regime: bestaande HMM (`analyst_agent.ai/src/analysis/simple_hmm.py`)
+      toegepast op NQ-prijsdata
+- [ ] Kwalitatieve bias-synthese uit alle domain agents
+- [ ] Regime ≠ bias ≠ trade-setup — expliciet gescheiden houden, ook in
+      het datamodel
+- [ ] Dagelijkse auto-update (monitoring mode) + on-demand interface
+- **Finetune (later):** realized volatility (Parkinson/Garman-Klass),
+  market breadth (advance-decline), put/call-ratio & VIX-termstructuur,
+  gamma exposure (GEX), concentratie-/correlatierisico in de index
+
+---
+
+## 3. Synthese & Intelligence — waar losse signalen marktinzicht worden
+
+### 3.1 Cross-Domain Synthesizer
+- [x] Eerste, simpele versie: gelijktijdige deep-dives naast elkaar
+      (`src/synthesizer/synthesizer.py`) — nog geen tegenstrijdigheid-
+      detectie of echte cross-domein-redenering
+- [ ] Cross-agent tegenstrijdigheid-detectie
+- [ ] Confidence-weging (Bayesiaans: prior-gewicht per domain agent op
+      basis van track record, gewogen posterior)
+- [ ] Cross-domein implicaties combineren tot één leesbaar geheel
+- [ ] Event-chain-reconstructie: nieuws en numerieke data in hetzelfde
+      event-model (hangt af van 1.2's event-model)
+
+### 3.2 Statistische synthese-laag — nog niet gestart
+- [ ] Z-score-normalisatie over domeinen heen
+- [ ] PCA op macro-reeksen (factor-reductie)
+- [ ] Rolling correlation / correlatiebreuk-detectie
+- [ ] Kalman filter voor ruizige reeksen
+
+### 3.3 Market State & Regime Engine — nog niet gestart
+- [ ] Cross-asset regime-aggregatie (breder dan alleen NQ, zie 2.9)
+- [ ] Regime/bias/trade-setup strikt gescheiden houden op systeemniveau
+
+---
+
+## 4. Evaluatie & Learning Loop — wat het systeem van chatbot naar
+   intelligentie maakt
+
+Nog niets van gebouwd. Dit is de laag die uiteindelijk bewijst of de
+onderbouwingsmodellen (sectie 2) en trigger-thresholds (1.5) daadwerkelijk
+kloppen — vergelijkbaar met `analyst_agent.ai`'s `compute_calibration_score()`,
+maar dan voor dit hele systeem.
+
+### 4.1 Predictions & Outcome Tracking
+- [ ] Expliciete, timestamped hypotheses per agent opslaan
+- [ ] `outcome_horizon` + actual vs. verwacht vastleggen
+- [ ] Predictions als first-class data naast claims
+
+### 4.2 Trigger-kalibratie & Backtesting
+- [ ] Held-vs-breached-tracking per trigger-regel
+- [ ] Beta-Binomiaal-model (posterior-onzekerheid bij weinig data) i.p.v.
+      alleen een held/breached-telling
+- [ ] Adaptieve thresholds op basis van kalibratie-resultaten
+
+### 4.3 Agent Track Records
+- [ ] Precision/recall/hallucination-rate per agent
+- [ ] Agent-reliability-scores als input voor de Bayesiaanse weging (3.1)
+
+### 4.4 Historical Replay Engine
+- [ ] Point-in-time-correcte snapshots per databron
+- [ ] Systeem laten draaien alsof het een historische datum is
+- [ ] Look-ahead/hindsight bias structureel voorkomen
+
+---
+
+## 5. Output & Interfaces — de database is de waarheid, dit is de weergave
+
+Nog niets van gebouwd.
+
+### 5.1 API-laag
+- [ ] Eén centrale API op de database
+- [ ] Dashboard, alerts, CLI en chat lezen allemaal uit dezelfde bron
+
+### 5.2 Dashboard
+- [ ] Dagelijkse stand van zaken per domein
+- [ ] Nasdaq-regime/bias prominent zichtbaar
+
+### 5.3 Alert-mechanisme
+- [ ] Notificatie bij trigger/escalatie
+
+### 5.4 On-demand Query-interface
+- [ ] Vragen kunnen stellen over het hele systeem heen, niet alleen NQ.
+      Bevat een aparte "thesis-mode": in tegenstelling tot de automatische
+      monitoring/deep-dive-laag (sectie 2, die strikt neutraal blijft —
+      zie `agents/base.py`'s docstring) mag deze mode WEL expliciet
+      gevraagde directionele/probabilistische antwoorden geven — bijv.
+      "ik denk dat de Fed de rente gaat verhogen om deze en deze reden,
+      hoe groot is die kans en wat is de thesis ervoor/ertegen" (DD's
+      eigen FOMC-voorbeeld). Analoog aan `analyst_agent.ai`'s sectie 18
+      (Variant Perception): overal elders neutraal, met één duidelijk
+      gelabeld, geïsoleerd kanaal voor opinie.
+
+### 5.5 Analyst Agent-koppeling
+- [ ] `analyst_agent.py` als subagent binnen Company Intelligence
+- [ ] Company Intelligence naast Market Intelligence in één platform
+
+---
+
+## Open beslissingen (bewust nog niet dichtgetimmerd)
+
+- [ ] Statische vs. adaptieve trigger-thresholds per domein (hangt samen
+      met 4.2).
+- [ ] Prioritering van domeinen: dagelijkse ICT-trading (kort) vs.
+      macro/mid-term-werk (lang) — kan de volgorde binnen sectie 2
+      beïnvloeden.
 - [ ] Hoeveel domain agents draaien continu vs. alleen op aanvraag.
-
-## I. Later / optioneel
-
-- [ ] Regime/bias-agent generaliseren naar meerdere instrumenten (DXY, crude,
-      Treasuries).
-- [ ] Market expectations-vergelijking scherper maken, voortbouwend op
-      `analyst_agent.ai/src/analysis/reverse_dcf.py`.
-- [ ] Thesis-tracking per domein (zoals `track_record.py` voor equity, maar
-      voor macro/currency-theses).
-- [x]/[ ] **Kwantitatieve modellen per agent, naarmate DD ze wil toevoegen.**
-      Zelfde patroon als `analyst_agent.ai/src/analysis/` (één model per
-      bestand). Gerealiseerd: `src/analysis/nfci_interpretation.py` (C.2)
-      en `src/analysis/taylor_rule.py` (monetary policy — r*=2% afgestemd
-      met DD, zie `docs/project-state.md`). Nog te doen: een Phillips-
-      curve-model voor de (nog te bouwen) economic agent, en een model
-      voor 1e/2e/3e-orde-inflatie-effecten bij monetary policy. Elk nieuw
-      model: eigen bestand in `src/analysis/`, gebruikt door de
-      bijbehorende agent — geen herstructurering nodig.
-- [ ] **Library + bronnen-hiërarchie per agent**, uiteindelijk uitgroeiend
-      tot een eigen database-hiërarchie: boeken > academische papers >
-      investor letters > artikelen > YouTube-video's > nieuwsberichten >
-      X-posts. Analoog aan `analyst_agent.ai/src/knowledge/`
-      (`library_index.py`/`library_search.py`, semantische RAG-search) —
-      dat project heeft dit zelf ook als open, onbeslist vraagstuk (zie
-      diens `docs/rejected-alternatives.md`, de evidence-tiering-vraag).
-      Zodra dit gebouwd wordt: waarschijnlijk relevant voor `Claim`'s
-      `confidence`-veld (A.1) — een claim uit een academisch paper zou een
-      andere confidence-anker moeten krijgen dan een claim uit een
-      X-post.
+- [ ] Library + bronnen-hiërarchie per agent, uitgroeiend tot een eigen
+      database-hiërarchie: boeken > academische papers > investor letters
+      > artikelen > YouTube-video's > nieuwsberichten > X-posts. Analoog
+      aan `analyst_agent.ai/src/knowledge/` — dat project heeft dit zelf
+      ook als open vraagstuk (`docs/rejected-alternatives.md`,
+      evidence-tiering). Raakt waarschijnlijk `Claim`'s `confidence`-veld
+      (1.1) zodra dit gebouwd wordt.
