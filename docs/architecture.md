@@ -14,7 +14,7 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | `contract/output_contract.py` | `Claim` en `DomainOutput` — de vorm waar elke domain agent zich aan houdt | A.1 |
 | `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7), sources (Source Registry, roadmap 1.4) | A.2 / 1.2 / 1.4 / 1.7 |
 | `sources/registry.py` | `SourceConfig` — de vorm van één geregistreerde bron (provider, domain, max_age, frequency, latency, cost, quality_score, fallback_source_key) | 1.4 |
-| `health/data_health.py` | Staleness/onbereikbaarheid per databron + revisie-detectie (roadmap 1.3), vóór de trigger-laag | A.3 / 1.3 |
+| `health/data_health.py` | Staleness/onbereikbaarheid per databron, revisie-detectie, completeness/validity/consistency/continuity-checks, en het `QualityStatus`-rollup (HEALTHY/DEGRADED/INVALID) — allemaal roadmap 1.3, vóór de trigger-laag | A.3 / 1.3 |
 | `health/system_health.py` | Centrale status-per-component-functie (source/ingestion/database/trigger/agent/LLM), roadmap 1.7 deel 1 — backend voor de latere Dashboard-laag (5.2). `sources_from_registry()` vult de `sources`-parameter automatisch vanuit 1.4's register | 1.7 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
@@ -166,6 +166,73 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   afweging in code-vorm, en `tests/test_system_health.py::
   test_system_health_with_registry_sources_keeps_two_fred_consumers_independent`
   voor het regressiebewijs.
+- **1.3's statusmodel (HEALTHY/DEGRADED/INVALID): GEEN hernoeming van
+  `HealthStatus`, wel een nieuw, complementair `QualityStatus`-rollup.**
+  De roadmap-notitie ("nu: OK/STALE/UNREACHABLE/UNKNOWN — andere
+  vocabulaire, vergelijkbaar idee") suggereert dat dit vooral een
+  woordenschat-kwestie is. Dat bleek bij nader inzien niet te kloppen, en
+  dat is de kern van deze beslissing.
+
+  **Optie (a), een echte hernoeming, is overwogen en afgewezen.**
+  `HealthStatus` wordt gebruikt in `health/data_health.py`,
+  `health/system_health.py` (severity-ordering, rollup, elk component),
+  `triggers/trigger_engine.py::evaluate_data_health`, `sources/
+  registry.py` (indirect, via `check_source()`), en in drie testbestanden
+  (`test_data_health.py`, `test_trigger_engine.py`, `test_system_
+  health.py`) — een reële, meervoudige-modules-brede blast radius. Erger
+  dan de omvang: de mapping is niet eens 1-op-1. OK/STALE/UNREACHABLE/
+  UNKNOWN zijn VIER waarden, HEALTHY/DEGRADED/INVALID zijn er DRIE — een
+  hernoeming moet dus sowieso al lossy keuzes maken (hoort STALE bij
+  DEGRADED of ergens anders; waar landt UNKNOWN). Een hernoeming die toch
+  al niet 1-op-1 kan, is geen hernoeming meer, maar een nieuw ontwerp
+  vermomd als opschoning.
+
+  **Het echte probleem met optie (a): de vier nieuwe checks (Deel 1) meten
+  assen die `HealthStatus` nooit heeft proberen te vangen.**
+  `HealthStatus` beschrijft specifiek "is de bron bereikbaar en vers"
+  (A.3) — één as. Completeness (kwam alles binnen déze pull), validity
+  (is DEZE waarde plausibel), consistency (klopt een afgeleide claim met
+  zijn eigen input) en continuity (zit er een gat verderop in de reeks)
+  zijn elk een ANDERE, orthogonale as. Een waarde kan perfect VERS zijn
+  (`HealthStatus.OK`) en toch ONGELDIG (een negatieve werkloosheid) —
+  deze twee feiten samenpersen in één enkele 3- of 4-waarden-enum verliest
+  precies het onderscheid dat de vier nieuwe checks juist willen maken.
+
+  **Gekozen aanpak: `HealthStatus` blijft ONGEWIJZIGD** (nul call sites
+  geraakt), elk van de vier nieuwe checks krijgt een EIGEN, smal
+  resultaat-type (`CompletenessResult`/`ValidityResult`/
+  `ConsistencyResult`/`ContinuityResult`, allen in `health/data_health.py`
+  — zie Deel 1 hieronder), en `QualityStatus` (HEALTHY/DEGRADED/INVALID)
+  is een NIEUW, TOEGEVOEGD rollup-type dat de vijf signalen (de vier
+  nieuwe checks + optioneel `HealthStatus`) samenvat tot één oordeel per
+  claim/metric — geen vervanging, een extra, hogere laag.
+  `rollup_quality_status()` combineert ze met een simpel worst-of (zelfde
+  patroon als `system_health.py`'s `_worst()`, geen uitgevonden
+  weegfactoren) — dat hoeft geen "geen gok"-schending te zijn omdat er
+  geen gewicht wordt geraden, alleen een volgorde (HEALTHY < DEGRADED <
+  INVALID) toegepast op signalen die zelf al puur deterministisch zijn.
+
+  Zelfs deze rollup is niet perfect 1-op-1: `HealthStatus.STALE` en
+  `HealthStatus.UNKNOWN` landen allebei op `QualityStatus.DEGRADED` (een
+  bewuste keuze: "nog geen oordeel mogelijk" verdient geen valse
+  geruststelling als HEALTHY), en `HealthStatus.UNREACHABLE` landt op
+  `QualityStatus.INVALID` bij gebrek aan een vierde bucket — een
+  eerlijk-benoemde onvolkomenheid, geen verborgen aanname. Zie de
+  mapping-tabel en `health/data_health.py::QualityStatus`'s docstring.
+
+  | `HealthStatus` (bron-freshness) | → | `QualityStatus` (kwaliteits-rollup) | Notitie |
+  |---|---|---|---|
+  | `OK` | → | `HEALTHY` | — |
+  | `STALE` | → | `DEGRADED` | bruikbaar, niet perfect |
+  | `UNKNOWN` | → | `DEGRADED` | geen data ≠ HEALTHY, maar ook geen bewezen fout |
+  | `UNREACHABLE` | → | `INVALID` | geen vierde bucket beschikbaar; enigszins oneigenlijk (INVALID impliceert een FOUTE waarde, niet AFWEZIGHEID van een waarde) — bewust benoemd, niet verdoezeld |
+
+  Nog niet gebouwd, expliciet vervolgwerk: een ECHTE gewogen synthese
+  over meerdere metrics/domeinen (bijv. "hoe erg is één INVALID-claim
+  tussen tien HEALTHY-claims voor het hele domein") hoort bij de
+  synthese-laag (sectie 3), net als `quality_score` uit 1.4 — deze
+  rollup oordeelt bewust alleen per losse claim/metric, geen aggregatie
+  eroverheen.
 - **Eigen databron-implementatie per domain agent, geen import van
   `analyst_agent.ai`.** `agents/monetary_policy_agent.py` en
   `agents/currency_agent.py` volgen dezelfde conventie als diens
@@ -195,7 +262,7 @@ CLAUDE.md, "eerst voorleggen, niet in stilte kiezen").
 | Component | LLM? | Taak / reden |
 |---|---|---|
 | `triggers/trigger_engine.py` (`evaluate_threshold`, `evaluate_surprise`, `evaluate_data_health`) | Nee | "Is deze afwijking significant" moet reproduceerbaar en goedkoop zijn — dit systeem draait onbeheerd en polled continu op de achtergrond. |
-| `health/data_health.py` | Nee | Pure leeftijdscontrole van de laatst bekende succesvolle pull tegen een verwachte ververssnelheid, plus deterministische revisie-detectie (waarde-vergelijking bij gelijke `source_time`, roadmap 1.3). |
+| `health/data_health.py` | Nee | Pure leeftijdscontrole van de laatst bekende succesvolle pull, revisie-detectie, en de vier nieuwe 1.3-checks (completeness/validity/consistency/continuity) + `rollup_quality_status()` — allemaal deterministische vergelijkingen, geen LLM. |
 | `health/system_health.py::system_health()` | Nee | Leest alleen al-bestaande, deterministische statussen (`data_health`, `agent_runs`) uit en rolt ze op — geen eigen oordeel, geen LLM. |
 | `sources/registry.py`, `storage/schema.py::register_source`/`get_source`/`list_sources` | Nee | Puur configuratie lezen/schrijven (Source Registry, roadmap 1.4) — geen interpretatie, geen LLM. `quality_score` is nu een leeg veld; de toekomstige berekening ervan (sectie 3) krijgt hier een eigen rij zodra die gebouwd wordt. |
 | `manager/manager.py::dispatch()` | Nee | Groepeert al-genomen triggerbeslissingen tot een `DispatchPlan` — coördineert, oordeelt niet opnieuw over "is dit significant". |

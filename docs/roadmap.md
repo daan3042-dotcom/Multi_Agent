@@ -80,14 +80,23 @@ niet erna.
 
 ### 1.3 Data Quality & Health Layer
 - [x] Basale freshness-check (`src/health/data_health.py`)
-- [ ] Completeness / validity / consistency / continuity checks
+- [x] Completeness / validity / consistency / continuity checks
+      (`src/health/data_health.py::evaluate_completeness/evaluate_validity/
+      evaluate_consistency/evaluate_continuity`). Elk als losstaande,
+      pure functie — WIRING in `agents/base.py`/`trigger_engine.py` bewust
+      niet geforceerd (zie `docs/project-state.md` voor per-check waarom),
+      dat is expliciet open vervolgwerk.
 - [x] Revisie-detectie (macro-cijfers worden later herzien — bijv. een
       eerste BBP-schatting wijkt af van de definitieve)
       (`src/health/data_health.py::detect_revision`,
       `src/triggers/trigger_engine.py::evaluate_revision`, gewired in
       `agents/base.py::run_monitoring`)
-- [ ] Statusmodel: HEALTHY / DEGRADED / INVALID (nu: OK/STALE/UNREACHABLE/
-      UNKNOWN — andere vocabulaire, vergelijkbaar idee)
+- [x] Statusmodel: HEALTHY / DEGRADED / INVALID
+      (`src/health/data_health.py::QualityStatus/rollup_quality_status`).
+      GEEN hernoeming van `HealthStatus` (die blijft ongewijzigd voor
+      bron-freshness) — een nieuw, complementair rollup-type over de vier
+      checks hierboven. Uitgebreid beargumenteerd in `docs/architecture.md`
+      ("Ontwerpkeuzes"), inclusief mapping-tabel tussen beide vocabulaires.
 
 ### 1.4 Source Registry
 - [x] Centraal register per databron: provider, frequency, latency, cost,

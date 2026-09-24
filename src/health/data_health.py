@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from typing import Any, Iterable
 
 from contract.output_contract import Claim
 
@@ -159,3 +160,249 @@ def detect_revision(
         if abs(claim.value - value) > tolerance:
             return claim
     return None
+
+
+# ---------------------------------------------------------------------------
+# Roadmap 1.3, resterende vier checks: completeness / validity / consistency
+# / continuity. Elk een EIGEN, smal resultaat-type i.p.v. geforceerd in
+# HealthStatus -- HealthStatus beschrijft specifiek "is de bron bereikbaar en
+# vers" (A.3); deze vier checks meten andere, orthogonale assen (breedte van
+# een pull, plausibiliteit van een waarde, rekenkundige klopt-het van een
+# afgeleide claim, gaten in een historische reeks) die daar niet onder
+# vallen. Zie docs/architecture.md ("Ontwerpkeuzes") voor de volledige
+# afweging, ook wat dit betekent voor het HEALTHY/DEGRADED/INVALID-
+# statusmodel hieronder.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CompletenessResult:
+    """Completeness: is voor ÉÉN monitoring-pull elke VERWACHTE metric ook
+    daadwerkelijk binnengekomen? Anders dan staleness (is de LAATSTE waarde
+    oud) of continuity hieronder (gat OVER TIJD in de reeks) -- dit is een
+    momentopname van ÉÉN cyclus: bijv. FRED_SERIES heeft 4 reeksen, maar
+    deze keer kwamen er maar 3 terug. Een ontbrekende metric die WEL
+    verwacht werd is geen gok-waardige situatie (fetch_snapshot() slaat 'm
+    om goede reden over, zie de agent-moduledocstrings) maar wel iets om
+    zichtbaar te houden."""
+
+    source: str
+    expected_metric_keys: frozenset[str]
+    missing_metric_keys: frozenset[str]
+    checked_at: datetime
+
+    @property
+    def is_complete(self) -> bool:
+        return not self.missing_metric_keys
+
+
+def evaluate_completeness(
+    source: str,
+    expected_metric_keys: Iterable[str],
+    present_metric_keys: Iterable[str],
+    now: datetime | None = None,
+) -> CompletenessResult:
+    """Zuiver deterministisch, geen I/O. `expected_metric_keys` komt in de
+    praktijk uit een agent se METRIC_SPECS.keys() (of FRED_SERIES.keys());
+    `present_metric_keys` uit de daadwerkelijke snapshot-dict van die
+    cyclus -- beide al beschikbaar in agents.base.run_monitoring() zonder
+    extra ophaalwerk. Een metric die WEL binnenkomt maar niet verwacht was
+    telt niet mee als incompleteness (dat zou een configuratiefout zijn,
+    geen data-kwaliteitsprobleem)."""
+    now = now or datetime.now(timezone.utc)
+    expected = frozenset(expected_metric_keys)
+    present = frozenset(present_metric_keys)
+    return CompletenessResult(
+        source=source, expected_metric_keys=expected, missing_metric_keys=expected - present, checked_at=now,
+    )
+
+
+@dataclass(frozen=True)
+class ValidityResult:
+    """Validity: is DEZE waarde, op zichzelf, plausibel? Een type-check
+    (is het een getal) plus een optioneel bereik. GEEN domein-specifieke
+    bereiken hardcoded hier -- net als METRIC_SPECS' tolerances (zie
+    agents/base.py's docstring, docs/roadmap.md sectie H) zijn plausibele
+    bereiken per metric een DD-finetuning-kwestie, geen gok van deze
+    check. `valid_range=None` betekent: alleen het type checken."""
+
+    metric_key: str
+    value: Any
+    is_valid: bool
+    reason: str | None
+    checked_at: datetime
+
+
+def evaluate_validity(
+    metric_key: str,
+    value: Any,
+    valid_range: tuple[float, float] | None = None,
+    now: datetime | None = None,
+) -> ValidityResult:
+    now = now or datetime.now(timezone.utc)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ValidityResult(
+            metric_key=metric_key, value=value, is_valid=False,
+            reason=f"geen getal (type {type(value).__name__})", checked_at=now,
+        )
+    if valid_range is not None:
+        lo, hi = valid_range
+        if not (lo <= value <= hi):
+            return ValidityResult(
+                metric_key=metric_key, value=value, is_valid=False,
+                reason=f"{value:g} valt buiten het plausibele bereik [{lo:g}, {hi:g}]", checked_at=now,
+            )
+    return ValidityResult(metric_key=metric_key, value=value, is_valid=True, reason=None, checked_at=now)
+
+
+@dataclass(frozen=True)
+class ConsistencyResult:
+    """Consistency: klopt een AFGELEIDE claim (source="Berekend (...)") met
+    de ruwe claims waaruit hij is berekend? Bijv. of "Afwijking daadwerke-
+    lijke Fed funds rate t.o.v. Taylor Rule" écht gelijk is aan
+    fed_funds_rate - taylor_rule_implied_rate. De herberekening zelf is
+    ONVERMIJDELIJK domein-specifiek (alleen de agent kent zijn eigen
+    formule) -- deze functie is daarom bewust een generieke vergelijker,
+    geen kant-en-klare per-agent-check."""
+
+    claim_label: str
+    stated_value: float
+    recomputed_value: float
+    is_consistent: bool
+    checked_at: datetime
+
+
+def evaluate_consistency(
+    claim_label: str,
+    stated_value: float,
+    recomputed_value: float,
+    tolerance: float = 1e-6,
+    now: datetime | None = None,
+) -> ConsistencyResult:
+    now = now or datetime.now(timezone.utc)
+    is_consistent = abs(stated_value - recomputed_value) <= tolerance
+    return ConsistencyResult(
+        claim_label=claim_label, stated_value=stated_value, recomputed_value=recomputed_value,
+        is_consistent=is_consistent, checked_at=now,
+    )
+
+
+@dataclass(frozen=True)
+class ContinuityGap:
+    before: datetime
+    after: datetime
+    gap: timedelta
+
+
+@dataclass(frozen=True)
+class ContinuityResult:
+    """Continuity: zit er een GAT in de tijdreeks van een metric dat groter
+    is dan de verwachte polling-cadans -- OOK als de LAATSTE waarde zelf
+    nog niet stale genoeg is om als HealthStatus.STALE te tellen. Kern-
+    onderscheid met staleness: evaluate_staleness()/check_source() kijken
+    alleen naar "hoe oud is de laatste succesvolle pull NU", niet naar of
+    er verderop in de reeks een periode is overgeslagen. Een reeks met
+    waarden in januari, februari, [gat], juni is voor staleness prima
+    (juni is vers) maar voor continuity niet."""
+
+    source: str
+    metric_key: str
+    expected_cadence: timedelta
+    gaps: tuple[ContinuityGap, ...]
+    checked_at: datetime
+
+    @property
+    def has_gap(self) -> bool:
+        return bool(self.gaps)
+
+
+def evaluate_continuity(
+    source: str,
+    metric_key: str,
+    timestamps: list[datetime],
+    expected_cadence: timedelta,
+    tolerance_factor: float = 1.5,
+    now: datetime | None = None,
+) -> ContinuityResult:
+    """Zuiver deterministisch, geen I/O. `timestamps` is typisch de
+    source_time van elke historische Claim voor deze metric (uit
+    storage.schema.load_latest_claims). `tolerance_factor` geeft normale
+    jitter in release-datums speling (zelfde gedachte als MAX_AGE's eigen
+    marge boven de kale cadans) -- pas een gat >
+    expected_cadence * tolerance_factor telt mee, niet elke kleine
+    afwijking."""
+    now = now or datetime.now(timezone.utc)
+    ordered = sorted(timestamps)
+    threshold = expected_cadence * tolerance_factor
+    gaps = tuple(
+        ContinuityGap(before=a, after=b, gap=b - a)
+        for a, b in zip(ordered, ordered[1:])
+        if (b - a) > threshold
+    )
+    return ContinuityResult(
+        source=source, metric_key=metric_key, expected_cadence=expected_cadence, gaps=gaps, checked_at=now,
+    )
+
+
+class QualityStatus(str, Enum):
+    """Roadmap 1.3, statusmodel HEALTHY/DEGRADED/INVALID. Complementair aan
+    HealthStatus, GEEN vervanging ervan: HealthStatus blijft de bron-
+    freshness/bereikbaarheid-status (A.3, ongewijzigd, overal in de
+    codebase gebruikt). QualityStatus is het rollup-oordeel over de
+    KWALITEIT van één specifieke claim/metric, samengesteld uit de vier
+    checks hierboven plus (optioneel) de bron se HealthStatus. Zie
+    docs/architecture.md ("Ontwerpkeuzes") voor waarom dit bewust geen
+    hernoeming van HealthStatus is."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    INVALID = "invalid"
+
+
+_QUALITY_SEVERITY_ORDER = {QualityStatus.HEALTHY: 0, QualityStatus.DEGRADED: 1, QualityStatus.INVALID: 2}
+
+# Vertaling van een bron se HealthStatus naar QualityStatus -- GEEN perfecte
+# 1-op-1-mapping (zie docs/architecture.md): STALE/UNKNOWN landen allebei op
+# DEGRADED ("bruikbaar maar niet perfect" resp. "nog geen oordeel mogelijk,
+# geen valse geruststelling als HEALTHY"), UNREACHABLE op INVALID bij gebrek
+# aan een vierde bucket -- een bewust geaccepteerde onvolkomenheid, geen
+# verborgen aanname.
+_SOURCE_STATUS_TO_QUALITY = {
+    HealthStatus.OK: QualityStatus.HEALTHY,
+    HealthStatus.UNKNOWN: QualityStatus.DEGRADED,
+    HealthStatus.STALE: QualityStatus.DEGRADED,
+    HealthStatus.UNREACHABLE: QualityStatus.INVALID,
+}
+
+
+def rollup_quality_status(
+    *,
+    source_status: HealthStatus | None = None,
+    completeness: CompletenessResult | None = None,
+    validity: ValidityResult | None = None,
+    consistency: ConsistencyResult | None = None,
+    continuity: ContinuityResult | None = None,
+) -> QualityStatus:
+    """Worst-of over alle MEEGEGEVEN signalen (elk optioneel -- niet elke
+    check is voor elke metric zinvol/beschikbaar, bijv. validity zonder een
+    DD-gevalideerd bereik, of consistency zonder een afgeleide claim). Geen
+    gewogen score, geen aannames over welk signaal zwaarder telt dan een
+    ander -- zelfde "worst-of, geen fancy weging"-patroon als
+    health.system_health's _worst(). Geen enkel signaal meegegeven is een
+    aanroepfout (ValueError), geen HEALTHY-by-default: een rollup zonder
+    input zou een valse geruststelling zijn, zie system_health.py's
+    zelfde principe bij een lege componentenlijst."""
+    signals: list[QualityStatus] = []
+    if source_status is not None:
+        signals.append(_SOURCE_STATUS_TO_QUALITY[source_status])
+    if completeness is not None:
+        signals.append(QualityStatus.HEALTHY if completeness.is_complete else QualityStatus.DEGRADED)
+    if validity is not None:
+        signals.append(QualityStatus.HEALTHY if validity.is_valid else QualityStatus.INVALID)
+    if consistency is not None:
+        signals.append(QualityStatus.HEALTHY if consistency.is_consistent else QualityStatus.INVALID)
+    if continuity is not None:
+        signals.append(QualityStatus.HEALTHY if not continuity.has_gap else QualityStatus.DEGRADED)
+    if not signals:
+        raise ValueError("rollup_quality_status: geef minstens één signaal mee -- een rollup zonder input is geen oordeel")
+    return max(signals, key=lambda s: _QUALITY_SEVERITY_ORDER[s])

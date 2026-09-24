@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 208 tests groen (`pytest`).
+alleen "het cijfer veranderde". 231 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 208 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-208 tests groen (`pytest`).
+231 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -195,7 +195,20 @@ alleen "het cijfer veranderde". 208 tests groen (`pytest`).
   `commodity_agent.py` ook naar het register gemigreerd (zelfde patroon,
   geen bug om op te lossen maar wel consistentie — alle 5 agents met een
   eigen live databron staan nu op dezelfde manier geregistreerd). 208
-  tests groen.
+  tests groen. Daarna: 1.3's laatste twee bullets afgerond. Vier nieuwe,
+  pure checkfuncties in `health/data_health.py`: `evaluate_completeness`
+  (verwachte metric ontbreekt in één pull), `evaluate_validity` (type/
+  bereik-check op een losse waarde), `evaluate_consistency` (klopt een
+  afgeleide claim met zijn eigen input), `evaluate_continuity` (gat in de
+  tijdreeks, los van of de laatste waarde zelf stale is). Plus
+  `QualityStatus` (HEALTHY/DEGRADED/INVALID) als NIEUW, complementair
+  rollup-type — geen hernoeming van `HealthStatus`, uitgebreid
+  beargumenteerd in `docs/architecture.md` (Ontwerpkeuzes: een hernoeming
+  zou ~4 modules + 3 testbestanden raken én is niet eens 1-op-1 mogelijk
+  tussen 4 en 3 waarden). Geen enkele wiring in agents/base.py of
+  trigger_engine.py geforceerd (zie Known problems) — dit blijft dus
+  onzichtbaar in het gedrag van de 6 agents, `docs/agents.md` is daarom
+  niet aangepast. 231 tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
@@ -305,6 +318,34 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
     redundantie, zie `docs/architecture.md` ("Ontwerpkeuzes") voor de
     volledige afweging tegenover het alternatief (dat de kernbug niet
     had opgelost).
+- **1.3's laatste twee bullets — bewuste grenzen, geen gaten:**
+  - Geen van de vier nieuwe checks is gewired in `agents/base.py` of
+    `triggers/trigger_engine.py`, per check een andere reden:
+    - **Completeness** is mechanisch het meest triviaal om te wiren
+      (`run_monitoring()` heeft `metric_specs.keys()` en `snapshot` al in
+      scope) — bewust NIET gedaan omdat het een gedragswijziging voor
+      alle 6 agents tegelijk zou zijn (nieuwe triggers bij een normale,
+      tot nu toe getolereerde gedeeltelijke pull — zie de
+      `fetch_snapshot()`-moduledocstrings: "ontbrekende reeksen worden
+      overgeslagen i.p.v. gegokt", dat is bewust bestaand gedrag). Een
+      vraag voor DD, niet stilzwijgend besloten.
+    - **Validity** heeft een `valid_range` per metric nodig die nog
+      nergens is vastgelegd — zelfde categorie open beslissing als
+      METRIC_SPECS' tolerances (sectie H), geen gok hier.
+    - **Consistency** vraagt domein-specifieke herberekeningslogica per
+      agent (bijv. de Taylor Rule-formule) — niet generiek te wiren
+      vanuit `agents/base.py`, dat kent de formules niet.
+    - **Continuity** heeft een "verwachte cadans" nodig die nu nergens
+      apart van MAX_AGE bestaat (MAX_AGE bevat al een staleness-marge,
+      is geen zuivere cadans) — zelfde categorie als validity's bereik.
+  - `QualityStatus`/`rollup_quality_status()` oordeelt alleen per LOSSE
+    claim/metric, geen aggregatie over meerdere metrics/domeinen heen
+    (bijv. "hoe erg is één INVALID-claim tussen tien HEALTHY-claims voor
+    het hele domein") — die synthese hoort bij sectie 3, net als
+    `quality_score` uit 1.4.
+  - Geen wiring betekent: `docs/agents.md` is NIET aangepast, dit werk is
+    onzichtbaar in hoe de 6 agents zich nu gedragen — puur nieuwe,
+    beschikbare infrastructuur.
 
 ## Next priorities
 
