@@ -8,7 +8,7 @@ from triggers.trigger_engine import TriggerEvent
 
 def _deep_dive_output(domain, narrative, needs_review=False):
     now = datetime.now(timezone.utc)
-    narrative_claim = Claim(domain=domain, claim="Deep-dive synthese", value=narrative, source="Claude deep-dive (test)", confidence=0.6, timestamp=now)
+    narrative_claim = Claim(domain=domain, claim="Deep-dive synthese", value=narrative, source="Claude deep-dive (test)", confidence=0.6, analysis_time=now)
     return DomainOutput(domain=domain, mode=Mode.DEEP_DIVE, generated_at=now, claims=[narrative_claim], needs_review=needs_review)
 
 
@@ -59,7 +59,7 @@ def test_to_markdown_includes_narratives_and_review_flag():
 
 def test_to_markdown_falls_back_to_claims_without_narrative():
     now = datetime.now(timezone.utc)
-    numeric_claim = Claim(domain="monetary_policy", claim="Fed funds rate", value=5.5, source="FRED", confidence=0.9, timestamp=now, metric_key="fed_funds_rate")
+    numeric_claim = Claim(domain="monetary_policy", claim="Fed funds rate", value=5.5, source="FRED", confidence=0.9, analysis_time=now, metric_key="fed_funds_rate")
     output = DomainOutput(domain="monetary_policy", mode=Mode.DEEP_DIVE, generated_at=now, claims=[numeric_claim])
     plan = dispatch([_event("monetary_policy")])
     md = synthesize_simultaneous(plan, {"monetary_policy": output}).to_markdown()

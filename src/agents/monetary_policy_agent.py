@@ -201,7 +201,8 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                     value=round(implied_rate, 2),
                     source="Berekend (Taylor Rule, 1993)",
                     confidence=Confidence.MEDIUM,
-                    timestamp=now,
+                    analysis_time=now,
+                    source_time=now,
                     note=assumptions_note,
                 )
             )
@@ -212,7 +213,8 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                     value=round(deviation, 2),
                     source="Berekend (Taylor Rule, 1993)",
                     confidence=Confidence.MEDIUM,
-                    timestamp=now,
+                    analysis_time=now,
+                    source_time=now,
                 )
             )
     return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now)

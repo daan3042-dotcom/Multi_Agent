@@ -68,9 +68,16 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   rapport.
 - **Claim-structuur i.p.v. los cijfer.** `Claim` generaliseert
   `lineage.py::build_lineage_manifest()`'s `{metric, value, source, period,
-  note}`-items, met `confidence` en `timestamp` toegevoegd omdat dit systeem
-  doorlopend draait (claims verouderen) in plaats van één rapport op één
-  moment.
+  note}`-items, met `confidence` toegevoegd omdat dit systeem doorlopend
+  draait (claims verouderen) in plaats van één rapport op één moment.
+  In plaats van één `timestamp` heeft een Claim vier tijdstempels
+  (`event_time` / `source_time` / `ingestion_time` / `analysis_time`,
+  zie roadmap 1.1) — nodig om later onderscheid te kunnen maken tussen
+  wanneer iets écht gebeurde, wat de bron als datum opgeeft, wanneer wij
+  het ophaalden, en wanneer een claim daadwerkelijk werd vastgesteld.
+  Alleen `analysis_time` is nu overal betrouwbaar gevuld; `source_time`
+  volgt uit de bron waar bekend, `event_time` is nog een gedocumenteerd
+  gat (komt met de Source Registry, 1.4).
 - **`metric_key` als optioneel, machine-checkbaar veld.** Zelfde onderscheid
   als `track_record.py` maakt tussen de platte tekst van sectie 17 en de
   `structured_kill_criteria`: alleen claims met een `metric_key` zijn later

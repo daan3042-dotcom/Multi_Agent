@@ -1,6 +1,6 @@
 # Current Project State
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-24
 
 ## Belangrijke koerswijziging (24-09-2026)
 
@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 143 tests groen (`pytest`).
+alleen "het cijfer veranderde". 154 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,13 +126,19 @@ alleen "het cijfer veranderde". 143 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-143 tests groen (`pytest`).
+154 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
 - 24-09-2026: koerswijziging naar de nieuwe, vijf-pijler-doelarchitectuur
-  (zie bovenaan) — `docs/roadmap.md` herschreven. Volgende stap: sectie 1
-  (Infrastructuur & Data) daadwerkelijk uitbreiden, niet meer agents.
+  (zie bovenaan) — `docs/roadmap.md` herschreven. Daarna: eerste,
+  afgebakende slice van pijler 1.1 gebouwd — vier tijdstempels op `Claim`
+  (`src/contract/output_contract.py`) en de domain-ontologie
+  (`src/contract/domain_ontology.py`), incrementeel gemigreerd over alle
+  6 agents, `agents/base.py` en de testsuite (154 tests groen). Bewust
+  NIET meegenomen: 1.2's volledige event-model (observations/entities/
+  measurements/events) — dat is losstaand vervolgwerk, met DD te bepalen
+  wat de volgende stap is (Source Registry 1.4 of het event-model 1.2).
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
@@ -201,14 +207,18 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 **Herzien op 24-09-2026 — sectie 1 (Infrastructuur & Data) eerst, niet
 meer agents.** Concreet, in volgorde:
 
-1. Sectie 1's openstaande items dichten (zie `docs/roadmap.md`): vier
-   tijdstempels op `Claim` (event/source/ingestion/analysis-time), een
-   rijker event-model in de database (observations/entities/measurements/
-   events i.p.v. alleen claims/triggers), de volledige data-quality-
-   dimensies (completeness/validity/consistency/continuity + revisie-
-   detectie), een Source Registry, en de QC-state-machine
-   (RAW→...→ARCHIVED). Nog te scopen: in welke volgorde/hoeveel ineens —
-   dit vraagt eerst een eigen ontwerpronde, niet blind doorbouwen.
+1. Sectie 1's openstaande items dichten (zie `docs/roadmap.md`). **1.1
+   afgerond (24-09-2026)**: vier tijdstempels op `Claim`
+   (event/source/ingestion/analysis-time, `src/contract/output_contract.py`)
+   en de domain-ontologie (`src/contract/domain_ontology.py`) — eerste,
+   afgebakende slice, incrementeel gemigreerd over alle 6 agents +
+   testsuite, 154 tests groen. Nog open: het rijkere event-model in de
+   database (observations/entities/measurements/events i.p.v. alleen
+   claims/triggers, 1.2), de volledige data-quality-dimensies
+   (completeness/validity/consistency/continuity + revisie-detectie, 1.3),
+   een Source Registry (1.4), trigger-severity/-versioning en de twee
+   ontbrekende triggertypes (1.5), en de QC-state-machine
+   (RAW→...→ARCHIVED, 1.6). Volgorde daarvan nog te bevestigen met DD.
 2. Live validatie tegen echte databronnen (FRED/Alpha Vantage), zodra
    netwerktoegang dat toelaat — zie "Known problems" hieronder
    (24-09-2026: beide geblokkeerd in de huidige sandbox-omgeving,

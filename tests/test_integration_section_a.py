@@ -50,7 +50,7 @@ def test_full_monitoring_to_deep_dive_pipeline_healthy_source(tmp_path):
         value=5.75,
         source="FRED",
         confidence=0.9,
-        timestamp=now,
+        analysis_time=now,
         metric_key="fed_funds_rate",
     )
     monitoring_output = DomainOutput(domain="monetary_policy", mode=Mode.MONITORING, generated_at=now, claims=[claim])

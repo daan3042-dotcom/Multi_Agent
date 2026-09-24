@@ -11,7 +11,7 @@ def _claim(**overrides):
         value=5.5,
         source="FRED",
         confidence=0.85,
-        timestamp=datetime.now(timezone.utc),
+        analysis_time=datetime.now(timezone.utc),
         metric_key="fed_funds_rate",
     )
     defaults.update(overrides)
@@ -22,6 +22,32 @@ def test_valid_claim_roundtrips_through_dict():
     c = _claim()
     restored = Claim.from_dict(c.to_dict())
     assert restored == c
+
+
+def test_claim_roundtrip_preserves_four_distinct_timestamps():
+    """Sterkere versie van de basis-roundtrip-test: vier VERSCHILLENDE
+    tz-aware datetimes per veld, zodat een per-ongeluk-verwisseld veld
+    (bijv. event_time en source_time omgedraaid in to_dict/from_dict) niet
+    onopgemerkt zou blijven doordat de waarden toevallig gelijk zijn."""
+    c = _claim(
+        analysis_time=datetime(2026, 1, 4, tzinfo=timezone.utc),
+        event_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        source_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        ingestion_time=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+    restored = Claim.from_dict(c.to_dict())
+    assert restored.analysis_time == c.analysis_time
+    assert restored.event_time == c.event_time
+    assert restored.source_time == c.source_time
+    assert restored.ingestion_time == c.ingestion_time
+
+
+def test_claim_ingestion_time_defaults_to_analysis_time():
+    now = datetime.now(timezone.utc)
+    c = _claim(analysis_time=now)
+    assert c.ingestion_time == now
+    assert c.event_time is None
+    assert c.source_time is None
 
 
 def test_claim_without_source_is_rejected():
@@ -39,9 +65,19 @@ def test_claim_confidence_out_of_range_is_rejected():
         _claim(confidence=1.5)
 
 
-def test_claim_naive_timestamp_is_rejected():
+def test_claim_naive_analysis_time_is_rejected():
     with pytest.raises(ValueError):
-        _claim(timestamp=datetime(2026, 1, 1))
+        _claim(analysis_time=datetime(2026, 1, 1))
+
+
+def test_claim_naive_source_time_is_rejected():
+    with pytest.raises(ValueError):
+        _claim(source_time=datetime(2026, 1, 1))
+
+
+def test_claim_naive_event_time_is_rejected():
+    with pytest.raises(ValueError):
+        _claim(event_time=datetime(2026, 1, 1))
 
 
 def test_domain_output_rejects_claim_from_other_domain():

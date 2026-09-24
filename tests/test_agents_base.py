@@ -64,7 +64,7 @@ def test_run_monitoring_total_failure_produces_data_health_trigger_no_output(tmp
 
 
 def _claim(metric_key, value, now):
-    return Claim(domain="monetary_policy", claim="test", value=value, source="test", confidence=Confidence.HIGH, timestamp=now, metric_key=metric_key)
+    return Claim(domain="monetary_policy", claim="test", value=value, source="test", confidence=Confidence.HIGH, analysis_time=now, metric_key=metric_key)
 
 
 def test_evaluate_deltas_triggers_on_significant_change():

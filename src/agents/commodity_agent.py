@@ -166,7 +166,8 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                     value=round(deviation_pct, 2),
                     source=f"Berekend ({MOVING_AVERAGE_PERIODS}-maands voortschrijdend gemiddelde)",
                     confidence=Confidence.HIGH,
-                    timestamp=now,
+                    analysis_time=now,
+                    source_time=now,
                     note=f"gemiddelde={average:.2f}, huidige waarde={current_value:.2f}",
                 )
             )

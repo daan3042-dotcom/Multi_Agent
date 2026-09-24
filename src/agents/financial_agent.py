@@ -139,7 +139,8 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                 value=classify_nfci(nfci_claim.value),
                 source="Chicago Fed NFCI-methodologie",
                 confidence=Confidence.VERY_HIGH,
-                timestamp=now,
+                analysis_time=now,
+                source_time=now,
                 note="0 = historisch gemiddelde sinds 1973; positief = krapper, negatief = ruimer",
             )
         )

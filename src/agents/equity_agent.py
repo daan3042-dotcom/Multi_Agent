@@ -131,7 +131,7 @@ def adapt_to_claims(report: AnalystAgentReport) -> list[Claim]:
                 value=value,
                 source=source,
                 confidence=Confidence.HIGH,
-                timestamp=report.generated_at,
+                analysis_time=report.generated_at,
                 metric_key=metric_key,
                 note=note,
             )
@@ -161,7 +161,7 @@ def adapt_to_claims(report: AnalystAgentReport) -> list[Claim]:
                 value=f"{report.piotroski_result['score']}/{report.piotroski_result['max_score']}",
                 source="SEC EDGAR",
                 confidence=Confidence.HIGH,
-                timestamp=report.generated_at,
+                analysis_time=report.generated_at,
                 note="9-punts checklist over twee opeenvolgende jaren SEC-data",
             )
         )
@@ -188,7 +188,7 @@ def adapt_narrative_claim(report: AnalystAgentReport) -> Claim:
         value=report.report_text or "(geen rapporttekst meegegeven)",
         source="analyst_agent.ai",
         confidence=Confidence.LOW if report.needs_review else Confidence.HIGH,
-        timestamp=report.generated_at,
+        analysis_time=report.generated_at,
     )
 
 

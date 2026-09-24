@@ -8,7 +8,7 @@ from qc.qc import apply_qc, default_llm_review, deterministic_consistency_check
 def _claim(**overrides):
     defaults = dict(
         domain="monetary_policy", claim="fed_funds_rate", value=5.5, source="FRED",
-        confidence=0.85, timestamp=datetime.now(timezone.utc), metric_key="fed_funds_rate",
+        confidence=0.85, analysis_time=datetime.now(timezone.utc), metric_key="fed_funds_rate",
     )
     defaults.update(overrides)
     return Claim(**defaults)

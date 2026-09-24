@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import functools
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
@@ -103,6 +103,25 @@ class MetricSpec:
     reason: str | None = None
 
 
+def _parse_source_date(raw: str | None) -> datetime | None:
+    """Vertaalt een ruwe brondatum (bijv. FRED's "as of"-datum uit
+    fetch_snapshot()'s entry["date"]) naar een echte source_time i.p.v. 'm
+    weg te gooien in het vrije-tekst note-veld. `None`/leeg en een
+    onparseerbaar formaat geven allebei `None` terug (verdedigend tegen
+    externe data, zelfde patroon als de KeyError/TypeError/ValueError-vang
+    bij het parsen van entry["value"] hierboven) -- geen gok, dan blijft
+    source_time gewoon ongezet."""
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def run_monitoring(
     conn,
     domain: str,
@@ -150,6 +169,8 @@ def run_monitoring(
             value = float(entry["value"])
         except (KeyError, TypeError, ValueError):
             continue
+        raw_date = entry.get("date")
+        source_time = _parse_source_date(raw_date)
         claims.append(
             Claim(
                 domain=domain,
@@ -157,9 +178,10 @@ def run_monitoring(
                 value=value,
                 source=source_name,
                 confidence=Confidence.HIGH,
-                timestamp=now,
+                analysis_time=now,
+                source_time=source_time,
                 metric_key=metric_key,
-                note=entry.get("date"),
+                note=None if source_time is not None else raw_date,
             )
         )
 
@@ -275,7 +297,8 @@ def run_deep_dive(
             value=f"Kon geen deep-dive genereren: {e}",
             source="Claude deep-dive (mislukt)",
             confidence=Confidence.LOW,
-            timestamp=now,
+            analysis_time=now,
+            source_time=now,
         )
         output = DomainOutput(
             domain=domain,
@@ -296,7 +319,8 @@ def run_deep_dive(
         value=deep_dive_text,
         source=f"Claude deep-dive ({model})",
         confidence=Confidence.MEDIUM,
-        timestamp=now,
+        analysis_time=now,
+        source_time=now,
         note="; ".join(t.reason for t in trigger_events) or None,
     )
     output = DomainOutput(

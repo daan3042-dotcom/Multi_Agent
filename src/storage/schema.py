@@ -49,7 +49,10 @@ CREATE TABLE IF NOT EXISTS claims (
     value_json TEXT NOT NULL,
     source TEXT NOT NULL,
     confidence REAL NOT NULL,
-    timestamp TEXT NOT NULL,
+    event_time TEXT,
+    source_time TEXT,
+    ingestion_time TEXT NOT NULL,
+    analysis_time TEXT NOT NULL,
     metric_key TEXT,
     note TEXT
 );
@@ -122,7 +125,8 @@ def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
     for c in output.claims:
         conn.execute(
             "INSERT INTO claims (domain_output_id, domain, claim, value_json, source, "
-            "confidence, timestamp, metric_key, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "confidence, event_time, source_time, ingestion_time, analysis_time, metric_key, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 domain_output_id,
                 c.domain,
@@ -130,7 +134,10 @@ def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
                 json.dumps(c.value, ensure_ascii=False, default=str),
                 c.source,
                 c.confidence,
-                c.timestamp.isoformat(),
+                c.event_time.isoformat() if c.event_time else None,
+                c.source_time.isoformat() if c.source_time else None,
+                c.ingestion_time.isoformat() if c.ingestion_time else None,
+                c.analysis_time.isoformat(),
                 c.metric_key,
                 c.note,
             ),
@@ -143,15 +150,18 @@ def load_latest_claims(conn: sqlite3.Connection, domain: str, metric_key: str | 
     """Geeft de meest recente claims voor een domein terug (optioneel
     gefilterd op metric_key), gesorteerd nieuw naar oud -- de trigger-laag
     (A.4) vergelijkt hiermee de nieuwste waarde tegen een eerdere."""
-    query = "SELECT domain, claim, value_json, source, confidence, timestamp, metric_key, note FROM claims WHERE domain = ?"
+    query = (
+        "SELECT domain, claim, value_json, source, confidence, event_time, source_time, "
+        "ingestion_time, analysis_time, metric_key, note FROM claims WHERE domain = ?"
+    )
     params: list = [domain]
     if metric_key is not None:
         query += " AND metric_key = ?"
         params.append(metric_key)
-    query += " ORDER BY timestamp DESC"
+    query += " ORDER BY analysis_time DESC"
     rows = conn.execute(query, params).fetchall()
     claims = []
-    for domain_, claim_, value_json, source, confidence, timestamp, metric_key_, note in rows:
+    for domain_, claim_, value_json, source, confidence, event_time, source_time, ingestion_time, analysis_time, metric_key_, note in rows:
         claims.append(
             Claim(
                 domain=domain_,
@@ -159,7 +169,10 @@ def load_latest_claims(conn: sqlite3.Connection, domain: str, metric_key: str | 
                 value=json.loads(value_json),
                 source=source,
                 confidence=confidence,
-                timestamp=datetime.fromisoformat(timestamp),
+                event_time=datetime.fromisoformat(event_time) if event_time else None,
+                source_time=datetime.fromisoformat(source_time) if source_time else None,
+                ingestion_time=datetime.fromisoformat(ingestion_time) if ingestion_time else None,
+                analysis_time=datetime.fromisoformat(analysis_time),
                 metric_key=metric_key_,
                 note=note,
             )

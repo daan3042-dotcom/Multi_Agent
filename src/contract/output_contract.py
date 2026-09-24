@@ -57,18 +57,40 @@ class Confidence(float, Enum):
 class Claim:
     """De enige eenheid waarin een domain agent iets beweert. Verplicht:
     claim (leesbare bewering), value (het onderliggende cijfer/object),
-    source (waar het vandaan komt), confidence, timestamp. metric_key is
+    source (waar het vandaan komt), confidence, analysis_time. metric_key is
     optioneel maar sterk aanbevolen voor elk cijfer dat later automatisch
     tegen een drempelwaarde gecontroleerd moet kunnen worden (zelfde rol als
     track_record.py's structured_kill_criteria: alleen claims MET metric_key
-    zijn machine-checkbaar, de rest is puur leesbare context)."""
+    zijn machine-checkbaar, de rest is puur leesbare context).
+
+    VIER TIJDSTEMPELS (roadmap 1.1) in plaats van één `timestamp`-veld --
+    elk beantwoordt een andere vraag, die later apart gebruikt wordt (bijv.
+    om bron-latency te meten in de Source Registry, 1.4):
+    - analysis_time (verplicht): wanneer deze claim is vastgesteld/berekend.
+      Directe opvolger van het oude `timestamp`-veld, blijft de sorteerkolom.
+    - ingestion_time (optioneel, defaultet naar analysis_time): wanneer WIJ
+      de onderliggende data hebben opgehaald. Valt in dit systeem nu altijd
+      samen met analysis_time (ophalen en claim-aanmaken gebeurt in dezelfde
+      cyclus) -- dat is de realiteit, geen aanname.
+    - source_time (optioneel, GEEN default): wat de bron zelf als
+      observatiedatum opgeeft (bijv. FRED's "as of"-datum). Blijft `None`
+      als dat niet betrouwbaar bekend is -- een fallback naar analysis_time
+      zou onbekende bron-latency ten onrechte als "vandaag" voorstellen.
+    - event_time (optioneel, GEEN default): wanneer het onderliggende
+      feit in de werkelijkheid plaatsvond (bijv. een FOMC-vergadering).
+      Blijft voorlopig overal `None` -- niet betrouwbaar af te leiden zonder
+      per-bron-metadata (komt met de Source Registry, 1.4). Expliciet
+      gedocumenteerd gat, geen gok."""
 
     domain: str
     claim: str
     value: Any
     source: str
     confidence: float
-    timestamp: datetime
+    analysis_time: datetime
+    event_time: datetime | None = None
+    source_time: datetime | None = None
+    ingestion_time: datetime | None = None
     metric_key: str | None = None
     note: str | None = None
 
@@ -83,18 +105,28 @@ class Claim:
             raise ValueError(f"Claim zonder bron is ongeldig (domain={self.domain!r}, claim={self.claim!r})")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(f"confidence moet tussen 0 en 1 liggen, kreeg {self.confidence!r}")
-        if self.timestamp.tzinfo is None:
-            raise ValueError("Claim.timestamp moet timezone-aware zijn (gebruik timezone.utc)")
+        if self.analysis_time.tzinfo is None:
+            raise ValueError("Claim.analysis_time moet timezone-aware zijn (gebruik timezone.utc)")
+        for field_name in ("event_time", "source_time", "ingestion_time"):
+            value = getattr(self, field_name)
+            if value is not None and value.tzinfo is None:
+                raise ValueError(f"Claim.{field_name} moet timezone-aware zijn (gebruik timezone.utc)")
+        if self.ingestion_time is None:
+            object.__setattr__(self, "ingestion_time", self.analysis_time)
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        d["timestamp"] = self.timestamp.isoformat()
+        for field_name in ("analysis_time", "event_time", "source_time", "ingestion_time"):
+            value = getattr(self, field_name)
+            d[field_name] = value.isoformat() if value is not None else None
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Claim":
         d = dict(d)
-        d["timestamp"] = datetime.fromisoformat(d["timestamp"])
+        for field_name in ("analysis_time", "event_time", "source_time", "ingestion_time"):
+            value = d.get(field_name)
+            d[field_name] = datetime.fromisoformat(value) if value else None
         return cls(**d)
 
 

@@ -43,10 +43,10 @@ niet erna.
 
 ### 1.1 Output Contract & Domain Ontologie
 - [x] Claim-contract: waarde, bron, confidence (`src/contract/output_contract.py`)
-- [ ] Vier tijdstempels: event_time / source_time / ingestion_time /
-      analysis_time (nu: één `timestamp`-veld)
-- [ ] Domain ontologie vastleggen (Equities, Rates, FX, Commodities,
-      Credit, Macro, Sectors, Companies)
+- [x] Vier tijdstempels: event_time / source_time / ingestion_time /
+      analysis_time (`src/contract/output_contract.py`)
+- [x] Domain ontologie vastleggen (Equities, Rates, FX, Commodities,
+      Credit, Macro, Sectors, Companies) (`src/contract/domain_ontology.py`)
 
 ### 1.2 Database & Event Store
 - [x] Database-schema als source of truth (`src/storage/schema.py`)

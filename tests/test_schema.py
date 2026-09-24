@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from contract.output_contract import Claim, DomainOutput, Mode
 from storage.schema import (
@@ -23,7 +23,9 @@ def _output():
         value=5.5,
         source="FRED",
         confidence=0.85,
-        timestamp=now,
+        analysis_time=now,
+        event_time=now - timedelta(days=1),
+        source_time=now - timedelta(hours=2),
         metric_key="fed_funds_rate",
     )
     return DomainOutput(domain="monetary_policy", mode=Mode.MONITORING, generated_at=now, claims=[claim])
@@ -47,6 +49,15 @@ def test_save_and_load_domain_output(tmp_path):
     assert claims[0].value == 5.5
     assert claims[0].metric_key == "fed_funds_rate"
 
+    # DB-round-trip van de vier tijdvelden zelf (niet alleen .value/.metric_key) --
+    # bewijst dat save_domain_output/load_latest_claims elk veld apart door
+    # SQLite heen krijgt, niet alleen de in-memory dataclass-round-trip.
+    original = output.claims[0]
+    assert claims[0].analysis_time == original.analysis_time
+    assert claims[0].event_time == original.event_time
+    assert claims[0].source_time == original.source_time
+    assert claims[0].ingestion_time == original.ingestion_time
+
 
 def test_load_latest_claims_filters_by_metric_key(tmp_path):
     conn = _db(tmp_path)
@@ -65,7 +76,7 @@ def test_load_latest_claims_orders_newest_first(tmp_path):
     now = datetime.now(timezone.utc)
     newer_claim = Claim(
         domain="monetary_policy", claim="Nieuwere claim", value=5.75, source="FRED",
-        confidence=0.9, timestamp=now, metric_key="fed_funds_rate",
+        confidence=0.9, analysis_time=now, metric_key="fed_funds_rate",
     )
     save_domain_output(conn, DomainOutput(domain="monetary_policy", mode=Mode.MONITORING, generated_at=now, claims=[newer_claim]))
 
