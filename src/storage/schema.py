@@ -23,11 +23,12 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator
 
 from contract.output_contract import Claim, DomainOutput, Mode
+from sources.registry import SourceConfig
 
 DEFAULT_DB_PATH = "market_intelligence.db"
 
@@ -103,6 +104,24 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_domain ON agent_runs(domain, run_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_runs_event_id
     ON agent_runs(domain, mode, event_id)
     WHERE event_id IS NOT NULL AND success = 1;
+
+-- Roadmap 1.4: Source Registry. Eén rij per (provider, domain)-combinatie,
+-- niet per provider -- zie sources/registry.py se moduledocstring voor de
+-- volledige afweging. source_key (bv. "FRED:monetary_policy") is wat
+-- record_data_health()/check_source() voortaan als source_name gebruiken.
+CREATE TABLE IF NOT EXISTS sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_key TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    max_age_seconds INTEGER NOT NULL,
+    frequency TEXT,
+    latency TEXT,
+    cost TEXT,
+    quality_score REAL,
+    fallback_source_key TEXT REFERENCES sources(source_key)
+);
+CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
 """
 
 
@@ -326,3 +345,73 @@ def latest_data_health(conn: sqlite3.Connection, source: str) -> dict | None:
         return None
     checked_at, success, detail = row
     return {"source": source, "checked_at": datetime.fromisoformat(checked_at), "success": bool(success), "detail": detail}
+
+
+def register_source(
+    conn: sqlite3.Connection,
+    source_key: str,
+    provider: str,
+    domain: str,
+    max_age: timedelta,
+    frequency: str | None = None,
+    latency: str | None = None,
+    cost: str | None = None,
+    quality_score: float | None = None,
+    fallback_source_key: str | None = None,
+) -> None:
+    """Roadmap 1.4: registreert/actualiseert ÉÉN bron in de Source Registry.
+    UPSERT (ON CONFLICT DO UPDATE), niet een append-only log zoals
+    record_agent_run()/record_data_health() -- dit is CONFIGURATIE, een
+    agent mag 'm daarom veilig op elke monitoring-cyclus aanroepen om zijn
+    eigen config te "declareren" zonder duplicaten te riskeren (zie
+    sources/registry.py se moduledocstring). `fallback_source_key` is een
+    FK naar sources.source_key (foreign_keys staat aan) -- verwijzen naar
+    een niet-geregistreerde bron faalt zichtbaar (IntegrityError), geen
+    stille no-op."""
+    conn.execute(
+        "INSERT INTO sources (source_key, provider, domain, max_age_seconds, frequency, latency, cost, "
+        "quality_score, fallback_source_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(source_key) DO UPDATE SET provider=excluded.provider, domain=excluded.domain, "
+        "max_age_seconds=excluded.max_age_seconds, frequency=excluded.frequency, latency=excluded.latency, "
+        "cost=excluded.cost, quality_score=excluded.quality_score, "
+        "fallback_source_key=excluded.fallback_source_key",
+        (
+            source_key, provider, domain, int(max_age.total_seconds()), frequency, latency, cost,
+            quality_score, fallback_source_key,
+        ),
+    )
+    conn.commit()
+
+
+def _source_config_from_row(row: tuple) -> SourceConfig:
+    source_key, provider, domain, max_age_seconds, frequency, latency, cost, quality_score, fallback_source_key = row
+    return SourceConfig(
+        source_key=source_key,
+        provider=provider,
+        domain=domain,
+        max_age=timedelta(seconds=max_age_seconds),
+        frequency=frequency,
+        latency=latency,
+        cost=cost,
+        quality_score=quality_score,
+        fallback_source_key=fallback_source_key,
+    )
+
+
+_SOURCES_SELECT = (
+    "SELECT source_key, provider, domain, max_age_seconds, frequency, latency, cost, "
+    "quality_score, fallback_source_key FROM sources"
+)
+
+
+def get_source(conn: sqlite3.Connection, source_key: str) -> SourceConfig | None:
+    row = conn.execute(f"{_SOURCES_SELECT} WHERE source_key = ?", (source_key,)).fetchone()
+    return _source_config_from_row(row) if row is not None else None
+
+
+def list_sources(conn: sqlite3.Connection) -> list[SourceConfig]:
+    """Alle geregistreerde bronnen, alfabetisch op source_key -- de vorm die
+    health.system_health straks gebruikt om zijn `sources`-parameter
+    automatisch te vullen i.p.v. met de hand samen te stellen."""
+    rows = conn.execute(f"{_SOURCES_SELECT} ORDER BY source_key").fetchall()
+    return [_source_config_from_row(row) for row in rows]

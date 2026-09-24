@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 194 tests groen (`pytest`).
+alleen "het cijfer veranderde". 205 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 194 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-194 tests groen (`pytest`).
+205 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -172,6 +172,26 @@ alleen "het cijfer veranderde". 194 tests groen (`pytest`).
   wacht op een toekomstige scheduler/orchestratielaag. `docs/agents.md`
   is NIET bijgewerkt: dit werk verandert niets aan wat een agent
   monitort/triggert/deep-dived, puur infrastructuur. 194 tests groen.
+  Daarna: 1.4 (Source Registry). Aanleiding: system_health() maakte
+  zichtbaar dat monetary_policy_agent.py en financial_agent.py allebei
+  de kale providernaam "FRED" als data_health-source_name gebruikten —
+  één gedeelde rij voor twee agents met een andere verwachte
+  ververssnelheid, waarbij de ene agent's successen de andere's
+  staleness konden verbergen. Nieuw: `src/storage/schema.py`'s
+  `sources`-tabel + `register_source`/`get_source`/`list_sources`
+  (UPSERT, geen event-log), `src/sources/registry.py::SourceConfig`.
+  Ontwerpbeslissing (uitgebreid beargumenteerd in `docs/architecture.md`,
+  Ontwerpkeuzes): één registry-entry per (provider, domain)-combinatie,
+  NIET per provider — een entry per provider alleen zou de kernbug niet
+  oplossen (data_health zou nog steeds gedeeld blijven). `monetary_policy_
+  agent.py`/`financial_agent.py` gemigreerd naar eigen source_keys
+  (`FRED:monetary_policy`/`FRED:financial`) — regressietest bewijst dat
+  hun data_health-geschiedenis nu écht onafhankelijk is. `health/
+  system_health.py::sources_from_registry()` (nieuw) leest de registry
+  uit en vult `system_health()`'s `sources`-parameter automatisch.
+  `docs/agents.md` kreeg een korte toelichting bij monetary_policy/
+  financial (de enige twee waar dit voor een lezer relevant is). 205
+  tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
@@ -241,19 +261,47 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
     onafhankelijk gemeten. Zie de moduledocstring van `system_health.py`.
   - "database"-component is een lichte `SELECT 1`-check — geen
     schijfruimte-, corruptie- of schrijfbaarheidscontrole.
-  - `sources`/`domains` worden door de AANROEPER meegegeven, geen
-    auto-discovery — een echt centraal register is de Source Registry
-    (1.4), bewust nog niet gebouwd.
-  - Twee agents die dezelfde bronnaam delen (bijv. `monetary_policy_agent`
-    en `financial_agent` delen beide "FRED", met verschillende MAX_AGE)
-    schrijven naar dezelfde `data_health`-rij — een bestaande beperking
-    van vóór 1.7, nu alleen zichtbaar geworden; de aanroeper van
-    `system_health()` moet zelf één max_age per bronnaam kiezen.
+  - `sources`/`domains` werden door de AANROEPER meegegeven, geen
+    auto-discovery — **inmiddels opgelost door 1.4**: `health/
+    system_health.py::sources_from_registry()` kan `sources` nu
+    automatisch vullen vanuit de Source Registry, voor elke agent die
+    zichzelf via `register_source()` declareert.
+  - ~~Twee agents die dezelfde bronnaam delen... schrijven naar dezelfde
+    `data_health`-rij~~ — **opgelost door 1.4**: `monetary_policy_agent.py`
+    en `financial_agent.py` hebben nu elk hun eigen `source_key`
+    (`FRED:monetary_policy`/`FRED:financial`). Zie hieronder voor de drie
+    agents die dit patroon nog niet hebben (geen aantoonbaar conflict).
   - Idempotency (`event_id`) is volledig opt-in en wordt door NIETS in de
     huidige codebase gebruikt — er is nog geen scheduler/orchestratielaag
     die een stabiele event_id per cyclus zou kunnen leveren. Voorkomt nu
     dus nog geen enkele dubbele verwerking in de praktijk, alleen de
     infrastructuur staat klaar.
+- **1.4's Source Registry — bewuste grenzen, geen gaten:**
+  - `currency_agent.py`, `sector_agent.py`, `commodity_agent.py` zijn
+    NIET gemigreerd naar de registry — elk gebruikt al een unieke
+    bronnaam (geen aantoonbaar FRED-achtig conflict), dus geen bug om op
+    te lossen. Migratie is mechanisch triviaal (zelfde patroon als de
+    twee gemigreerde agents, ~5 regels per agent) maar bewust niet in
+    deze ronde meegenomen om de diff gericht te houden op de aanleiding.
+    Kandidaat voor een korte, losse vervolgronde als DD dat wil.
+    `equity_agent.py` heeft geen eigen live databron (adapter) en komt
+    sowieso niet in aanmerking.
+  - `fallback_source_key` bestaat als veld + FK-constraint, maar GEEN
+    agent heeft een daadwerkelijke alternatieve bron geïmplementeerd —
+    er is dus nergens iets om naar te verwijzen. Wiring van echte
+    failover-logica in `agents/base.py::run_monitoring()` (proberen op
+    de primaire bron, bij totale mislukking de fallback proberen) is
+    open vervolgwerk, expliciet niet geforceerd binnen 1.4.
+  - `quality_score` bestaat als veld, altijd `None` — de berekening
+    ervan wacht op de Bayesiaanse weging uit de synthese-laag (sectie 3,
+    nog niet gebouwd), zoals afgesproken.
+  - Providerfeiten (latency, cost) worden gedupliceerd over meerdere
+    registry-rijen als twee agents dezelfde provider delen (nu:
+    `FRED:monetary_policy` en `FRED:financial` herhalen allebei "FRED
+    API, gratis, ~1s per call") — een bewust geaccepteerde kleine
+    redundantie, zie `docs/architecture.md` ("Ontwerpkeuzes") voor de
+    volledige afweging tegenover het alternatief (dat de kernbug niet
+    had opgelost).
 
 ## Next priorities
 

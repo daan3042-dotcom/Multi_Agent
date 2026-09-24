@@ -12,9 +12,10 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | Module | Rol | Roadmap-stap |
 |---|---|---|
 | `contract/output_contract.py` | `Claim` en `DomainOutput` — de vorm waar elke domain agent zich aan houdt | A.1 |
-| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7) | A.2 / 1.2 / 1.7 |
+| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7), sources (Source Registry, roadmap 1.4) | A.2 / 1.2 / 1.4 / 1.7 |
+| `sources/registry.py` | `SourceConfig` — de vorm van één geregistreerde bron (provider, domain, max_age, frequency, latency, cost, quality_score, fallback_source_key) | 1.4 |
 | `health/data_health.py` | Staleness/onbereikbaarheid per databron + revisie-detectie (roadmap 1.3), vóór de trigger-laag | A.3 / 1.3 |
-| `health/system_health.py` | Centrale status-per-component-functie (source/ingestion/database/trigger/agent/LLM), roadmap 1.7 deel 1 — backend voor de latere Dashboard-laag (5.2) | 1.7 |
+| `health/system_health.py` | Centrale status-per-component-functie (source/ingestion/database/trigger/agent/LLM), roadmap 1.7 deel 1 — backend voor de latere Dashboard-laag (5.2). `sources_from_registry()` vult de `sources`-parameter automatisch vanuit 1.4's register | 1.7 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
@@ -128,6 +129,43 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   orchestratielaag die cycli van een stabiele identifier voorziet), dus
   dit verandert niets aan het huidige gedrag totdat een toekomstige
   aanroeper er gebruik van maakt.
+- **Source Registry: één entry per (provider, domain)-combinatie, niet
+  één entry per provider met losse per-consument-config (roadmap 1.4).**
+  Dit is bewust NIET de voor de hand liggende keuze — een registry-rij
+  per PROVIDER (met max_age als apart, per-consument veld ernaast) is
+  op het eerste gezicht netter (geen duplicatie van providerfeiten als
+  latency/cost), en was serieus overwogen.
+
+  Reden om die aanpak toch AF te wijzen: het lost de aanleiding niet op.
+  `monetary_policy_agent.py` en `financial_agent.py` gebruiken beide
+  provider "FRED", met een verschillende verwachte ververssnelheid (35
+  vs. 10 dagen). Zolang `data_health` zelf op de KALE providernaam
+  "FRED" gekeyed blijft, delen beide agents nog steeds ÉÉN
+  `checked_at`-rij — ongeacht welke max_age je er los naast zet. Erger:
+  een succesvolle poll van de ene agent ververst die gedeelde rij, en
+  verbergt daarmee de andere agent's eigen staleness (die misschien al
+  dagen niet zelf gelukt is) achter de eerste agent's frequente
+  successen. Dat is precies het "stille-faalscenario" dat A.3's "fail
+  loudly, not silently"-principe wil voorkomen — een registry die alleen
+  de max_age-parameter oplost maar niet de gedeelde `data_health`-rij,
+  lost het echte probleem dus niet op.
+
+  De gekozen aanpak fixt dit bij de bron: elke registry-entry krijgt een
+  eigen `source_key`, format `<provider>:<domain>` (bv.
+  `"FRED:monetary_policy"`, `"FRED:financial"`), en DIE string — niet de
+  kale providernaam — is wat de gemigreerde agents voortaan als `source_name`
+  doorgeven aan `record_data_health()`/`check_source()`
+  (`agents/base.py`/`health/data_health.py` zelf zijn ONGEWIJZIGD; ze
+  namen altijd al een vrije string aan). Twee agents die dezelfde
+  provider delen krijgen zo gegarandeerd hun EIGEN, onafhankelijke
+  `data_health`-geschiedenis. Prijs: providerfeiten (latency, cost) die
+  écht gedeeld zijn tussen consumenten van dezelfde provider worden
+  letterlijk gedupliceerd over meerdere rijen — een bewust geaccepteerde
+  kleine redundantie tegenover een registry die de kernbug niet had
+  opgelost. Zie `sources/registry.py`'s moduledocstring voor dezelfde
+  afweging in code-vorm, en `tests/test_system_health.py::
+  test_system_health_with_registry_sources_keeps_two_fred_consumers_independent`
+  voor het regressiebewijs.
 - **Eigen databron-implementatie per domain agent, geen import van
   `analyst_agent.ai`.** `agents/monetary_policy_agent.py` en
   `agents/currency_agent.py` volgen dezelfde conventie als diens
@@ -159,6 +197,7 @@ CLAUDE.md, "eerst voorleggen, niet in stilte kiezen").
 | `triggers/trigger_engine.py` (`evaluate_threshold`, `evaluate_surprise`, `evaluate_data_health`) | Nee | "Is deze afwijking significant" moet reproduceerbaar en goedkoop zijn — dit systeem draait onbeheerd en polled continu op de achtergrond. |
 | `health/data_health.py` | Nee | Pure leeftijdscontrole van de laatst bekende succesvolle pull tegen een verwachte ververssnelheid, plus deterministische revisie-detectie (waarde-vergelijking bij gelijke `source_time`, roadmap 1.3). |
 | `health/system_health.py::system_health()` | Nee | Leest alleen al-bestaande, deterministische statussen (`data_health`, `agent_runs`) uit en rolt ze op — geen eigen oordeel, geen LLM. |
+| `sources/registry.py`, `storage/schema.py::register_source`/`get_source`/`list_sources` | Nee | Puur configuratie lezen/schrijven (Source Registry, roadmap 1.4) — geen interpretatie, geen LLM. `quality_score` is nu een leeg veld; de toekomstige berekening ervan (sectie 3) krijgt hier een eigen rij zodra die gebouwd wordt. |
 | `manager/manager.py::dispatch()` | Nee | Groepeert al-genomen triggerbeslissingen tot een `DispatchPlan` — coördineert, oordeelt niet opnieuw over "is dit significant". |
 | Domain agent monitoring mode (`agents/*.py::monitor()`, `agents/base.py::run_monitoring()`) | Nee | Data ophalen + delta-berekening tegen de vorige observatie — puur cijferwerk, geen duiding. |
 | `src/analysis/*` (Taylor Rule, NFCI-interpretatie, relatieve sterkte, moving-average-deviation) | Nee | Citeerbare, deterministische modellen berekend in Python, aan de LLM gegeven als kant-en-klare claim om te **duiden**, nooit om zelf te **schatten** ("Python computes, Claude narrates"). |

@@ -44,9 +44,18 @@ import requests
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.taylor_rule import compute_output_gap_pct, compute_taylor_rule_rate
 from contract.output_contract import Claim, Confidence, now_utc
+from storage.schema import register_source
 
 DOMAIN = "monetary_policy"
-SOURCE_NAME = "FRED"
+PROVIDER = "FRED"
+# Roadmap 1.4 (Source Registry): EIGEN, per-agent-gescopete source_key i.p.v.
+# de kale providernaam "FRED" -- financial_agent.py gebruikt dezelfde
+# provider met een andere MAX_AGE (35 vs. 10 dagen); zonder deze scoping
+# zouden beide agents naar dezelfde data_health-rij schrijven en zou de
+# ene agent's succesvolle polls de andere's staleness verbergen. Zie
+# sources/registry.py se moduledocstring en docs/architecture.md
+# ("Ontwerpkeuzes") voor de volledige afweging.
+SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 MAX_AGE = timedelta(days=35)  # de meeste FRED-reeksen hier zijn maandelijks
 
@@ -132,8 +141,14 @@ def fetch_snapshot() -> dict:
 
 def monitor(conn, now=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
-    volledige gedrag (data-health, claims opslaan, delta-triggers)."""
-    return run_monitoring(conn, DOMAIN, SOURCE_NAME, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    volledige gedrag (data-health, claims opslaan, delta-triggers).
+    register_source() is een idempotente upsert (roadmap 1.4) -- veilig
+    om op elke cyclus te herhalen, declareert alleen de actuele config."""
+    register_source(
+        conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
+        frequency="maandelijks (meeste FRED-reeksen hier)", latency="~1s per call (REST)", cost="gratis (FRED API)",
+    )
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
 
 
 def _fetch_taylor_rule_inputs() -> dict | None:

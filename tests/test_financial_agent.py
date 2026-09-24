@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import agents.financial_agent as fa
-from storage.schema import init_db
+from storage.schema import get_source, init_db, latest_data_health
 
 
 def test_fetch_snapshot_without_api_key_returns_error(monkeypatch):
@@ -51,6 +51,27 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     assert output is not None
     assert output.domain == "financial"
     assert triggers == []
+
+
+def test_monitor_registers_itself_in_the_source_registry_with_its_own_key(tmp_path, monkeypatch):
+    """Roadmap 1.4: dezelfde provider (FRED) als monetary_policy_agent,
+    maar een EIGEN source_key en dus een eigen data_health-geschiedenis --
+    dat is de kern van de fix (zie aanleiding in docs/architecture.md)."""
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(fa, "fetch_snapshot", lambda: {"vix": {"value": "18.5", "date": "2026-01-01"}})
+
+    fa.monitor(conn, now=now)
+
+    source = get_source(conn, fa.SOURCE_KEY)
+    assert source is not None
+    assert source.provider == "FRED"
+    assert source.domain == "financial"
+    assert source.max_age == fa.MAX_AGE
+    assert fa.SOURCE_KEY != "FRED"
+
+    assert latest_data_health(conn, fa.SOURCE_KEY) is not None
+    assert latest_data_health(conn, "FRED") is None
 
 
 def test_monitor_triggers_on_significant_vix_spike(tmp_path, monkeypatch):

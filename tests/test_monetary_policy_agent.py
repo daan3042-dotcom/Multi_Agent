@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import agents.monetary_policy_agent as mpa
-from storage.schema import init_db
+from storage.schema import get_source, init_db, latest_data_health
 
 
 def test_fetch_snapshot_without_api_key_returns_error(monkeypatch):
@@ -53,6 +53,29 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     assert output is not None
     assert output.domain == "monetary_policy"
     assert triggers == []
+
+
+def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
+    """Roadmap 1.4: monitor() moet zijn EIGEN, per-agent-gescopete
+    source_key gebruiken (niet de kale providernaam "FRED") -- dat is de
+    daadwerkelijke fix voor het gedeelde-databron-probleem met
+    financial_agent.py."""
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}})
+
+    mpa.monitor(conn, now=now)
+
+    source = get_source(conn, mpa.SOURCE_KEY)
+    assert source is not None
+    assert source.provider == "FRED"
+    assert source.domain == "monetary_policy"
+    assert source.max_age == mpa.MAX_AGE
+
+    # data_health wordt onder de PER-AGENT source_key geregistreerd, niet
+    # onder de kale providernaam "FRED" (die financial_agent.py ook gebruikt)
+    assert latest_data_health(conn, mpa.SOURCE_KEY) is not None
+    assert latest_data_health(conn, "FRED") is None
 
 
 def test_deep_dive_wires_into_run_deep_dive(tmp_path, monkeypatch):

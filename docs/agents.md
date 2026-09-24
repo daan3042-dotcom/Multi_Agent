@@ -31,7 +31,11 @@ worden door `run_deep_dive()` zelf toegevoegd, niet door de agent:
 
 **Wat het volgt:** vier kernreeksen van FRED (Federal Reserve Economic
 Data), elk gezien als "vers" tot 35 dagen oud (het zijn maandelijkse
-reeksen):
+reeksen). Sinds roadmap 1.4 (Source Registry) heeft deze agent zijn EIGEN
+databron-registratie (`FRED:monetary_policy`), los van de financial agent
+hieronder — die gebruikt óók FRED, maar met een andere ververssnelheid
+(10 dagen). Vóór 1.4 deelden ze onbedoeld dezelfde status, waardoor de
+ene agent's verse pulls de andere's veroudering kon verbergen.
 
 | Metric | FRED-reeks |
 |---|---|
@@ -156,7 +160,9 @@ trigger-laag de ene ticker per ongeluk tegen een andere ticker afzetten
 niet bedrijfsfundamentals (dat is de equity agent hierboven) en niet
 Fed-beleid zelf (dat is de monetary policy agent). Vier reeksen, alle van
 FRED, elk gezien als "vers" tot 10 dagen oud (afgestemd op de traagste,
-wekelijkse reeks — de andere drie zijn dagelijks):
+wekelijkse reeks — de andere drie zijn dagelijks). Eigen databron-
+registratie (`FRED:financial`, roadmap 1.4), los van de monetary policy
+agent hierboven — zie die sectie voor waarom.
 
 | Metric | FRED-reeks | Wat het meet |
 |---|---|---|

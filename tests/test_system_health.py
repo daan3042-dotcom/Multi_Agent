@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from health.data_health import HealthStatus
-from health.system_health import system_health
-from storage.schema import init_db, record_agent_run, record_data_health
+from health.system_health import sources_from_registry, system_health
+from storage.schema import init_db, record_agent_run, record_data_health, register_source
 
 
 def _db(tmp_path):
@@ -151,3 +151,39 @@ def test_status_for_unknown_component_returns_none(tmp_path):
     conn = _db(tmp_path)
     report = system_health(conn, sources={}, domains=[])
     assert report.status_for("does_not_exist") is None
+
+
+def test_sources_from_registry_derives_max_age_dict(tmp_path):
+    conn = _db(tmp_path)
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=35))
+    register_source(conn, "FRED:financial", provider="FRED", domain="financial", max_age=timedelta(days=10))
+
+    assert sources_from_registry(conn) == {
+        "FRED:monetary_policy": timedelta(days=35),
+        "FRED:financial": timedelta(days=10),
+    }
+
+
+def test_sources_from_registry_empty_without_registrations(tmp_path):
+    conn = _db(tmp_path)
+    assert sources_from_registry(conn) == {}
+
+
+def test_system_health_with_registry_sources_keeps_two_fred_consumers_independent(tmp_path):
+    """De kern-regressietest voor de aanleiding van 1.4: monetary_policy en
+    financial delen de PROVIDER "FRED" maar hebben nu elk hun eigen
+    source_key -- de een succesvol en vers, de ander allang niet meer
+    succesvol gepolld, mag elkaars status niet meer beïnvloeden."""
+    conn = _db(tmp_path)
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=35))
+    register_source(conn, "FRED:financial", provider="FRED", domain="financial", max_age=timedelta(days=10))
+
+    now = datetime.now(timezone.utc)
+    long_ago = now - timedelta(days=20)  # ruim voorbij financial's 10-dagen max_age, ruim binnen monetary_policy's 35
+
+    record_data_health(conn, "FRED:monetary_policy", now, success=True)
+    record_data_health(conn, "FRED:financial", long_ago, success=True)
+
+    report = system_health(conn, sources=sources_from_registry(conn), domains=[], now=now)
+    assert report.status_for("source:FRED:monetary_policy") == HealthStatus.OK
+    assert report.status_for("source:FRED:financial") == HealthStatus.STALE

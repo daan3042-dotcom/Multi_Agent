@@ -56,8 +56,8 @@ niet erna.
 - [x] Entiteit: triggers (`trigger_events`-tabel, al vanaf de start)
 - [x] Entiteit: agent_runs — audit-log per monitoring/deep-dive-run
       (`src/storage/schema.py::record_agent_run/list_agent_runs`)
-- [ ] Entiteit: sources (los register, zie ook 1.4 Source Registry —
-      overlapt bewust, wordt daar samen mee gebouwd)
+- [x] Entiteit: sources (`src/storage/schema.py` — `sources`-tabel,
+      gebouwd samen met 1.4 Source Registry, zie daar)
 - [ ] Entiteit: observations — bewust NIET gebouwd als aparte tabel:
       revisie-detectie (1.3) is de enige huidige reden om ze los van
       claims te zien, en dat werkt al tegen de bestaande claims-historie
@@ -90,9 +90,26 @@ niet erna.
       UNKNOWN — andere vocabulaire, vergelijkbaar idee)
 
 ### 1.4 Source Registry
-- [ ] Centraal register per databron: provider, frequency, latency, cost,
-      quality_score
-- [ ] Fallback-bron-logica per databron
+- [x] Centraal register per databron: provider, frequency, latency, cost,
+      quality_score (`src/storage/schema.py::register_source/get_source/
+      list_sources`, `src/sources/registry.py::SourceConfig`). Eén entry
+      per (provider, domain)-combinatie, niet per provider — zie
+      `docs/architecture.md` ("Ontwerpkeuzes") voor de afweging.
+      `quality_score` bestaat als veld, nog geen logica die 'm berekent
+      (wacht op de synthese-laag, sectie 3).
+- [x] Fallback-bron-logica per databron — VELD/mechanisme aanwezig
+      (`fallback_source_key`, FK naar `sources.source_key`), maar GEEN
+      agent heeft momenteel een daadwerkelijke alternatieve bron
+      geïmplementeerd om naar te verwijzen. Wiring in een agent is
+      expliciet open vervolgwerk, niet geforceerd binnen deze sectie.
+- [x] `monetary_policy_agent.py` en `financial_agent.py` gemigreerd naar
+      het register (`FRED:monetary_policy` / `FRED:financial`) — lost het
+      gedeelde-databron-probleem uit de aanleiding daadwerkelijk op, geen
+      registry "voor de vorm". `currency_agent.py`, `sector_agent.py`,
+      `commodity_agent.py` NOG NIET gemigreerd (geen aantoonbaar conflict,
+      dus bewust niet in deze ronde meegenomen — mechanisch triviaal als
+      vervolgstap, zie `docs/project-state.md`). `equity_agent.py` heeft
+      geen eigen live databron (adapter) en valt hier sowieso buiten.
 
 ### 1.5 Trigger Engine
 - [x] Deterministische thresholds, geen LLM (`src/triggers/trigger_engine.py`)

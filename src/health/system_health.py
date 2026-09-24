@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from health.data_health import HealthStatus, check_source
-from storage.schema import list_agent_runs
+from storage.schema import list_agent_runs, list_sources
 
 # Ernst-volgorde voor de ROLLUP (overall_status). Bewust anders dan
 # triggers.trigger_engine.evaluate_data_health, waar OK en UNKNOWN gelijk
@@ -113,6 +113,17 @@ def _latest_run_status(conn, domain: str, mode: str) -> tuple[HealthStatus, str 
 
 def _worst(pairs: list[tuple[HealthStatus, str | None]]) -> tuple[HealthStatus, str | None]:
     return max(pairs, key=lambda sd: _SEVERITY_ORDER[sd[0]])
+
+
+def sources_from_registry(conn) -> dict[str, timedelta]:
+    """Roadmap 1.4: leest alle geregistreerde bronnen (storage.schema.
+    list_sources) uit en zet ze om naar de vorm die system_health()'s
+    `sources`-parameter verwacht (source_key -> max_age). Sluit de cirkel
+    uit de aanleiding voor 1.4: een aanroeper hoeft de sources-dict niet
+    langer met de hand samen te stellen -- elke agent die zichzelf via
+    storage.schema.register_source() declareert, verschijnt hier
+    automatisch."""
+    return {s.source_key: s.max_age for s in list_sources(conn)}
 
 
 def system_health(

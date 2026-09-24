@@ -4,14 +4,17 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from contract.output_contract import Claim, DomainOutput, Mode
 from storage.schema import (
+    get_source,
     has_successful_run,
     init_db,
     latest_data_health,
     list_agent_runs,
+    list_sources,
     load_latest_claims,
     record_agent_run,
     record_data_health,
     record_trigger_event,
+    register_source,
     save_domain_output,
 )
 
@@ -210,3 +213,70 @@ def test_agent_runs_allows_retry_after_a_failed_attempt_with_same_event_id(tmp_p
     # hetzelfde event_id is een legitieme retry, geen duplicaat
     record_id = record_agent_run(conn, "monetary_policy", "monitoring", t2, success=True, event_id="cycle-2026-01-01")
     assert record_id is not None
+
+
+def test_register_source_and_get_source(tmp_path):
+    conn = _db(tmp_path)
+    register_source(
+        conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy",
+        max_age=timedelta(days=35), frequency="maandelijks", latency="~1s per call", cost="gratis",
+    )
+
+    source = get_source(conn, "FRED:monetary_policy")
+    assert source is not None
+    assert source.source_key == "FRED:monetary_policy"
+    assert source.provider == "FRED"
+    assert source.domain == "monetary_policy"
+    assert source.max_age == timedelta(days=35)
+    assert source.frequency == "maandelijks"
+    assert source.quality_score is None
+    assert source.fallback_source_key is None
+
+
+def test_get_source_returns_none_for_unknown_key(tmp_path):
+    conn = _db(tmp_path)
+    assert get_source(conn, "does_not_exist") is None
+
+
+def test_register_source_is_an_idempotent_upsert(tmp_path):
+    """register_source() is CONFIGURATIE, geen gebeurtenis-log -- een
+    tweede aanroep met hetzelfde source_key mag geen duplicaat aanmaken,
+    en moet de nieuwe waarden overnemen (bijv. een aangepaste max_age)."""
+    conn = _db(tmp_path)
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=35))
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=40))
+
+    assert len(list_sources(conn)) == 1
+    assert get_source(conn, "FRED:monetary_policy").max_age == timedelta(days=40)
+
+
+def test_list_sources_returns_all_registered_sources_sorted(tmp_path):
+    conn = _db(tmp_path)
+    register_source(conn, "FRED:financial", provider="FRED", domain="financial", max_age=timedelta(days=10))
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=35))
+
+    sources = list_sources(conn)
+    assert [s.source_key for s in sources] == ["FRED:financial", "FRED:monetary_policy"]
+
+
+def test_register_source_with_fallback_pointing_to_unknown_source_raises(tmp_path):
+    """fallback_source_key is een FK naar sources.source_key (foreign_keys
+    staat aan in init_db) -- verwijzen naar een niet-bestaande bron mag
+    niet stilzwijgend geaccepteerd worden."""
+    conn = _db(tmp_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        register_source(
+            conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy",
+            max_age=timedelta(days=35), fallback_source_key="does_not_exist",
+        )
+
+
+def test_register_source_with_valid_fallback(tmp_path):
+    conn = _db(tmp_path)
+    register_source(conn, "FRED:monetary_policy", provider="FRED", domain="monetary_policy", max_age=timedelta(days=35))
+    register_source(
+        conn, "ALTERNATIVE:monetary_policy", provider="ALTERNATIVE", domain="monetary_policy",
+        max_age=timedelta(days=35), fallback_source_key="FRED:monetary_policy",
+    )
+    source = get_source(conn, "ALTERNATIVE:monetary_policy")
+    assert source.fallback_source_key == "FRED:monetary_policy"
