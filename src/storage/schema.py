@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS trigger_events (
 );
 CREATE INDEX IF NOT EXISTS idx_trigger_events_domain ON trigger_events(domain);
 CREATE INDEX IF NOT EXISTS idx_trigger_events_batch ON trigger_events(dispatch_batch_id);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('monitoring', 'deep_dive')),
+    run_at TEXT NOT NULL,
+    success INTEGER NOT NULL,
+    domain_output_id INTEGER REFERENCES domain_outputs(id),
+    trigger_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_domain ON agent_runs(domain, run_at);
 """
 
 
@@ -216,6 +228,55 @@ def record_data_health(conn: sqlite3.Connection, source: str, checked_at: dateti
     )
     conn.commit()
     return cur.lastrowid
+
+
+def record_agent_run(
+    conn: sqlite3.Connection,
+    domain: str,
+    mode: str,
+    run_at: datetime,
+    success: bool,
+    domain_output_id: int | None = None,
+    trigger_count: int = 0,
+    error: str | None = None,
+) -> int:
+    """Audit-log-regel voor ÉÉN monitoring- of deep-dive-cyclus van een
+    domain agent (roadmap 1.2, entiteit agent_runs) -- los van de claims
+    die zo'n cyclus eventueel oplevert. Sluit de blinde vlek dat er nu wel
+    resultaten (claims) bewaard worden, maar geen geschiedenis van de runs
+    zelf: "heeft agent X vandaag gedraaid, is het gelukt". Wordt door
+    run_monitoring()/run_deep_dive() (agents/base.py) op ELKE cyclus
+    aangeroepen, ook bij falen -- net als data_health mag een mislukte run
+    nooit stilzwijgend ontbreken."""
+    cur = conn.execute(
+        "INSERT INTO agent_runs (domain, mode, run_at, success, domain_output_id, trigger_count, error) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (domain, mode, run_at.isoformat(), int(success), domain_output_id, trigger_count, error),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_agent_runs(conn: sqlite3.Connection, domain: str, limit: int = 20) -> list[dict]:
+    """Meest recente runs voor een domein, nieuw naar oud -- de leesvorm die
+    1.7 (Observability, "system health per component") straks gebruikt."""
+    rows = conn.execute(
+        "SELECT domain, mode, run_at, success, domain_output_id, trigger_count, error "
+        "FROM agent_runs WHERE domain = ? ORDER BY run_at DESC LIMIT ?",
+        (domain, limit),
+    ).fetchall()
+    return [
+        {
+            "domain": domain_,
+            "mode": mode,
+            "run_at": datetime.fromisoformat(run_at),
+            "success": bool(success),
+            "domain_output_id": domain_output_id,
+            "trigger_count": trigger_count,
+            "error": error,
+        }
+        for domain_, mode, run_at, success, domain_output_id, trigger_count, error in rows
+    ]
 
 
 def latest_data_health(conn: sqlite3.Connection, source: str) -> dict | None:

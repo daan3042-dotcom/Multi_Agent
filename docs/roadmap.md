@@ -50,11 +50,30 @@ niet erna.
 
 ### 1.2 Database & Event Store
 - [x] Database-schema als source of truth (`src/storage/schema.py`)
-- [ ] Event-model: raw data → observation → event
-- [ ] Entiteiten: sources, observations, entities, measurements, events,
-      expectations, claims, evidence
-- [ ] Entiteiten: triggers, deep_dives, agent_runs, syntheses, alerts,
-      regimes, theses, predictions, evaluations
+- [ ] Event-model: raw data → observation → event (conceptueel pad, wordt
+      concreet zodra de entiteiten hieronder er zijn om het te dragen)
+- [x] Entiteit: claims (`src/storage/schema.py`, al vanaf de start)
+- [x] Entiteit: triggers (`trigger_events`-tabel, al vanaf de start)
+- [x] Entiteit: agent_runs — audit-log per monitoring/deep-dive-run
+      (`src/storage/schema.py::record_agent_run/list_agent_runs`)
+- [ ] Entiteit: sources (los register, zie ook 1.4 Source Registry —
+      overlapt bewust, wordt daar samen mee gebouwd)
+- [ ] Entiteit: observations (los van claims: de ruwe, ongeïnterpreteerde
+      datapunten, nodig voor revisie-detectie in 1.3)
+- [ ] Entiteit: entities (het "wat wordt hier gemeten"-register)
+- [ ] Entiteit: measurements (afgeleide/berekende waarden, nu impliciet
+      onderdeel van claims met source="Berekend (...)")
+- [ ] Entiteit: events (nieuws/agenda-gebeurtenissen, hoort bij 2.8 News
+      Monitor Agent)
+- [ ] Entiteit: expectations (echte marktverwachting i.p.v. "vorige
+      observatie" als trigger-referentie)
+- [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
+- [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
+      mode=DEEP_DIVE, geen eigen entiteit)
+- [ ] Entiteit: syntheses (synthesizer's output is nu vluchtig, nooit
+      persistent)
+- [ ] Entiteiten: alerts, regimes, theses, predictions, evaluations (horen
+      bij pijler 4/5, bewust nog niet nu)
 
 ### 1.3 Data Quality & Health Layer
 - [x] Basale freshness-check (`src/health/data_health.py`)

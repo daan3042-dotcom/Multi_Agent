@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from agents.base import SHARED_QUALITY_RULES, MetricSpec, evaluate_deltas, run_deep_dive, run_monitoring
 from contract.output_contract import Claim, Confidence, Mode
-from storage.schema import init_db
+from storage.schema import init_db, list_agent_runs
 
 SPECS = {"fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.25, severity="high")}
 
@@ -23,6 +23,13 @@ def test_run_monitoring_saves_claims_and_no_trigger_on_first_observation(tmp_pat
     assert output.mode == Mode.MONITORING
     assert output.claims[0].value == 5.5
     assert triggers == []  # eerste observatie, niets om tegen te vergelijken
+
+    runs = list_agent_runs(conn, "monetary_policy")
+    assert len(runs) == 1
+    assert runs[0]["mode"] == "monitoring"
+    assert runs[0]["success"] is True
+    assert runs[0]["domain_output_id"] is not None
+    assert runs[0]["trigger_count"] == 0
 
 
 def test_run_monitoring_triggers_on_significant_delta(tmp_path):
@@ -61,6 +68,29 @@ def test_run_monitoring_total_failure_produces_data_health_trigger_no_output(tmp
     assert output is None
     assert len(triggers) == 1
     assert triggers[0].reason.startswith("data_health:")
+
+    runs = list_agent_runs(conn, "monetary_policy")
+    assert len(runs) == 1
+    assert runs[0]["success"] is False
+    assert runs[0]["domain_output_id"] is None
+    assert "FRED_API_KEY" in runs[0]["error"]
+
+
+def test_run_monitoring_no_parseable_metrics_still_records_agent_run(tmp_path):
+    """Snapshot zelf is geen fout (geen "error"-key), maar geen enkele
+    entry is als float te parsen -- ander faalpad dan een totale pull-
+    mislukking, moet ook een eigen agent_run wegschrijven."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    fetch = lambda: {"fed_funds_rate": {"value": "niet-een-getal"}}
+
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", fetch, SPECS, timedelta(days=35), now=now)
+
+    assert output is None
+    runs = list_agent_runs(conn, "monetary_policy")
+    assert len(runs) == 1
+    assert runs[0]["success"] is False
+    assert runs[0]["domain_output_id"] is None
 
 
 def _claim(metric_key, value, now):
@@ -125,6 +155,11 @@ def test_run_deep_dive_saves_narrative_claim_and_needs_review_false_when_clean(t
     assert deep_dive_output.needs_review is False
     assert any(c.claim == "Deep-dive synthese" for c in deep_dive_output.claims)
 
+    deep_dive_runs = [r for r in list_agent_runs(conn, "monetary_policy") if r["mode"] == "deep_dive"]
+    assert len(deep_dive_runs) == 1
+    assert deep_dive_runs[0]["success"] is True
+    assert deep_dive_runs[0]["domain_output_id"] is not None
+
 
 def test_run_deep_dive_needs_review_true_when_llm_review_flags_issue(tmp_path):
     conn = _db(tmp_path)
@@ -154,6 +189,11 @@ def test_run_deep_dive_llm_failure_is_never_silent(tmp_path):
     deep_dive_output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
     assert deep_dive_output.needs_review is True
     assert any("Deep-dive mislukt" in c.claim for c in deep_dive_output.claims)
+
+    deep_dive_runs = [r for r in list_agent_runs(conn, "monetary_policy") if r["mode"] == "deep_dive"]
+    assert len(deep_dive_runs) == 1
+    assert deep_dive_runs[0]["success"] is False
+    assert "API-fout" in deep_dive_runs[0]["error"]
 
 
 def test_run_deep_dive_prepends_shared_quality_rules_to_domain_prompt(tmp_path):

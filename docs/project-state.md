@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 154 tests groen (`pytest`).
+alleen "het cijfer veranderde". 157 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 154 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-154 tests groen (`pytest`).
+157 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -140,7 +140,14 @@ alleen "het cijfer veranderde". 154 tests groen (`pytest`).
   vast welk component wel/niet een LLM gebruikt (`docs/architecture.md`).
   Bewust NIET meegenomen: 1.2's volledige event-model (observations/
   entities/measurements/events) — dat is losstaand vervolgwerk, met DD
-  te bepalen wat de volgende stap is (1.3, 1.4, 1.5, 1.6 of 1.7).
+  te bepalen wat de volgende stap is (1.3, 1.4, 1.5, 1.6 of 1.7). Daarna
+  1.2's eerste entiteit gebouwd: `agent_runs` — een audit-log per
+  monitoring/deep-dive-cyclus (`src/storage/schema.py::record_agent_run/
+  list_agent_runs`, aangeroepen vanuit `agents/base.py` op elk pad,
+  ook bij falen), voorbereidend op 1.7 (Observability). 157 tests groen.
+  1.2's checklist is nu opgesplitst per entiteit i.p.v. twee brede
+  bundel-bullets, zodat voortgang zichtbaar is zonder op alle 8-9
+  entiteiten tegelijk te wachten.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`

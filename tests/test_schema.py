@@ -4,7 +4,9 @@ from contract.output_contract import Claim, DomainOutput, Mode
 from storage.schema import (
     init_db,
     latest_data_health,
+    list_agent_runs,
     load_latest_claims,
+    record_agent_run,
     record_data_health,
     record_trigger_event,
     save_domain_output,
@@ -109,3 +111,30 @@ def test_record_trigger_event(tmp_path):
     assert trigger_id is not None
     row = conn.execute("SELECT domain, severity, dispatch_batch_id FROM trigger_events WHERE id = ?", (trigger_id,)).fetchone()
     assert row == ("monetary_policy", "high", "batch-1")
+
+
+def test_record_and_list_agent_runs(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(minutes=5)
+
+    output_id = save_domain_output(conn, _output())
+    record_agent_run(conn, "monetary_policy", "monitoring", t1, success=True, domain_output_id=output_id, trigger_count=1)
+    record_agent_run(conn, "monetary_policy", "deep_dive", t2, success=False, trigger_count=0, error="LLM-call mislukt")
+
+    runs = list_agent_runs(conn, "monetary_policy")
+    assert len(runs) == 2
+    # nieuwste eerst
+    assert runs[0]["mode"] == "deep_dive"
+    assert runs[0]["success"] is False
+    assert runs[0]["error"] == "LLM-call mislukt"
+    assert runs[0]["domain_output_id"] is None
+    assert runs[1]["mode"] == "monitoring"
+    assert runs[1]["success"] is True
+    assert runs[1]["domain_output_id"] == output_id
+    assert runs[1]["trigger_count"] == 1
+
+
+def test_list_agent_runs_returns_empty_for_unknown_domain(tmp_path):
+    conn = _db(tmp_path)
+    assert list_agent_runs(conn, "unknown") == []

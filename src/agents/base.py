@@ -14,6 +14,12 @@ PROMPT -- en roept run_monitoring()/run_deep_dive() hieronder aan. Dat houdt
 de trigger-beslissing (A.4) en QC (A.5) consistent tussen domeinen, in
 plaats van dat elke agent zijn eigen variant uitvindt.
 
+Elke cyclus (monitoring EN deep-dive, geslaagd of niet) registreert zichzelf
+via storage.schema.record_agent_run() (roadmap 1.2, entiteit agent_runs) --
+los van de claims die de cyclus eventueel oplevert. Dit is de audit-log die
+1.7 (Observability) straks leest: "heeft agent X gedraaid, is het gelukt",
+onafhankelijk van of er een output/trigger uitkwam.
+
 Triggerlogica hier is "afwijking sinds de vorige observatie" (delta), NIET
 een vaste absolute drempel -- welk absoluut niveau per domein "significant"
 is, staat bewust nog open (zie docs/roadmap.md sectie H). Een delta-check is
@@ -57,7 +63,7 @@ from typing import Callable
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
 from health.data_health import check_source
 from qc.qc import DEFAULT_LLM_REVIEW_MODEL, apply_qc, default_llm_review
-from storage.schema import load_latest_claims, record_data_health, save_domain_output
+from storage.schema import load_latest_claims, record_agent_run, record_data_health, save_domain_output
 from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_surprise
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
@@ -153,6 +159,7 @@ def run_monitoring(
         triggers.append(health_trigger)
 
     if not success:
+        record_agent_run(conn, domain, "monitoring", now, success=False, trigger_count=len(triggers), error=snapshot.get("error"))
         return None, triggers
 
     # Vorige observatie per metric OPHALEN VOORDAT de nieuwe claims worden
@@ -186,12 +193,18 @@ def run_monitoring(
         )
 
     if not claims:
+        record_agent_run(
+            conn, domain, "monitoring", now, success=False, trigger_count=len(triggers),
+            error="Geen enkele metric kon geparsed worden uit de snapshot",
+        )
         return None, triggers
 
     output = DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=now, claims=claims)
-    save_domain_output(conn, output)
+    domain_output_id = save_domain_output(conn, output)
 
     triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
+
+    record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers))
 
     return output, triggers
 
@@ -308,7 +321,11 @@ def run_deep_dive(
             needs_review=True,
             review_issues=[str(e)],
         )
-        save_domain_output(conn, output)
+        domain_output_id = save_domain_output(conn, output)
+        record_agent_run(
+            conn, domain, "deep_dive", now, success=False, domain_output_id=domain_output_id,
+            trigger_count=len(trigger_events), error=str(e),
+        )
         return output
 
     qc_result = apply_qc(claims, deep_dive_text, llm_review_fn=functools.partial(default_llm_review, client))
@@ -331,5 +348,6 @@ def run_deep_dive(
         needs_review=qc_result.needs_review,
         review_issues=qc_result.issues,
     )
-    save_domain_output(conn, output)
+    domain_output_id = save_domain_output(conn, output)
+    record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events))
     return output

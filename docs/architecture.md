@@ -12,7 +12,7 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | Module | Rol | Roadmap-stap |
 |---|---|---|
 | `contract/output_contract.py` | `Claim` en `DomainOutput` — de vorm waar elke domain agent zich aan houdt | A.1 |
-| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health | A.2 |
+| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2) | A.2 / 1.2 |
 | `health/data_health.py` | Staleness/onbereikbaarheid per databron, vóór de trigger-laag | A.3 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
