@@ -99,6 +99,12 @@ se "Huidige focus" en `docs/project-state.md`.
   goed". Bij twijfel over een kwaliteitsafweging (bijv. hoeveel regels
   centraal vastleggen vs. per domein vrij laten): eerst voorleggen, niet
   in stilte kiezen.
+- Elke keer dat we iets uitdenken (een ontwerpvoorstel) of uitvoeren
+  (een coderonde) expliciet verwijzen naar waar dat in `docs/roadmap.md`
+  staat (welke pijler/sectienummer) — zodat DD zonder de code te lezen
+  kan volgen waar we mee bezig zijn en wat het volgende is. Een
+  afgerond item wordt in diezelfde ronde in de roadmap afgevinkt, niet
+  pas later.
 
 ## Taal
 
