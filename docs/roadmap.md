@@ -100,8 +100,9 @@ niet erna.
 - [x] Gelijktijdige triggers over meerdere domeinen (bv. een Fed-besluit
       dat monetary policy + currency tegelijk raakt — bewezen in
       `tests/test_integration_section_b.py`)
-- [ ] LLM-taken-tabel expliciet vastleggen (wat mag wel/niet door een LLM
-      gedaan worden, systeembreed)
+- [x] LLM-taken-tabel expliciet vastleggen (wat mag wel/niet door een LLM
+      gedaan worden, systeembreed) (`docs/architecture.md`, sectie
+      "LLM-taken-tabel")
 
 ### 1.9 Documentatie
 - [x] `docs/agents.md` — leesbaar overzicht per agent, geen code lezen nodig

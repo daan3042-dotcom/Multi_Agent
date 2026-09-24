@@ -135,10 +135,12 @@ alleen "het cijfer veranderde". 154 tests groen (`pytest`).
   afgebakende slice van pijler 1.1 gebouwd — vier tijdstempels op `Claim`
   (`src/contract/output_contract.py`) en de domain-ontologie
   (`src/contract/domain_ontology.py`), incrementeel gemigreerd over alle
-  6 agents, `agents/base.py` en de testsuite (154 tests groen). Bewust
-  NIET meegenomen: 1.2's volledige event-model (observations/entities/
-  measurements/events) — dat is losstaand vervolgwerk, met DD te bepalen
-  wat de volgende stap is (Source Registry 1.4 of het event-model 1.2).
+  6 agents, `agents/base.py` en de testsuite (154 tests groen). Daarna
+  1.8 (LLM-taken-tabel) afgerond — puur documentatie, legt expliciet
+  vast welk component wel/niet een LLM gebruikt (`docs/architecture.md`).
+  Bewust NIET meegenomen: 1.2's volledige event-model (observations/
+  entities/measurements/events) — dat is losstaand vervolgwerk, met DD
+  te bepalen wat de volgende stap is (1.3, 1.4, 1.5, 1.6 of 1.7).
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`

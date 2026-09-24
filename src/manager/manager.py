@@ -12,6 +12,11 @@ Bewust GEEN LLM hier -- dispatchen ("welke agent(s) triggeren dit domein")
 is nog steeds pure regelbepaling. De LLM-synthese gebeurt pas in de
 deep-dive-mode van de domain agents zelf (buiten scope van dit fundament,
 zie sectie B) en in de synthesizer (sectie F).
+
+Zie docs/architecture.md ("LLM-taken-tabel", roadmap 1.8) voor het
+systeembrede overzicht van welk component wel/niet een LLM gebruikt en
+waarom -- dit bestand is daar één rij van, niet de plek om dat overzicht
+te herhalen.
 """
 
 from __future__ import annotations

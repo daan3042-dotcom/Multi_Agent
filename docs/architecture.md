@@ -110,6 +110,31 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   is een bewust open beslissing (sectie H). De `tolerance`-waarden in
   `METRIC_SPECS` zijn illustratieve plaatshouders.
 
+## LLM-taken-tabel (roadmap 1.8): wat mag wel/niet door een LLM
+
+Legt CLAUDE.md-principe 1 ("Deterministisch waar mogelijk, LLM alleen waar
+het moet") systeembreed en expliciet vast — voorheen impliciet verspreid
+over losse moduledocstrings (`trigger_engine.py`, `manager.py`, `qc.py`,
+`agents/base.py`). Dit is de ÉÉN plek om te checken of een component een
+LLM gebruikt, en waarom (niet). **Governance-regel**: een nieuwe LLM-call
+die hier niet in staat is een bug, geen feature — deze tabel wordt
+bijgewerkt VOORDAT zo'n aanroep wordt toegevoegd, niet erna (zie ook
+CLAUDE.md, "eerst voorleggen, niet in stilte kiezen").
+
+| Component | LLM? | Taak / reden |
+|---|---|---|
+| `triggers/trigger_engine.py` (`evaluate_threshold`, `evaluate_surprise`, `evaluate_data_health`) | Nee | "Is deze afwijking significant" moet reproduceerbaar en goedkoop zijn — dit systeem draait onbeheerd en polled continu op de achtergrond. |
+| `health/data_health.py` | Nee | Pure leeftijdscontrole van de laatst bekende succesvolle pull tegen een verwachte ververssnelheid. |
+| `manager/manager.py::dispatch()` | Nee | Groepeert al-genomen triggerbeslissingen tot een `DispatchPlan` — coördineert, oordeelt niet opnieuw over "is dit significant". |
+| Domain agent monitoring mode (`agents/*.py::monitor()`, `agents/base.py::run_monitoring()`) | Nee | Data ophalen + delta-berekening tegen de vorige observatie — puur cijferwerk, geen duiding. |
+| `src/analysis/*` (Taylor Rule, NFCI-interpretatie, relatieve sterkte, moving-average-deviation) | Nee | Citeerbare, deterministische modellen berekend in Python, aan de LLM gegeven als kant-en-klare claim om te **duiden**, nooit om zelf te **schatten** ("Python computes, Claude narrates"). |
+| `qc/qc.py::deterministic_consistency_check` | Nee | Regex/cijfer-matching tussen een Claim en de deep-dive-tekst. |
+| Domain agent deep-dive mode (`agents/base.py::run_deep_dive()`) | **Ja** | Eén call per getriggerd domein: vat de al-berekende claims samen tot een korte, neutrale synthese. Gebonden aan `SHARED_QUALITY_RULES` (alleen aangeleverde claims, geen koop/verkoop-advies, onzekerheid expliciet) — zie sectie hieronder. |
+| `qc/qc.py::default_llm_review` | **Ja** | Eén lichte review-call per deep-dive: checkt neutraliteit/volledigheid/zelfconsistentie van de tekst — GEEN herbeoordeling van de cijfers zelf (dat doet de deterministische laag hierboven al). Bewust niet de 4-parallelle-reviewers-aanpak van `analyst_agent.ai` (zie `qc.py`'s moduledocstring). |
+| `synthesizer/synthesizer.py::synthesize_simultaneous` | Nee (nu) | Zet op dit moment al-gegenereerde deep-dive-teksten naief naast elkaar, geen eigen LLM-call. Pijler 3.1 (nog te bouwen: contradictie-detectie, cross-domain-samenvoeging) voegt hier WEL LLM-gebruik toe — deze rij wordt dan bijgewerkt. |
+| `agents/equity_agent.py` (adapter) | Nee (hier) | Adapteert een AL gegenereerd `analyst_agent.ai`-rapport naar claims — het LLM-gebruik zit in dat losse systeem, niet in deze adapter. |
+| Toekomstige "thesis-mode" (roadmap 5.4, nog niet gebouwd) | Ja (gepland) | Enige geplande plek waar EXPLICIET gevraagde directionele/probabilistische redenering is toegestaan (analoog aan `analyst_agent.ai` sectie 18, Variant Perception) — een apart, duidelijk gelabeld kanaal, GEEN aanpassing van `SHARED_QUALITY_RULES` elders (zie `agents/base.py`'s moduledocstring). |
+
 ## Gedeelde kwaliteitsregels voor élke deep-dive (`agents/base.py::SHARED_QUALITY_RULES`)
 
 Elke domain agent schreef eerst zijn eigen neutraliteits-/kwaliteitsregels
