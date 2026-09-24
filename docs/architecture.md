@@ -12,8 +12,9 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | Module | Rol | Roadmap-stap |
 |---|---|---|
 | `contract/output_contract.py` | `Claim` en `DomainOutput` — de vorm waar elke domain agent zich aan houdt | A.1 |
-| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2) | A.2 / 1.2 |
+| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7) | A.2 / 1.2 / 1.7 |
 | `health/data_health.py` | Staleness/onbereikbaarheid per databron + revisie-detectie (roadmap 1.3), vóór de trigger-laag | A.3 / 1.3 |
+| `health/system_health.py` | Centrale status-per-component-functie (source/ingestion/database/trigger/agent/LLM), roadmap 1.7 deel 1 — backend voor de latere Dashboard-laag (5.2) | 1.7 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
@@ -107,6 +108,26 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   waarde bij gelijke `source_time`; `triggers.trigger_engine.
   evaluate_revision()` heeft, anders dan `evaluate_surprise()`, GEEN
   tolerantie: elke revisie is per definitie al nieuws.
+- **Idempotency op `agent_runs`-niveau, niet op `claims`-niveau (roadmap
+  1.7, deel 2).** Bewust een ANDERE keuze dan revisie-detectie hierboven,
+  met een andere reden: de eenheid van herhaling is hier "is deze
+  CYCLUS al verwerkt" (één keer fetchen, één keer de LLM aanroepen), niet
+  "is deze WAARDE al gezien" (dat is revisie-detectie, een apart
+  concern dat over individuele metric-waarden gaat). `agent_runs` is al
+  precies één rij per monitoring-/deep-dive-cyclus (roadmap 1.2) — de
+  natuurlijke plek voor een dedup-key, geen nieuwe tabel nodig. Een
+  optionele `event_id`-kolom + partial unique index
+  (`idx_agent_runs_event_id`, alleen op succesvolle rijen: `WHERE
+  event_id IS NOT NULL AND success = 1`) dwingt op databaseniveau af dat
+  een event_id maximaal één succesvolle verwerking krijgt, terwijl een
+  mislukte poging een retry met hetzelfde event_id niet blokkeert.
+  `agents/base.py::AlreadyProcessedError` is de vroege, applicatieve
+  check (vóór een onnodige fetch/LLM-call); de databaseconstraint is het
+  laatste vangnet. `event_id` is optioneel — geen enkele bestaande
+  domain agent geeft er nu een mee (er is nog geen scheduler/
+  orchestratielaag die cycli van een stabiele identifier voorziet), dus
+  dit verandert niets aan het huidige gedrag totdat een toekomstige
+  aanroeper er gebruik van maakt.
 - **Eigen databron-implementatie per domain agent, geen import van
   `analyst_agent.ai`.** `agents/monetary_policy_agent.py` en
   `agents/currency_agent.py` volgen dezelfde conventie als diens
@@ -137,6 +158,7 @@ CLAUDE.md, "eerst voorleggen, niet in stilte kiezen").
 |---|---|---|
 | `triggers/trigger_engine.py` (`evaluate_threshold`, `evaluate_surprise`, `evaluate_data_health`) | Nee | "Is deze afwijking significant" moet reproduceerbaar en goedkoop zijn — dit systeem draait onbeheerd en polled continu op de achtergrond. |
 | `health/data_health.py` | Nee | Pure leeftijdscontrole van de laatst bekende succesvolle pull tegen een verwachte ververssnelheid, plus deterministische revisie-detectie (waarde-vergelijking bij gelijke `source_time`, roadmap 1.3). |
+| `health/system_health.py::system_health()` | Nee | Leest alleen al-bestaande, deterministische statussen (`data_health`, `agent_runs`) uit en rolt ze op — geen eigen oordeel, geen LLM. |
 | `manager/manager.py::dispatch()` | Nee | Groepeert al-genomen triggerbeslissingen tot een `DispatchPlan` — coördineert, oordeelt niet opnieuw over "is dit significant". |
 | Domain agent monitoring mode (`agents/*.py::monitor()`, `agents/base.py::run_monitoring()`) | Nee | Data ophalen + delta-berekening tegen de vorige observatie — puur cijferwerk, geen duiding. |
 | `src/analysis/*` (Taylor Rule, NFCI-interpretatie, relatieve sterkte, moving-average-deviation) | Nee | Citeerbare, deterministische modellen berekend in Python, aan de LLM gegeven als kant-en-klare claim om te **duiden**, nooit om zelf te **schatten** ("Python computes, Claude narrates"). |

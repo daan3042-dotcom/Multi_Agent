@@ -1,7 +1,10 @@
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from contract.output_contract import Claim, DomainOutput, Mode
 from storage.schema import (
+    has_successful_run,
     init_db,
     latest_data_health,
     list_agent_runs,
@@ -138,3 +141,72 @@ def test_record_and_list_agent_runs(tmp_path):
 def test_list_agent_runs_returns_empty_for_unknown_domain(tmp_path):
     conn = _db(tmp_path)
     assert list_agent_runs(conn, "unknown") == []
+
+
+def test_list_agent_runs_filters_by_mode(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(minutes=5)
+    record_agent_run(conn, "monetary_policy", "monitoring", t1, success=True)
+    record_agent_run(conn, "monetary_policy", "deep_dive", t2, success=True)
+
+    monitoring_runs = list_agent_runs(conn, "monetary_policy", mode="monitoring")
+    assert len(monitoring_runs) == 1
+    assert monitoring_runs[0]["mode"] == "monitoring"
+
+    deep_dive_runs = list_agent_runs(conn, "monetary_policy", mode="deep_dive")
+    assert len(deep_dive_runs) == 1
+    assert deep_dive_runs[0]["mode"] == "deep_dive"
+
+
+def test_has_successful_run_false_without_any_run(tmp_path):
+    conn = _db(tmp_path)
+    assert has_successful_run(conn, "monetary_policy", "monitoring", "cycle-2026-01-01") is False
+
+
+def test_has_successful_run_true_after_a_successful_run_with_that_event_id(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now, success=True, event_id="cycle-2026-01-01")
+    assert has_successful_run(conn, "monetary_policy", "monitoring", "cycle-2026-01-01") is True
+
+
+def test_has_successful_run_false_after_only_a_failed_run_with_that_event_id(tmp_path):
+    """Een mislukte poging mag NOOIT als 'al verwerkt' tellen -- anders zou
+    een terechte retry na een echte fout stilzwijgend geblokkeerd worden."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now, success=False, event_id="cycle-2026-01-01", error="timeout")
+    assert has_successful_run(conn, "monetary_policy", "monitoring", "cycle-2026-01-01") is False
+
+
+def test_has_successful_run_is_scoped_to_domain_and_mode(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now, success=True, event_id="cycle-2026-01-01")
+
+    assert has_successful_run(conn, "currency", "monitoring", "cycle-2026-01-01") is False
+    assert has_successful_run(conn, "monetary_policy", "deep_dive", "cycle-2026-01-01") is False
+
+
+def test_agent_runs_rejects_duplicate_successful_event_id(tmp_path):
+    """Databaseniveau-afdwinging (partial unique index), niet alleen een
+    applicatie-check -- een tweede succesvolle rij met hetzelfde
+    domain+mode+event_id mag nooit stil worden toegestaan."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now, success=True, event_id="cycle-2026-01-01")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        record_agent_run(conn, "monetary_policy", "monitoring", now, success=True, event_id="cycle-2026-01-01")
+
+
+def test_agent_runs_allows_retry_after_a_failed_attempt_with_same_event_id(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(minutes=1)
+    record_agent_run(conn, "monetary_policy", "monitoring", t1, success=False, event_id="cycle-2026-01-01", error="timeout")
+    # geen crash: een tweede POGING (nog steeds mislukt, of nu wel gelukt) met
+    # hetzelfde event_id is een legitieme retry, geen duplicaat
+    record_id = record_agent_run(conn, "monetary_policy", "monitoring", t2, success=True, event_id="cycle-2026-01-01")
+    assert record_id is not None

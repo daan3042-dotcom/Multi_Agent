@@ -17,8 +17,18 @@ plaats van dat elke agent zijn eigen variant uitvindt.
 Elke cyclus (monitoring EN deep-dive, geslaagd of niet) registreert zichzelf
 via storage.schema.record_agent_run() (roadmap 1.2, entiteit agent_runs) --
 los van de claims die de cyclus eventueel oplevert. Dit is de audit-log die
-1.7 (Observability) straks leest: "heeft agent X gedraaid, is het gelukt",
-onafhankelijk van of er een output/trigger uitkwam.
+health.system_health.system_health() (roadmap 1.7, deel 1) leest: "heeft
+agent X gedraaid, is het gelukt", onafhankelijk van of er een output/
+trigger uitkwam.
+
+IDEMPOTENCY (roadmap 1.7, deel 2): beide functies accepteren een optionele
+`event_id` -- een dedup-key die de aanroeper (bijv. een toekomstige
+scheduler) meegeeft. Is dit domain+mode+event_id al SUCCESVOL verwerkt
+(storage.schema.has_successful_run), dan gooit de functie
+AlreadyProcessedError VÓÓR er gefetcht of de LLM aangeroepen wordt -- geen
+dubbele kosten, geen dubbele claims. Een mislukte eerdere poging blokkeert
+een retry met hetzelfde event_id NIET. Zonder event_id (alle 6 bestaande
+domain agents op dit moment) verandert er niets aan het gedrag.
 
 Triggerlogica hier is "afwijking sinds de vorige observatie" (delta), NIET
 een vaste absolute drempel -- welk absoluut niveau per domein "significant"
@@ -70,10 +80,28 @@ from typing import Callable
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
 from health.data_health import check_source, detect_revision
 from qc.qc import DEFAULT_LLM_REVIEW_MODEL, apply_qc, default_llm_review
-from storage.schema import load_latest_claims, record_agent_run, record_data_health, save_domain_output
+from storage.schema import has_successful_run, load_latest_claims, record_agent_run, record_data_health, save_domain_output
 from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_revision, evaluate_surprise
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
+
+
+class AlreadyProcessedError(Exception):
+    """Roadmap 1.7, deel 2 (idempotency). Wordt gegooid door run_monitoring()/
+    run_deep_dive() als de aanroeper een `event_id` meegeeft die voor dit
+    domain+mode al SUCCESVOL verwerkt is (storage.schema.has_successful_run)
+    -- vóórdat er gefetcht of een LLM aangeroepen wordt, dus geen dubbele
+    kosten en geen dubbele claims/agent_run. Een expliciete exception i.p.v.
+    stilzwijgend `None` teruggeven: run_deep_dive() geeft normaliter ALTIJD
+    een echte DomainOutput terug (ook bij een mislukte LLM-call), dus een
+    stille None zou dat contract breken. De aanroeper beslist zelf hoe
+    hiermee om te gaan (negeren, loggen) -- geen impliciete aanname hier."""
+
+    def __init__(self, domain: str, mode: str, event_id: str):
+        self.domain = domain
+        self.mode = mode
+        self.event_id = event_id
+        super().__init__(f"{domain}/{mode}: event_id {event_id!r} is al succesvol verwerkt")
 
 SHARED_QUALITY_RULES = """Dit is een korte deep-dive-synthese binnen een doorlopend \
 marktintelligentie-systeem, geen los rapport -- onderstaande regels gelden daarom voor \
@@ -143,13 +171,24 @@ def run_monitoring(
     metric_specs: dict[str, MetricSpec],
     max_age: timedelta,
     now=None,
+    event_id: str | None = None,
 ) -> tuple[DomainOutput | None, list[TriggerEvent]]:
     """Eén monitoring-cyclus: data ophalen, health registreren, claims
     opslaan, en per metric met een spec checken of de afwijking t.o.v. de
     vorige observatie significant is. Geeft (None, [data-health-trigger])
     terug als de pull volledig mislukte -- er is dan niets om claims van te
-    bouwen, maar het falen zelf mag nooit stilzwijgend verdwijnen (A.3)."""
+    bouwen, maar het falen zelf mag nooit stilzwijgend verdwijnen (A.3).
+
+    `event_id` is optioneel (roadmap 1.7, idempotency) -- als meegegeven EN
+    dit domain+mode+event_id al succesvol verwerkt is, gooit dit
+    AlreadyProcessedError VÓÓR fetch_snapshot_fn() wordt aangeroepen (geen
+    onnodige netwerkcall). Achterwaarts compatibel: bestaande aanroepers
+    (alle 6 domain agents op dit moment) geven geen event_id mee en merken
+    hier niets van."""
     now = now or now_utc()
+    if event_id is not None and has_successful_run(conn, domain, "monitoring", event_id):
+        raise AlreadyProcessedError(domain, "monitoring", event_id)
+
     triggers: list[TriggerEvent] = []
 
     try:
@@ -166,7 +205,7 @@ def run_monitoring(
         triggers.append(health_trigger)
 
     if not success:
-        record_agent_run(conn, domain, "monitoring", now, success=False, trigger_count=len(triggers), error=snapshot.get("error"))
+        record_agent_run(conn, domain, "monitoring", now, success=False, trigger_count=len(triggers), error=snapshot.get("error"), event_id=event_id)
         return None, triggers
 
     # Vorige observatie per metric OPHALEN VOORDAT de nieuwe claims worden
@@ -219,7 +258,7 @@ def run_monitoring(
     if not claims:
         record_agent_run(
             conn, domain, "monitoring", now, success=False, trigger_count=len(triggers),
-            error="Geen enkele metric kon geparsed worden uit de snapshot",
+            error="Geen enkele metric kon geparsed worden uit de snapshot", event_id=event_id,
         )
         return None, triggers
 
@@ -228,7 +267,7 @@ def run_monitoring(
 
     triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
 
-    record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers))
+    record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers), event_id=event_id)
 
     return output, triggers
 
@@ -282,6 +321,7 @@ def run_deep_dive(
     trigger_events: list[TriggerEvent],
     model: str = DEFAULT_DEEP_DIVE_MODEL,
     now=None,
+    event_id: str | None = None,
 ) -> DomainOutput:
     """Deep-dive mode: één LLM-call die de aangeleverde, al-berekende claims
     duidt (Python computes, Claude narrates -- zelfde regel als
@@ -298,8 +338,16 @@ def run_deep_dive(
     Een mislukte call wordt NOOIT stilzwijgend een lege/ontbrekende output --
     het wordt een eigen DomainOutput met needs_review=True en een claim die
     de fout zelf benoemt, zodat het zichtbaar blijft voor de manager/
-    synthesizer in plaats van gewoon te verdwijnen."""
+    synthesizer in plaats van gewoon te verdwijnen.
+
+    `event_id` is optioneel (roadmap 1.7, idempotency) -- zelfde gedrag als
+    run_monitoring(): als dit domain+mode+event_id al succesvol verwerkt
+    is, AlreadyProcessedError VÓÓR de (dure) LLM-call. Achterwaarts
+    compatibel zonder event_id."""
     now = now or now_utc()
+    if event_id is not None and has_successful_run(conn, domain, "deep_dive", event_id):
+        raise AlreadyProcessedError(domain, "deep_dive", event_id)
+
     full_system_prompt = f"{SHARED_QUALITY_RULES}\n\n{system_prompt}"
 
     claims_summary = (
@@ -348,7 +396,7 @@ def run_deep_dive(
         domain_output_id = save_domain_output(conn, output)
         record_agent_run(
             conn, domain, "deep_dive", now, success=False, domain_output_id=domain_output_id,
-            trigger_count=len(trigger_events), error=str(e),
+            trigger_count=len(trigger_events), error=str(e), event_id=event_id,
         )
         return output
 
@@ -373,5 +421,5 @@ def run_deep_dive(
         review_issues=qc_result.issues,
     )
     domain_output_id = save_domain_output(conn, output)
-    record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events))
+    record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events), event_id=event_id)
     return output

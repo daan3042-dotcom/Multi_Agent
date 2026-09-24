@@ -113,12 +113,21 @@ niet erna.
       `needs_review`-vlag, geen volledige state machine)
 
 ### 1.7 Observability
-- [ ] System health per component (source, ingestion, database, trigger,
-      agent, LLM)
+- [x] System health per component (source, ingestion, database, trigger,
+      agent, LLM) (`src/health/system_health.py::system_health`, bouwt op
+      `agent_runs` (1.2) en `data_health` (A.3); backend-functie, nog geen
+      dashboard-UI — dat is 5.2)
 - [x] Fail loudly, not silently — data-health-triggers i.p.v. een stille
       "geen trigger" (A.3-principe, staat al in `health/data_health.py` +
       `triggers/trigger_engine.py::evaluate_data_health`)
-- [ ] Idempotency: event_id + dedup-key tegen dubbele verwerking
+- [x] Idempotency: event_id + dedup-key tegen dubbele verwerking
+      (`src/storage/schema.py::has_successful_run`,
+      `src/agents/base.py::AlreadyProcessedError`, gewired in
+      `run_monitoring`/`run_deep_dive` — op `agent_runs`-niveau, niet
+      `claims`; zie `docs/architecture.md` "Ontwerpkeuzes" voor de
+      afweging. Optioneel/backward-compatible: geen enkele bestaande
+      agent geeft nu al een event_id mee, dat komt met een toekomstige
+      scheduler)
 
 ### 1.8 Orchestrator / Manager
 - [x] Deterministische dispatch-logica (`src/manager/manager.py`)

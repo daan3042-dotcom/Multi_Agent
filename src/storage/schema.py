@@ -91,9 +91,18 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     success INTEGER NOT NULL,
     domain_output_id INTEGER REFERENCES domain_outputs(id),
     trigger_count INTEGER NOT NULL DEFAULT 0,
-    error TEXT
+    error TEXT,
+    event_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_runs_domain ON agent_runs(domain, run_at);
+-- Roadmap 1.7, deel 2 (idempotency): een event_id mag maximaal ÉÉN
+-- succesvolle rij hebben per domain+mode -- afgedwongen op databaseniveau,
+-- niet alleen in Python. Een MISLUKTE poging (success=0) telt bewust niet
+-- mee (WHERE success = 1): een terechte retry na een echte fout moet
+-- kunnen, alleen dubbele SUCCESVOLLE verwerking wordt geblokkeerd.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_runs_event_id
+    ON agent_runs(domain, mode, event_id)
+    WHERE event_id IS NOT NULL AND success = 1;
 """
 
 
@@ -239,6 +248,7 @@ def record_agent_run(
     domain_output_id: int | None = None,
     trigger_count: int = 0,
     error: str | None = None,
+    event_id: str | None = None,
 ) -> int:
     """Audit-log-regel voor ÉÉN monitoring- of deep-dive-cyclus van een
     domain agent (roadmap 1.2, entiteit agent_runs) -- los van de claims
@@ -247,24 +257,51 @@ def record_agent_run(
     zelf: "heeft agent X vandaag gedraaid, is het gelukt". Wordt door
     run_monitoring()/run_deep_dive() (agents/base.py) op ELKE cyclus
     aangeroepen, ook bij falen -- net als data_health mag een mislukte run
-    nooit stilzwijgend ontbreken."""
+    nooit stilzwijgend ontbreken.
+
+    `event_id` is optioneel (roadmap 1.7, idempotency) -- een dedup-key die
+    de AANROEPER meegeeft (bijv. een toekomstige scheduler: "cyclus van
+    2026-01-01"). Een tweede succesvolle rij met hetzelfde domain+mode+
+    event_id wordt door het schema zelf geweigerd (sqlite3.IntegrityError,
+    zie idx_agent_runs_event_id) -- een mislukte poging blokkeert een
+    retry met hetzelfde event_id NIET."""
     cur = conn.execute(
-        "INSERT INTO agent_runs (domain, mode, run_at, success, domain_output_id, trigger_count, error) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (domain, mode, run_at.isoformat(), int(success), domain_output_id, trigger_count, error),
+        "INSERT INTO agent_runs (domain, mode, run_at, success, domain_output_id, trigger_count, error, event_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (domain, mode, run_at.isoformat(), int(success), domain_output_id, trigger_count, error, event_id),
     )
     conn.commit()
     return cur.lastrowid
 
 
-def list_agent_runs(conn: sqlite3.Connection, domain: str, limit: int = 20) -> list[dict]:
+def has_successful_run(conn: sqlite3.Connection, domain: str, mode: str, event_id: str) -> bool:
+    """Roadmap 1.7, deel 2: is dit event_id al SUCCESVOL verwerkt voor dit
+    domain+mode? De applicatie-check die run_monitoring()/run_deep_dive()
+    vóóraf raadplegen (agents/base.py::AlreadyProcessedError) -- de
+    databaseconstraint hierboven is het laatste vangnet, dit is de vroege,
+    goedkope check die een onnodige fetch/LLM-call voorkomt."""
+    row = conn.execute(
+        "SELECT 1 FROM agent_runs WHERE domain = ? AND mode = ? AND event_id = ? AND success = 1 LIMIT 1",
+        (domain, mode, event_id),
+    ).fetchone()
+    return row is not None
+
+
+def list_agent_runs(conn: sqlite3.Connection, domain: str, mode: str | None = None, limit: int = 20) -> list[dict]:
     """Meest recente runs voor een domein, nieuw naar oud -- de leesvorm die
-    1.7 (Observability, "system health per component") straks gebruikt."""
-    rows = conn.execute(
-        "SELECT domain, mode, run_at, success, domain_output_id, trigger_count, error "
-        "FROM agent_runs WHERE domain = ? ORDER BY run_at DESC LIMIT ?",
-        (domain, limit),
-    ).fetchall()
+    1.7 (Observability, "system health per component") gebruikt. Optioneel
+    filteren op mode ('monitoring'/'deep_dive') -- health.system_health
+    heeft de LAATSTE run per modus apart nodig (ingestion vs. LLM-status),
+    en zonder deze filter zou een domein met veel monitoring-runs de
+    laatste deep-dive-run buiten een klein limit kunnen duwen."""
+    query = "SELECT domain, mode, run_at, success, domain_output_id, trigger_count, error FROM agent_runs WHERE domain = ?"
+    params: list = [domain]
+    if mode is not None:
+        query += " AND mode = ?"
+        params.append(mode)
+    query += " ORDER BY run_at DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
     return [
         {
             "domain": domain_,

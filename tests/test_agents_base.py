@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from agents.base import SHARED_QUALITY_RULES, MetricSpec, evaluate_deltas, run_deep_dive, run_monitoring
+import pytest
+from agents.base import SHARED_QUALITY_RULES, AlreadyProcessedError, MetricSpec, evaluate_deltas, run_deep_dive, run_monitoring
 from contract.output_contract import Claim, Confidence, Mode
 from storage.schema import init_db, list_agent_runs
 
@@ -258,6 +259,85 @@ def test_run_deep_dive_prepends_shared_quality_rules_to_domain_prompt(tmp_path):
     sent_system_prompt = deep_dive_call["system"]
     assert SHARED_QUALITY_RULES in sent_system_prompt
     assert sent_system_prompt.index(SHARED_QUALITY_RULES) < sent_system_prompt.index(domain_specific_prompt)
+
+
+def test_run_monitoring_raises_when_event_id_already_successfully_processed(tmp_path):
+    """Roadmap 1.7 deel 2: een tweede aanroep met hetzelfde event_id mag
+    NIET opnieuw fetchen -- de fetch-functie mag daarom niet eens
+    aangeroepen worden."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    fetch = lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}
+
+    run_monitoring(conn, "monetary_policy", "FRED", fetch, SPECS, timedelta(days=35), now=now, event_id="cycle-1")
+
+    def fetch_should_not_be_called():
+        raise AssertionError("fetch_snapshot_fn werd aangeroepen ondanks al-verwerkt event_id")
+
+    with pytest.raises(AlreadyProcessedError):
+        run_monitoring(conn, "monetary_policy", "FRED", fetch_should_not_be_called, SPECS, timedelta(days=35), now=now, event_id="cycle-1")
+
+    # geen dubbele claims/agent_run door de geweigerde tweede aanroep
+    assert len(list_agent_runs(conn, "monetary_policy")) == 1
+
+
+def test_run_monitoring_allows_retry_with_same_event_id_after_a_failure(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    failing_fetch = lambda: {"error": "timeout"}
+    working_fetch = lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}
+
+    output1, _ = run_monitoring(conn, "monetary_policy", "FRED", failing_fetch, SPECS, timedelta(days=35), now=now, event_id="cycle-1")
+    assert output1 is None
+
+    # geen AlreadyProcessedError: de vorige poging mislukte, dit is een legitieme retry
+    output2, _ = run_monitoring(conn, "monetary_policy", "FRED", working_fetch, SPECS, timedelta(days=35), now=now, event_id="cycle-1")
+    assert output2 is not None
+
+
+def test_run_monitoring_without_event_id_never_raises(tmp_path):
+    """Backward-compatible: bestaande aanroepers die geen event_id
+    meegeven (alle 6 domain agents op dit moment) merken niets van deze
+    uitbreiding."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    fetch = lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}
+
+    run_monitoring(conn, "monetary_policy", "FRED", fetch, SPECS, timedelta(days=35), now=now)
+    output, _ = run_monitoring(conn, "monetary_policy", "FRED", fetch, SPECS, timedelta(days=35), now=now)
+    assert output is not None  # geen AlreadyProcessedError zonder event_id
+
+
+def test_run_deep_dive_raises_when_event_id_already_successfully_processed(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output, _ = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "x"}}, SPECS, timedelta(days=35), now=now)
+
+    client = _fake_client('{"issues": []}')
+    run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now, event_id="batch-1")
+
+    def create_should_not_be_called(**kwargs):
+        raise AssertionError("client.messages.create werd aangeroepen ondanks al-verwerkt event_id")
+
+    client_should_not_be_called = MagicMock()
+    client_should_not_be_called.messages.create = create_should_not_be_called
+
+    with pytest.raises(AlreadyProcessedError):
+        run_deep_dive(conn, client_should_not_be_called, "monetary_policy", "systeemprompt", output.claims, [], now=now, event_id="batch-1")
+
+    deep_dive_runs = [r for r in list_agent_runs(conn, "monetary_policy") if r["mode"] == "deep_dive"]
+    assert len(deep_dive_runs) == 1
+
+
+def test_run_deep_dive_without_event_id_never_raises(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output, _ = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "x"}}, SPECS, timedelta(days=35), now=now)
+
+    client = _fake_client('{"issues": []}')
+    run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
+    deep_dive_output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
+    assert deep_dive_output is not None
 
 
 def test_shared_quality_rules_bans_directional_advice_language():

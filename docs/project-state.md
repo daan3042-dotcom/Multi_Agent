@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 166 tests groen (`pytest`).
+alleen "het cijfer veranderde". 194 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 166 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-166 tests groen (`pytest`).
+194 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -155,7 +155,23 @@ alleen "het cijfer veranderde". 166 tests groen (`pytest`).
   andere consument zou hebben dan deze ene check (zie
   `docs/architecture.md`, Ontwerpkeuzes). 1.2's observations-entiteit
   blijft daarom open totdat er een échte reden is om 'm van claims te
-  scheiden. 166 tests groen.
+  scheiden. 166 tests groen. Daarna: 1.7 (Observability) in twee delen
+  afgerond. Deel 1 — `src/health/system_health.py::system_health()`: één
+  centrale functie die de status per component teruggeeft (source,
+  ingestion, database, trigger, agent, LLM), gebouwd op `agent_runs`
+  (1.2) en `data_health` (A.3) — geen nieuw statusmodel, hergebruikt
+  overal `HealthStatus`. Puur de backend-functie, nog geen dashboard
+  (dat is 5.2). Deel 2 — idempotency: `event_id` + partial unique index
+  op `agent_runs` (`src/storage/schema.py::has_successful_run`), en
+  `agents/base.py::AlreadyProcessedError` die `run_monitoring`/
+  `run_deep_dive` VÓÓR een fetch/LLM-call laat weigeren als een
+  event_id al succesvol verwerkt is. Bewust op `agent_runs`-niveau
+  gebouwd, niet `claims`-niveau (afweging vastgelegd in
+  `docs/architecture.md`, Ontwerpkeuzes). Optioneel/backward-compatible:
+  geen enkele van de 6 bestaande agents geeft nu een event_id mee — dat
+  wacht op een toekomstige scheduler/orchestratielaag. `docs/agents.md`
+  is NIET bijgewerkt: dit werk verandert niets aan wat een agent
+  monitort/triggert/deep-dived, puur infrastructuur. 194 tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
@@ -218,6 +234,26 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   zekerheid geverifieerd tegen actuele marktdata (in tegenstelling tot de
   ETF-prijzen, waar de schattingen redelijk vertrouwd zijn). Sterkste
   kandidaat tot nu toe voor DD's eigen latere finetuning.
+- **1.7's `system_health()` — bewuste grenzen, geen gaten:**
+  - "trigger"-component heeft GEEN eigen, apart bijgehouden faalstatus —
+    trigger-evaluatie draait inline binnen `run_monitoring()`, dus de
+    status is afgeleid (worst-of alle `ingestion:*`-statussen), niet
+    onafhankelijk gemeten. Zie de moduledocstring van `system_health.py`.
+  - "database"-component is een lichte `SELECT 1`-check — geen
+    schijfruimte-, corruptie- of schrijfbaarheidscontrole.
+  - `sources`/`domains` worden door de AANROEPER meegegeven, geen
+    auto-discovery — een echt centraal register is de Source Registry
+    (1.4), bewust nog niet gebouwd.
+  - Twee agents die dezelfde bronnaam delen (bijv. `monetary_policy_agent`
+    en `financial_agent` delen beide "FRED", met verschillende MAX_AGE)
+    schrijven naar dezelfde `data_health`-rij — een bestaande beperking
+    van vóór 1.7, nu alleen zichtbaar geworden; de aanroeper van
+    `system_health()` moet zelf één max_age per bronnaam kiezen.
+  - Idempotency (`event_id`) is volledig opt-in en wordt door NIETS in de
+    huidige codebase gebruikt — er is nog geen scheduler/orchestratielaag
+    die een stabiele event_id per cyclus zou kunnen leveren. Voorkomt nu
+    dus nog geen enkele dubbele verwerking in de praktijk, alleen de
+    infrastructuur staat klaar.
 
 ## Next priorities
 
