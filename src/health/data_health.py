@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from contract.output_contract import Claim
+
 
 class HealthStatus(str, Enum):
     OK = "ok"
@@ -123,3 +125,37 @@ def check_source(
         # onbereikbaar", dat verwart de manager onnodig).
         return evaluate_pull_failure(source, now=now, detail=record["detail"])
     return evaluate_staleness(source, record["checked_at"], max_age, now=now)
+
+
+def detect_revision(
+    previous_claims: list[Claim],
+    source_time: datetime | None,
+    value: float,
+    tolerance: float = 1e-9,
+) -> Claim | None:
+    """Roadmap 1.3, "revisie-detectie": macro-cijfers worden later herzien
+    (bijv. een eerste BBP-schatting wijkt af van de definitieve) -- dat is
+    geen gewone delta (nieuwe periode, nieuwe waarde), maar een gewijzigde
+    waarde voor een periode die AL eerder gerapporteerd is (zelfde
+    source_time). Werkt tegen de al-bestaande claims-geschiedenis (elke
+    monitoring-poll blijft bewaard, nooit overschreven) -- geen aparte
+    observations-tabel nodig, dat zou nu alleen data dupliceren die claims
+    al heeft.
+
+    `previous_claims` is de VOLLEDIGE historie voor deze metric (zoals
+    run_monitoring() 'm al ophaalt voor de delta-trigger, hier hergebruikt),
+    niet alleen de laatste -- een revisie kan een periode van meerdere
+    cycli geleden raken, niet per se de vorige poll. `source_time=None`
+    (brondatum niet parsebaar) levert altijd None op: zonder betrouwbare
+    periode-identificatie is een "revisie" niet van een gewone nieuwe
+    waarde te onderscheiden, geen gok."""
+    if source_time is None:
+        return None
+    for claim in previous_claims:
+        if claim.source_time is None or claim.source_time != source_time:
+            continue
+        if not isinstance(claim.value, (int, float)):
+            continue
+        if abs(claim.value - value) > tolerance:
+            return claim
+    return None

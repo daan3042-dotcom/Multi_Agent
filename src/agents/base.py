@@ -27,6 +27,13 @@ zinvol ongeacht dat besluit: gebruikt geen aannames over wat een "hoog" of
 "laag" niveau is, alleen "is dit meer veranderd dan normaal sinds de vorige
 keer".
 
+Naast een delta (nieuwe periode, nieuwe waarde) checkt run_monitoring() ook
+op REVISIES (roadmap 1.3): een gewijzigde waarde voor een periode die al
+eerder gerapporteerd is (zelfde source_time), bijv. een BBP-schatting die
+wordt bijgesteld. health.data_health.detect_revision() vergelijkt hiervoor
+tegen de al-opgehaalde claims-geschiedenis (previous_by_metric) -- geen
+aparte observations-tabel nodig, claims bewaart elke poll al historisch.
+
 KWALITEIT VAN DE DEEP-DIVES (zie CLAUDE.md, "Werkwijze met DD"): elk domain
 agent's DEEP_DIVE_SYSTEM_PROMPT bevat ALLEEN vakinhoudelijke context --
 SHARED_QUALITY_RULES hieronder wordt door run_deep_dive() automatisch
@@ -61,10 +68,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from health.data_health import check_source
+from health.data_health import check_source, detect_revision
 from qc.qc import DEFAULT_LLM_REVIEW_MODEL, apply_qc, default_llm_review
 from storage.schema import load_latest_claims, record_agent_run, record_data_health, save_domain_output
-from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_surprise
+from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_revision, evaluate_surprise
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
 
@@ -178,6 +185,23 @@ def run_monitoring(
             continue
         raw_date = entry.get("date")
         source_time = _parse_source_date(raw_date)
+
+        revised_claim = detect_revision(previous_by_metric.get(metric_key) or [], source_time, value)
+        if revised_claim is not None:
+            label = spec.label if spec else metric_key
+            triggers.append(evaluate_revision(
+                domain=domain,
+                metric_key=metric_key,
+                previous_value=revised_claim.value,
+                revised_value=value,
+                reason=(
+                    f"Revisie: {label} voor periode {source_time.date()} gewijzigd van "
+                    f"{revised_claim.value:g} naar {value:g}"
+                ),
+                severity=spec.severity if spec else "medium",
+                now=now,
+            ))
+
         claims.append(
             Claim(
                 domain=domain,

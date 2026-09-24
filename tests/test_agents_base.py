@@ -46,6 +46,38 @@ def test_run_monitoring_triggers_on_significant_delta(tmp_path):
     assert triggers[0].severity == "high"
 
 
+def test_run_monitoring_triggers_on_revision_of_already_reported_period(tmp_path):
+    """Zelfde source_time (periode) tweemaal, een kleine waardewijziging
+    ruim binnen de delta-tolerantie -- toont dat het een REVISIE-trigger
+    is (geen delta-trigger), roadmap 1.3."""
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=1)
+
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.45", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t2)
+
+    assert output is not None
+    assert len(triggers) == 1  # geen delta-trigger (0.05 < tolerantie 0.25), wel een revisie
+    assert triggers[0].reason.startswith("Revisie:")
+    assert triggers[0].metric_key == "fed_funds_rate"
+
+
+def test_run_monitoring_no_revision_trigger_for_unchanged_repeated_period(tmp_path):
+    """Dagelijks pollen van een maandcijfer dat nog niet is bijgewerkt mag
+    NOOIT als revisie tellen -- alleen een daadwerkelijk andere waarde
+    voor dezelfde periode is een revisie."""
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=1)
+
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t2)
+
+    assert output is not None
+    assert triggers == []
+
+
 def test_run_monitoring_no_trigger_within_tolerance(tmp_path):
     conn = _db(tmp_path)
     t1 = datetime.now(timezone.utc)

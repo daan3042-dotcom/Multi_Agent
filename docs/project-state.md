@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 157 tests groen (`pytest`).
+alleen "het cijfer veranderde". 166 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 157 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-157 tests groen (`pytest`).
+166 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -147,7 +147,15 @@ alleen "het cijfer veranderde". 157 tests groen (`pytest`).
   ook bij falen), voorbereidend op 1.7 (Observability). 157 tests groen.
   1.2's checklist is nu opgesplitst per entiteit i.p.v. twee brede
   bundel-bullets, zodat voortgang zichtbaar is zonder op alle 8-9
-  entiteiten tegelijk te wachten.
+  entiteiten tegelijk te wachten. Daarna, na overleg met DD: 1.3's
+  revisie-detectie gebouwd (`health/data_health.py::detect_revision`,
+  `triggers/trigger_engine.py::evaluate_revision`, gewired in
+  `agents/base.py::run_monitoring`) — bewust TEGEN de bestaande
+  `claims`-historie i.p.v. een nieuwe `observations`-tabel, die nu geen
+  andere consument zou hebben dan deze ene check (zie
+  `docs/architecture.md`, Ontwerpkeuzes). 1.2's observations-entiteit
+  blijft daarom open totdat er een échte reden is om 'm van claims te
+  scheiden. 166 tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`

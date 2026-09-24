@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from health.data_health import HealthCheckResult, HealthStatus
-from triggers.trigger_engine import evaluate_data_health, evaluate_surprise, evaluate_threshold
+from triggers.trigger_engine import evaluate_data_health, evaluate_revision, evaluate_surprise, evaluate_threshold
 
 
 def test_evaluate_threshold_fires_when_breached():
@@ -62,3 +62,19 @@ def test_evaluate_data_health_stale_produces_medium_severity_trigger():
     event = evaluate_data_health("monetary_policy", health)
     assert event is not None
     assert event.severity == "medium"
+
+
+def test_evaluate_revision_always_fires_no_tolerance():
+    """In tegenstelling tot evaluate_surprise() kent een revisie geen
+    tolerantie -- elke gewijzigde waarde voor een al-gerapporteerde
+    periode is op zichzelf al nieuws."""
+    event = evaluate_revision(
+        domain="economic", metric_key="gdp_growth", previous_value=2.5, revised_value=2.1,
+        reason="Revisie: BBP-groei voor periode 2026-05-01 gewijzigd van 2.5 naar 2.1",
+    )
+    assert event.domain == "economic"
+    assert event.metric_key == "gdp_growth"
+    assert event.observed_value == 2.1
+    assert event.threshold == 2.5
+    assert event.severity == "medium"
+    assert "Revisie" in event.reason

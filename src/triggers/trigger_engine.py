@@ -104,6 +104,32 @@ def evaluate_surprise(
     )
 
 
+def evaluate_revision(
+    domain: str,
+    metric_key: str,
+    previous_value: float,
+    revised_value: float,
+    reason: str,
+    severity: Severity = "medium",
+    now: datetime | None = None,
+) -> TriggerEvent:
+    """Roadmap 1.3, revisie-detectie (health.data_health.detect_revision()
+    heeft de vergelijking al gemaakt vóórdat dit aangeroepen wordt). Anders
+    dan evaluate_surprise(): GEEN tolerantie-afweging -- een gewijzigde
+    waarde voor een periode die al eerder is gerapporteerd is per definitie
+    op zichzelf al nieuws (bijv. een BBP-schatting die naar beneden wordt
+    bijgesteld), niet een "is dit significant genoeg"-vraag."""
+    return TriggerEvent(
+        domain=domain,
+        triggered_at=now or datetime.now(timezone.utc),
+        reason=reason,
+        severity=severity,
+        metric_key=metric_key,
+        observed_value=revised_value,
+        threshold=previous_value,
+    )
+
+
 def evaluate_data_health(domain: str, health: HealthCheckResult, now: datetime | None = None) -> TriggerEvent | None:
     """Zet een slechte HealthCheckResult (A.3) om in een eigen trigger. OK en
     UNKNOWN leveren bewust geen trigger op: UNKNOWN is de normale staat vóór

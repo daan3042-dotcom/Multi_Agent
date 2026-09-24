@@ -58,8 +58,11 @@ niet erna.
       (`src/storage/schema.py::record_agent_run/list_agent_runs`)
 - [ ] Entiteit: sources (los register, zie ook 1.4 Source Registry —
       overlapt bewust, wordt daar samen mee gebouwd)
-- [ ] Entiteit: observations (los van claims: de ruwe, ongeïnterpreteerde
-      datapunten, nodig voor revisie-detectie in 1.3)
+- [ ] Entiteit: observations — bewust NIET gebouwd als aparte tabel:
+      revisie-detectie (1.3) is de enige huidige reden om ze los van
+      claims te zien, en dat werkt al tegen de bestaande claims-historie
+      (elke poll blijft bewaard). Pas een eigen tabel zodra er een
+      andere reden is om ze te scheiden (bijv. claims gaan prunen).
 - [ ] Entiteit: entities (het "wat wordt hier gemeten"-register)
 - [ ] Entiteit: measurements (afgeleide/berekende waarden, nu impliciet
       onderdeel van claims met source="Berekend (...)")
@@ -78,8 +81,11 @@ niet erna.
 ### 1.3 Data Quality & Health Layer
 - [x] Basale freshness-check (`src/health/data_health.py`)
 - [ ] Completeness / validity / consistency / continuity checks
-- [ ] Revisie-detectie (macro-cijfers worden later herzien — bijv. een
+- [x] Revisie-detectie (macro-cijfers worden later herzien — bijv. een
       eerste BBP-schatting wijkt af van de definitieve)
+      (`src/health/data_health.py::detect_revision`,
+      `src/triggers/trigger_engine.py::evaluate_revision`, gewired in
+      `agents/base.py::run_monitoring`)
 - [ ] Statusmodel: HEALTHY / DEGRADED / INVALID (nu: OK/STALE/UNREACHABLE/
       UNKNOWN — andere vocabulaire, vergelijkbaar idee)
 
