@@ -50,9 +50,11 @@ import requests
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
 from contract.output_contract import Claim, Confidence, now_utc
+from storage.schema import register_source
 
 DOMAIN = "sector"
-SOURCE_NAME = "ALPHA_VANTAGE_EQUITY"
+PROVIDER = "ALPHA_VANTAGE_EQUITY"
+SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
 BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=5)  # dagelijkse slotkoersen; buffer voor een weekend + feestdag
 BENCHMARK_SYMBOL = "SPY"  # S&P 500-proxy voor de relatieve-sterkte-berekening
@@ -142,8 +144,14 @@ def fetch_snapshot() -> dict:
 
 def monitor(conn, now=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
-    volledige gedrag (data-health, claims opslaan, delta-triggers)."""
-    return run_monitoring(conn, DOMAIN, SOURCE_NAME, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    volledige gedrag (data-health, claims opslaan, delta-triggers).
+    register_source() is een idempotente upsert (roadmap 1.4) -- veilig
+    om op elke cyclus te herhalen."""
+    register_source(
+        conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
+        frequency="dagelijks (slotkoersen)", latency="~1s per call (REST)", cost="gratis (Alpha Vantage, rate-limited)",
+    )
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
 
 
 def _fetch_change_percent(symbol: str, api_key: str) -> float | None:

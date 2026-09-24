@@ -28,9 +28,11 @@ from datetime import timedelta
 import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from storage.schema import register_source
 
 DOMAIN = "currency"
-SOURCE_NAME = "ALPHA_VANTAGE_FX"
+PROVIDER = "ALPHA_VANTAGE_FX"
+SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
 BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(hours=6)  # wisselkoersen bewegen continu, hebben vaker verse pulls nodig dan macro-reeksen
 
@@ -93,7 +95,13 @@ def fetch_snapshot() -> dict:
 
 
 def monitor(conn, now=None):
-    return run_monitoring(conn, DOMAIN, SOURCE_NAME, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    """register_source() is een idempotente upsert (roadmap 1.4) -- veilig
+    om op elke cyclus te herhalen."""
+    register_source(
+        conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
+        frequency="continu (wisselkoersen)", latency="~1s per call (REST)", cost="gratis (Alpha Vantage, rate-limited)",
+    )
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
 
 
 def deep_dive(conn, client, claims, trigger_events, now=None):

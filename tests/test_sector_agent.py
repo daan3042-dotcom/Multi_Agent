@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import agents.sector_agent as sa
-from storage.schema import init_db
+from storage.schema import get_source, init_db
 
 
 def test_fetch_snapshot_without_api_key_returns_error(monkeypatch):
@@ -53,6 +53,20 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     assert output is not None
     assert output.domain == "sector"
     assert triggers == []
+
+
+def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(sa, "fetch_snapshot", lambda: {"xlb_materials": {"value": "85.32", "date": "2026-09-22"}})
+
+    sa.monitor(conn, now=now)
+
+    source = get_source(conn, sa.SOURCE_KEY)
+    assert source is not None
+    assert source.provider == "ALPHA_VANTAGE_EQUITY"
+    assert source.domain == "sector"
+    assert source.max_age == sa.MAX_AGE
 
 
 def test_monitor_triggers_on_significant_price_move(tmp_path, monkeypatch):

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import agents.currency_agent as ca
-from storage.schema import init_db
+from storage.schema import get_source, init_db
 
 
 def test_fetch_snapshot_without_api_key_returns_error(monkeypatch):
@@ -53,3 +53,17 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     assert output is not None
     assert output.domain == "currency"
     assert triggers == []
+
+
+def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"eur_usd": {"value": "1.0850", "date": "2026-01-01"}})
+
+    ca.monitor(conn, now=now)
+
+    source = get_source(conn, ca.SOURCE_KEY)
+    assert source is not None
+    assert source.provider == "ALPHA_VANTAGE_FX"
+    assert source.domain == "currency"
+    assert source.max_age == ca.MAX_AGE

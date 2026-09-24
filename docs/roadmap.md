@@ -102,14 +102,16 @@ niet erna.
       agent heeft momenteel een daadwerkelijke alternatieve bron
       geïmplementeerd om naar te verwijzen. Wiring in een agent is
       expliciet open vervolgwerk, niet geforceerd binnen deze sectie.
-- [x] `monetary_policy_agent.py` en `financial_agent.py` gemigreerd naar
-      het register (`FRED:monetary_policy` / `FRED:financial`) — lost het
-      gedeelde-databron-probleem uit de aanleiding daadwerkelijk op, geen
-      registry "voor de vorm". `currency_agent.py`, `sector_agent.py`,
-      `commodity_agent.py` NOG NIET gemigreerd (geen aantoonbaar conflict,
-      dus bewust niet in deze ronde meegenomen — mechanisch triviaal als
-      vervolgstap, zie `docs/project-state.md`). `equity_agent.py` heeft
-      geen eigen live databron (adapter) en valt hier sowieso buiten.
+- [x] Alle 5 agents met een eigen live databron gemigreerd naar het
+      register: `monetary_policy_agent.py` (`FRED:monetary_policy`),
+      `financial_agent.py` (`FRED:financial`) — lost het gedeelde-
+      databron-probleem uit de aanleiding daadwerkelijk op, geen registry
+      "voor de vorm" — en, in een tweede ronde zonder aantoonbaar
+      conflict maar voor consistentie, `currency_agent.py`
+      (`ALPHA_VANTAGE_FX:currency`), `sector_agent.py`
+      (`ALPHA_VANTAGE_EQUITY:sector`), `commodity_agent.py`
+      (`ALPHA_VANTAGE_COMMODITY:commodity`). `equity_agent.py` heeft geen
+      eigen live databron (adapter) en valt hier sowieso buiten.
 
 ### 1.5 Trigger Engine
 - [x] Deterministische thresholds, geen LLM (`src/triggers/trigger_engine.py`)

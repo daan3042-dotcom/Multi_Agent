@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 205 tests groen (`pytest`).
+alleen "het cijfer veranderde". 208 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 205 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-205 tests groen (`pytest`).
+208 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -190,7 +190,11 @@ alleen "het cijfer veranderde". 205 tests groen (`pytest`).
   system_health.py::sources_from_registry()` (nieuw) leest de registry
   uit en vult `system_health()`'s `sources`-parameter automatisch.
   `docs/agents.md` kreeg een korte toelichting bij monetary_policy/
-  financial (de enige twee waar dit voor een lezer relevant is). 205
+  financial (de enige twee waar dit voor een lezer relevant is). Daarna,
+  op DD's verzoek: `currency_agent.py`, `sector_agent.py`,
+  `commodity_agent.py` ook naar het register gemigreerd (zelfde patroon,
+  geen bug om op te lossen maar wel consistentie — alle 5 agents met een
+  eigen live databron staan nu op dezelfde manier geregistreerd). 208
   tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
@@ -278,14 +282,13 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
     infrastructuur staat klaar.
 - **1.4's Source Registry — bewuste grenzen, geen gaten:**
   - `currency_agent.py`, `sector_agent.py`, `commodity_agent.py` zijn
-    NIET gemigreerd naar de registry — elk gebruikt al een unieke
-    bronnaam (geen aantoonbaar FRED-achtig conflict), dus geen bug om op
-    te lossen. Migratie is mechanisch triviaal (zelfde patroon als de
-    twee gemigreerde agents, ~5 regels per agent) maar bewust niet in
-    deze ronde meegenomen om de diff gericht te houden op de aanleiding.
-    Kandidaat voor een korte, losse vervolgronde als DD dat wil.
-    `equity_agent.py` heeft geen eigen live databron (adapter) en komt
-    sowieso niet in aanmerking.
+    inmiddels óók gemigreerd (op DD's verzoek, tweede ronde na de eerste
+    twee) — elk gebruikte al een unieke bronnaam (geen
+    aantoonbaar FRED-achtig conflict), dus geen bug om op te lossen,
+    maar wel voor consistentie: alle 5 agents met een eigen live databron
+    staan nu op dezelfde manier in de registry. `equity_agent.py` heeft
+    geen eigen live databron (adapter) en komt sowieso niet in
+    aanmerking.
   - `fallback_source_key` bestaat als veld + FK-constraint, maar GEEN
     agent heeft een daadwerkelijke alternatieve bron geïmplementeerd —
     er is dus nergens iets om naar te verwijzen. Wiring van echte

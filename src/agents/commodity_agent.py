@@ -51,9 +51,11 @@ import requests
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.moving_average_deviation import compute_deviation_from_average_pct, compute_moving_average
 from contract.output_contract import Claim, Confidence, now_utc
+from storage.schema import register_source
 
 DOMAIN = "commodity"
-SOURCE_NAME = "ALPHA_VANTAGE_COMMODITY"
+PROVIDER = "ALPHA_VANTAGE_COMMODITY"
+SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
 BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=40)  # maandelijkse data (interval=monthly, zelfde keuze als analyst_agent.ai)
 MOVING_AVERAGE_PERIODS = 6  # aantal maandpunten voor het voortschrijdend gemiddelde
@@ -130,8 +132,14 @@ def fetch_snapshot() -> dict:
 
 def monitor(conn, now=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
-    volledige gedrag (data-health, claims opslaan, delta-triggers)."""
-    return run_monitoring(conn, DOMAIN, SOURCE_NAME, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    volledige gedrag (data-health, claims opslaan, delta-triggers).
+    register_source() is een idempotente upsert (roadmap 1.4) -- veilig
+    om op elke cyclus te herhalen."""
+    register_source(
+        conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
+        frequency="maandelijks (interval=monthly)", latency="~1s per call (REST)", cost="gratis (Alpha Vantage, rate-limited)",
+    )
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
 
 
 def deep_dive(conn, client, claims, trigger_events, now=None):

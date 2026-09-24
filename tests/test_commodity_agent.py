@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import agents.commodity_agent as ca
-from storage.schema import init_db
+from storage.schema import get_source, init_db
 
 
 def test_fetch_snapshot_without_api_key_returns_error(monkeypatch):
@@ -51,6 +51,20 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     assert output is not None
     assert output.domain == "commodity"
     assert triggers == []
+
+
+def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"copper": {"value": "4.25", "date": "2026-09-01"}})
+
+    ca.monitor(conn, now=now)
+
+    source = get_source(conn, ca.SOURCE_KEY)
+    assert source is not None
+    assert source.provider == "ALPHA_VANTAGE_COMMODITY"
+    assert source.domain == "commodity"
+    assert source.max_age == ca.MAX_AGE
 
 
 def test_monitor_triggers_on_significant_price_move(tmp_path, monkeypatch):
