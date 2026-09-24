@@ -27,6 +27,20 @@ worden door `run_deep_dive()` zelf toegevoegd, niet door de agent:
 - **Aanleiding uitleggen, niet overinterpreteren.** De trigger-reden mag
   verklaard worden, maar één afwijkende observatie is nog geen trend.
 
+## QC-statusmodel: wat er gebeurt ná een trigger (roadmap 1.6)
+
+Elke keer dat een agent triggert, opent het systeem automatisch een
+"geval" dat de hele weg volgt: TRIGGERED → DEEP_DIVE_COMPLETE →
+QC_PASSED/QC_FAILED → (bij een fail) NEEDS_REVIEW. Dit gebeurt voor élke
+agent gelijk, zonder dat een agent er zelf iets voor hoeft te doen.
+
+Nieuw sinds 1.6: als de aanleiding voor een deep-dive een onbereikbare
+bron was (een "data_health"-trigger, severity high), telt dat geval
+ALTIJD als mislukt (QC_FAILED → NEEDS_REVIEW) — ook als de geschreven
+tekst zelf verder brandschoon is. Onbetrouwbare onderliggende data kan
+geen goed geschreven tekst "redden". Een verouderde (maar niet
+onbereikbare) bron dwingt dit niet automatisch af.
+
 ## Monetary policy agent (`agents/monetary_policy_agent.py`)
 
 **Wat het volgt:** vier kernreeksen van FRED (Federal Reserve Economic

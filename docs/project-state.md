@@ -28,7 +28,7 @@ deep-dive automatisch meekrijgt, een leesbaar overzicht per agent
 (`docs/agents.md`), en `src/analysis/` — citeerbare, Python-berekende
 modellen (NFCI-interpretatie, Taylor Rule, relatieve sterkte,
 voortschrijdend-gemiddelde-afwijking) die deep-dives onderbouwen i.p.v.
-alleen "het cijfer veranderde". 231 tests groen (`pytest`).
+alleen "het cijfer veranderde". 261 tests groen (`pytest`).
 
 ## Completed
 
@@ -126,7 +126,7 @@ alleen "het cijfer veranderde". 231 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-231 tests groen (`pytest`).
+261 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
@@ -208,7 +208,24 @@ alleen "het cijfer veranderde". 231 tests groen (`pytest`).
   tussen 4 en 3 waarden). Geen enkele wiring in agents/base.py of
   trigger_engine.py geforceerd (zie Known problems) — dit blijft dus
   onzichtbaar in het gedrag van de 6 agents, `docs/agents.md` is daarom
-  niet aangepast. 231 tests groen.
+  niet aangepast. 231 tests groen. Daarna: 1.6 (QC & State Machine)
+  afgerond, de LAATSTE volledig openstaande sectie-1-post (1.2's overige
+  entiteiten blijven bewust open, zie de losse regels onder 1.2 in
+  `docs/roadmap.md`). Nieuwe `qc_cases`-tabel + `qc.qc.QCCaseStatus`/
+  `QC_TRANSITIONS`/`decide_qc_outcome()` — een ECHTE state machine
+  (overgangen gevalideerd, geen vrij label). Automatisch gewired in
+  `agents/base.py`: een case ontstaat bij TRIGGERED zodra
+  `run_monitoring()` triggert, en `run_deep_dive()` zoekt 'm zelf op
+  (geen signatuurwijziging, geen wijziging aan de 6 agent-wrappers) en
+  zet 'm door tot QC_PASSED/QC_FAILED/NEEDS_REVIEW. `QualityStatus`
+  (1.3) is nu ECHT gewired als input voor die beslissing — sluit de open
+  lus die 1.3 liet liggen. `DomainOutput.needs_review` en de qc_case-
+  status volgen nu dezelfde ene beslissing, nooit meer los van elkaar.
+  ARCHIVED is de enige handmatige overgang. `docs/agents.md` kreeg een
+  korte, gedeelde toelichting (geldt voor alle 6 agents gelijk, geen
+  per-agent secties aangepast). Ook vastgelegd: de domeinprioritering-
+  vraag (continu vs. on-demand) blijft bewust open tot er een scheduler
+  is — zie "Open questions" hieronder. 261 tests groen.
 - Vóór de koerswijziging afgerond (oude, kleinere scope): sectie B +
   gedeelde kwaliteitsregels + C.1-C.4 (equity-adapter, financial agent,
   sector agent, commodity agent) + `docs/agents.md` + `src/analysis/`
@@ -346,30 +363,52 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   - Geen wiring betekent: `docs/agents.md` is NIET aangepast, dit werk is
     onzichtbaar in hoe de 6 agents zich nu gedragen — puur nieuwe,
     beschikbare infrastructuur.
+- **1.6's QC-state-machine — bewuste grenzen, geen gaten:**
+  - Alleen het data_health-oorsprong-triggersignaal wordt vertaald naar
+    een `QualityStatus` voor de QC_PASSED/FAILED-beslissing — de vier
+    1.3-checks zelf (completeness/validity/consistency/continuity)
+    blijven ongewijzigd ONGEWIRED, zoals bij 1.3 afgesproken. Zodra één
+    van de vier ooit gewired wordt, kan `decide_qc_outcome()` er zo bij.
+  - `QualityStatus.DEGRADED` faalt een QC-case NIET automatisch (alleen
+    zichtbaar via `qc_issues`) — een bewuste keuze om NEEDS_REVIEW niet
+    te laten vollopen met bruikbare-maar-niet-perfecte gevallen, zie
+    `docs/architecture.md` ("Ontwerpkeuzes") voor de volledige afweging.
+  - Een `qc_case` wordt gekoppeld aan een deep-dive via een lookup op
+    domein+status (meest recente TRIGGERED case), niet via een
+    doorgegeven `case_id` — correct zolang een domein maximaal één open
+    TRIGGERED case tegelijk heeft. Bij twee opeenvolgende
+    `run_monitoring()`-triggers vóór de eerste deep-dive draait, pakt
+    `run_deep_dive()` de MEEST RECENTE case; de oudere blijft voor altijd
+    in TRIGGERED steken (geen automatische opruiming/samenvoeging
+    gebouwd). Onwaarschijnlijk bij het huidige handmatige/on-demand-
+    gebruik (zie "Open questions"), maar wordt relevanter zodra er een
+    scheduler is die snel na elkaar kan draaien.
+  - `archive_qc_case()` heeft geen enkele aanroeper — er is nog geen
+    review-workflow/UI die 'm zou aanroepen. Cases die QC_PASSED of
+    NEEDS_REVIEW bereiken, blijven daar dus vooralsnog staan (zichtbaar
+    via `list_qc_cases()`, niet stilzwijgend verloren).
 
 ## Next priorities
 
 **Herzien op 24-09-2026 — sectie 1 (Infrastructuur & Data) eerst, niet
-meer agents.** Concreet, in volgorde:
+meer agents.** Stand: 1.1, 1.3, 1.4, 1.6, 1.7, 1.8 volledig afgevinkt.
+Concreet, in volgorde:
 
-1. Sectie 1's openstaande items dichten (zie `docs/roadmap.md`). **1.1
-   afgerond (24-09-2026)**: vier tijdstempels op `Claim`
-   (event/source/ingestion/analysis-time, `src/contract/output_contract.py`)
-   en de domain-ontologie (`src/contract/domain_ontology.py`) — eerste,
-   afgebakende slice, incrementeel gemigreerd over alle 6 agents +
-   testsuite, 154 tests groen. Nog open: het rijkere event-model in de
-   database (observations/entities/measurements/events i.p.v. alleen
-   claims/triggers, 1.2), de volledige data-quality-dimensies
-   (completeness/validity/consistency/continuity + revisie-detectie, 1.3),
-   een Source Registry (1.4), trigger-severity/-versioning en de twee
-   ontbrekende triggertypes (1.5), en de QC-state-machine
-   (RAW→...→ARCHIVED, 1.6). Volgorde daarvan nog te bevestigen met DD.
-2. Live validatie tegen echte databronnen (FRED/Alpha Vantage), zodra
+1. **1.5 (Trigger Engine)** is nu de enige nog écht openstaande sectie-1-
+   post: trigger severity-model (INFO/WATCH/SIGNIFICANT/CRITICAL,
+   nu low/medium/high), trigger-versioning (welke regel-versie was actief
+   toen dit triggerde), en twee ontbrekende triggertypes (regime-transitie,
+   cross-variable/correlatiebreuk).
+2. 1.2's overige entiteiten (observations/entities/measurements/events/
+   expectations/evidence/deep_dives/syntheses) blijven BEWUST open, elk
+   met een vastgelegde reden (zie de losse regels onder 1.2 in
+   `docs/roadmap.md`) — geen "nog te doen"-lijst, een bewuste grens.
+3. Live validatie tegen echte databronnen (FRED/Alpha Vantage), zodra
    netwerktoegang dat toelaat — zie "Known problems" hieronder
    (24-09-2026: beide geblokkeerd in de huidige sandbox-omgeving,
    organisatie-egress-policy, 403). Anthropic-calls werken al wel
    (gevalideerd op 24-09-2026).
-3. C.5 (economic agent) en verdere Finetune-modellen: bewust NA sectie 1,
+4. C.5 (economic agent) en verdere Finetune-modellen: bewust NA sectie 1,
    niet ervoor.
 4. De daadwerkelijke koppeling voor C.1/2.3 (hoe een `analyst_agent.ai`-run
    zijn output naar `AnalystAgentReport` vertaald krijgt) — nog geen
@@ -377,9 +416,18 @@ meer agents.** Concreet, in volgorde:
 
 ## Open questions needing the project owner's input
 
-Zie `docs/roadmap.md` sectie H — met name: welke domeinen continu draaien
-vs. alleen on-demand, en de prioritering ICT-trading (kort) vs. macro/
-mid-term (lang), aangezien dat de volgorde van sectie C kan beïnvloeden.
-Ook: zijn de illustratieve tolerance-waarden in B.1/B.2 bruikbaar als
-startpunt, of moeten die eerst vervangen worden voordat dit tegen live data
-draait?
+- **Domeinprioritering (continu vs. on-demand per domein) bewust
+  uitgesteld tot er een scheduler is — voorlopig draait alles handmatig.**
+  (Vastgelegd tijdens 1.6.) DD heeft besloten: geen scheduler,
+  geen per-domein continue-vs-on-demand-instelling, geen configuratie-
+  systeem of cadans-veld hiervoor — bewust NIET gebouwd, ook geen stub.
+  Dit is een tijdelijke keuze; DD komt hier op terug zodra een scheduler +
+  de Nasdaq/NQ-regime-agent (2.9) relevant worden. Tot die tijd: alle 6
+  agents worden handmatig/on-demand gedraaid, geen enkele agent geeft een
+  `event_id` mee (zie 1.7's idempotency — blijft daardoor ongebruikt in
+  de praktijk).
+- Zie `docs/roadmap.md` sectie H — met name: de prioritering ICT-trading
+  (kort) vs. macro/mid-term (lang), aangezien dat de volgorde van sectie 2
+  kan beïnvloeden. Ook: zijn de illustratieve tolerance-waarden in B.1/B.2
+  bruikbaar als startpunt, of moeten die eerst vervangen worden voordat
+  dit tegen live data draait?

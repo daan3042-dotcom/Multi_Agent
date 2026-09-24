@@ -3,14 +3,22 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from contract.output_contract import Claim, DomainOutput, Mode
+from health.data_health import QualityStatus
+from qc.qc import InvalidQCTransitionError, QCCaseStatus
 from storage.schema import (
+    advance_qc_case,
+    archive_qc_case,
+    get_qc_case,
     get_source,
     has_successful_run,
     init_db,
     latest_data_health,
+    latest_qc_case,
     list_agent_runs,
+    list_qc_cases,
     list_sources,
     load_latest_claims,
+    open_qc_case,
     record_agent_run,
     record_data_health,
     record_trigger_event,
@@ -280,3 +288,157 @@ def test_register_source_with_valid_fallback(tmp_path):
     )
     source = get_source(conn, "ALTERNATIVE:monetary_policy")
     assert source.fallback_source_key == "FRED:monetary_policy"
+
+
+# -- Roadmap 1.6: qc_cases --
+
+def test_open_qc_case_starts_at_triggered(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    case_id = open_qc_case(conn, "monetary_policy", ["Fed funds rate significant gewijzigd"], now)
+
+    case = get_qc_case(conn, case_id)
+    assert case is not None
+    assert case.domain == "monetary_policy"
+    assert case.status == QCCaseStatus.TRIGGERED
+    assert case.trigger_reasons == ["Fed funds rate significant gewijzigd"]
+    assert case.domain_output_id is None
+    assert case.quality_status is None
+    assert case.qc_issues == []
+    assert case.created_at == now
+    assert case.updated_at == now
+
+
+def test_get_qc_case_returns_none_for_unknown_id(tmp_path):
+    conn = _db(tmp_path)
+    assert get_qc_case(conn, 999) is None
+
+
+def test_advance_qc_case_along_valid_path(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(seconds=5)
+    output_id = save_domain_output(conn, _output())
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], t1)
+
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, t2, domain_output_id=output_id)
+    case = get_qc_case(conn, case_id)
+    assert case.status == QCCaseStatus.DEEP_DIVE_COMPLETE
+    assert case.domain_output_id == output_id
+    assert case.updated_at == t2
+    assert case.created_at == t1  # created_at blijft ongewijzigd
+
+
+def test_advance_qc_case_rejects_invalid_transition(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], now)
+
+    with pytest.raises(InvalidQCTransitionError):
+        advance_qc_case(conn, case_id, QCCaseStatus.ARCHIVED, now)  # mag niet springen
+
+
+def test_advance_qc_case_stores_quality_status_and_issues(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    output_id = save_domain_output(conn, _output())
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], t1)
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, t1, domain_output_id=output_id)
+
+    advance_qc_case(
+        conn, case_id, QCCaseStatus.QC_FAILED, t1,
+        quality_status=QualityStatus.INVALID, qc_issues=["bron onbereikbaar"],
+    )
+    case = get_qc_case(conn, case_id)
+    assert case.status == QCCaseStatus.QC_FAILED
+    assert case.quality_status == QualityStatus.INVALID
+    assert case.qc_issues == ["bron onbereikbaar"]
+
+
+def test_advance_qc_case_with_empty_issues_list_is_stored_not_skipped(tmp_path):
+    """Een LEGE issue-lijst betekent 'gecontroleerd, niets gevonden' -- dat
+    moet onderscheiden blijven van 'nog niet gecontroleerd' (None)."""
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], t1)
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, t1)
+    advance_qc_case(conn, case_id, QCCaseStatus.QC_PASSED, t1, qc_issues=[])
+
+    case = get_qc_case(conn, case_id)
+    assert case.qc_issues == []
+
+
+def test_full_lifecycle_qc_failed_to_needs_review_to_archived(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output_id = save_domain_output(conn, _output())
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], now)
+
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=output_id)
+    advance_qc_case(conn, case_id, QCCaseStatus.QC_FAILED, now, qc_issues=["inconsistentie"])
+    advance_qc_case(conn, case_id, QCCaseStatus.NEEDS_REVIEW, now)
+    assert get_qc_case(conn, case_id).status == QCCaseStatus.NEEDS_REVIEW
+
+    archive_qc_case(conn, case_id, now)
+    assert get_qc_case(conn, case_id).status == QCCaseStatus.ARCHIVED
+
+
+def test_full_lifecycle_qc_passed_to_archived(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output_id = save_domain_output(conn, _output())
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], now)
+
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=output_id)
+    advance_qc_case(conn, case_id, QCCaseStatus.QC_PASSED, now)
+    archive_qc_case(conn, case_id, now)
+    assert get_qc_case(conn, case_id).status == QCCaseStatus.ARCHIVED
+
+
+def test_archive_qc_case_rejects_from_deep_dive_complete(tmp_path):
+    """Archivering mag alleen vanuit QC_PASSED of NEEDS_REVIEW -- niet
+    zomaar vanuit elke status."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    case_id = open_qc_case(conn, "monetary_policy", ["test"], now)
+    advance_qc_case(conn, case_id, QCCaseStatus.DEEP_DIVE_COMPLETE, now)
+
+    with pytest.raises(InvalidQCTransitionError):
+        archive_qc_case(conn, case_id, now)
+
+
+def test_latest_qc_case_returns_most_recent_matching_status(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(minutes=5)
+    older = open_qc_case(conn, "monetary_policy", ["eerste"], t1)
+    newer = open_qc_case(conn, "monetary_policy", ["tweede"], t2)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.TRIGGERED)
+    assert case.id == newer
+
+
+def test_latest_qc_case_none_when_no_case_in_that_status(tmp_path):
+    conn = _db(tmp_path)
+    assert latest_qc_case(conn, "monetary_policy", QCCaseStatus.TRIGGERED) is None
+
+
+def test_latest_qc_case_scoped_to_domain(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    open_qc_case(conn, "currency", ["ander domein"], now)
+    assert latest_qc_case(conn, "monetary_policy", QCCaseStatus.TRIGGERED) is None
+
+
+def test_list_qc_cases_filters_by_status(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    c1 = open_qc_case(conn, "monetary_policy", ["a"], now)
+    c2 = open_qc_case(conn, "monetary_policy", ["b"], now)
+    advance_qc_case(conn, c2, QCCaseStatus.DEEP_DIVE_COMPLETE, now)
+
+    triggered = list_qc_cases(conn, "monetary_policy", status=QCCaseStatus.TRIGGERED)
+    assert [c.id for c in triggered] == [c1]
+
+    all_cases = list_qc_cases(conn, "monetary_policy")
+    assert {c.id for c in all_cases} == {c1, c2}

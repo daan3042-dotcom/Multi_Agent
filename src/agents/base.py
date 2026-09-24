@@ -44,6 +44,22 @@ wordt bijgesteld. health.data_health.detect_revision() vergelijkt hiervoor
 tegen de al-opgehaalde claims-geschiedenis (previous_by_metric) -- geen
 aparte observations-tabel nodig, claims bewaart elke poll al historisch.
 
+QC-STATE-MACHINE (roadmap 1.6, qc.qc.QCCaseStatus): zodra run_monitoring()
+minstens één trigger oplevert, opent het een QC-case (status TRIGGERED,
+storage.schema.open_qc_case()) -- RAW/VALIDATED worden bewust niet als
+losse rijen gepersisteerd, zie qc.py se moduledocstring. run_deep_dive()
+zoekt zelf de meest recente TRIGGERED case voor dit domein op (geen
+gewijzigde signatuur nodig, geen case_id die door 6 agent-wrappers heen
+gedragen hoeft te worden) en zet 'm automatisch door: DEEP_DIVE_COMPLETE
+-> QC_PASSED/QC_FAILED (qc.qc.decide_qc_outcome(), met een QualityStatus
+afgeleid uit een eventuele data_health-oorsprong-trigger tussen de
+aanleiding -- zie decide_qc_outcome()'s docstring en docs/architecture.md
+voor de volledige PASSED/FAILED-afweging) -> NEEDS_REVIEW bij een FAIL.
+Geen open TRIGGERED case (bijv. een on-demand/handmatige deep-dive zonder
+voorafgaande trigger) betekent simpelweg: geen case om te volgen, geen
+foutmelding. ARCHIVED is de ENIGE overgang zonder aanroeper hier --
+expliciet, handmatig (storage.schema.archive_qc_case()).
+
 KWALITEIT VAN DE DEEP-DIVES (zie CLAUDE.md, "Werkwijze met DD"): elk domain
 agent's DEEP_DIVE_SYSTEM_PROMPT bevat ALLEEN vakinhoudelijke context --
 SHARED_QUALITY_RULES hieronder wordt door run_deep_dive() automatisch
@@ -78,9 +94,18 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from health.data_health import check_source, detect_revision
-from qc.qc import DEFAULT_LLM_REVIEW_MODEL, apply_qc, default_llm_review
-from storage.schema import has_successful_run, load_latest_claims, record_agent_run, record_data_health, save_domain_output
+from health.data_health import HealthStatus, QualityStatus, check_source, detect_revision, rollup_quality_status
+from qc.qc import DEFAULT_LLM_REVIEW_MODEL, QCCaseStatus, apply_qc, decide_qc_outcome, default_llm_review
+from storage.schema import (
+    advance_qc_case,
+    has_successful_run,
+    latest_qc_case,
+    load_latest_claims,
+    open_qc_case,
+    record_agent_run,
+    record_data_health,
+    save_domain_output,
+)
 from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_revision, evaluate_surprise
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
@@ -163,6 +188,15 @@ def _parse_source_date(raw: str | None) -> datetime | None:
     return parsed
 
 
+def _maybe_open_qc_case(conn, domain: str, triggers: list[TriggerEvent], now) -> None:
+    """Opent een QC-case (roadmap 1.6, status TRIGGERED) zodra er
+    minstens één trigger is -- geen case voor een rustige, niet-
+    triggerende cyclus (dat zou de tabel vullen met evenveel ruis als
+    agent_runs al dekt, zie qc.py se moduledocstring)."""
+    if triggers:
+        open_qc_case(conn, domain, [t.reason for t in triggers], now)
+
+
 def run_monitoring(
     conn,
     domain: str,
@@ -206,6 +240,7 @@ def run_monitoring(
 
     if not success:
         record_agent_run(conn, domain, "monitoring", now, success=False, trigger_count=len(triggers), error=snapshot.get("error"), event_id=event_id)
+        _maybe_open_qc_case(conn, domain, triggers, now)
         return None, triggers
 
     # Vorige observatie per metric OPHALEN VOORDAT de nieuwe claims worden
@@ -260,6 +295,7 @@ def run_monitoring(
             conn, domain, "monitoring", now, success=False, trigger_count=len(triggers),
             error="Geen enkele metric kon geparsed worden uit de snapshot", event_id=event_id,
         )
+        _maybe_open_qc_case(conn, domain, triggers, now)
         return None, triggers
 
     output = DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=now, claims=claims)
@@ -268,6 +304,7 @@ def run_monitoring(
     triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
 
     record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers), event_id=event_id)
+    _maybe_open_qc_case(conn, domain, triggers, now)
 
     return output, triggers
 
@@ -312,6 +349,27 @@ def evaluate_deltas(
     return triggers
 
 
+_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _derive_quality_status_from_triggers(trigger_events: list[TriggerEvent]) -> QualityStatus | None:
+    """Roadmap 1.6, DEEL 2: leidt een QualityStatus af uit een eventuele
+    data_health-oorsprong-trigger tussen de aanleiding (reason begint met
+    "data_health:", zie triggers.trigger_engine.evaluate_data_health) --
+    GEEN nieuwe parameter nodig (source_name/max_age zijn hier niet
+    beschikbaar), hergebruikt wat al aanwezig is in trigger_events. De
+    vier andere 1.3-checks (completeness/validity/consistency/continuity)
+    blijven bewust ongewired (zie 1.3's afronding in docs/project-state.md)
+    -- alleen dit ene, al-vloeiende signaal wordt hier aangesloten. Geen
+    data_health-trigger aanwezig -> None (geen signaal, geen gok)."""
+    data_health_triggers = [t for t in trigger_events if t.reason.startswith("data_health:")]
+    if not data_health_triggers:
+        return None
+    worst = max(data_health_triggers, key=lambda t: _SEVERITY_RANK[t.severity])
+    source_status = HealthStatus.UNREACHABLE if worst.severity == "high" else HealthStatus.STALE
+    return rollup_quality_status(source_status=source_status)
+
+
 def run_deep_dive(
     conn,
     client,
@@ -347,6 +405,12 @@ def run_deep_dive(
     now = now or now_utc()
     if event_id is not None and has_successful_run(conn, domain, "deep_dive", event_id):
         raise AlreadyProcessedError(domain, "deep_dive", event_id)
+
+    # Roadmap 1.6: de meest recente TRIGGERED case voor dit domein opzoeken
+    # (geen case_id-parameter nodig, zie moduledocstring) -- None als deze
+    # deep-dive on-demand/handmatig is aangevraagd zonder voorafgaande
+    # trigger, dan is er simpelweg geen case om te volgen.
+    qc_case = latest_qc_case(conn, domain, QCCaseStatus.TRIGGERED)
 
     full_system_prompt = f"{SHARED_QUALITY_RULES}\n\n{system_prompt}"
 
@@ -398,9 +462,33 @@ def run_deep_dive(
             conn, domain, "deep_dive", now, success=False, domain_output_id=domain_output_id,
             trigger_count=len(trigger_events), error=str(e), event_id=event_id,
         )
+        if qc_case is not None:
+            # Een mislukte LLM-call heeft geen tekst om te QC'en -- rechtstreeks
+            # QC_FAILED (geen geldige tekst is per definitie geen PASS) en meteen
+            # door naar NEEDS_REVIEW, zelfde twee-staps-overgang als het
+            # QC_FAILED-pad hieronder.
+            advance_qc_case(conn, qc_case.id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=domain_output_id)
+            advance_qc_case(conn, qc_case.id, QCCaseStatus.QC_FAILED, now, qc_issues=[str(e)])
+            advance_qc_case(conn, qc_case.id, QCCaseStatus.NEEDS_REVIEW, now)
         return output
 
     qc_result = apply_qc(claims, deep_dive_text, llm_review_fn=functools.partial(default_llm_review, client))
+
+    # Roadmap 1.6, DEEL 2: het bestaande qc_result.needs_review-oordeel
+    # (Layer 1+2, tekst-vs-cijfers) combineren met een eventueel
+    # QualityStatus-signaal uit de aanleiding (zie decide_qc_outcome()'s
+    # docstring en docs/architecture.md voor de volledige afweging) --
+    # `outcome` is de ENE bron van waarheid: zowel de DomainOutput se
+    # needs_review als de qc_case-status volgen 'm, zodat ze nooit
+    # tegenstrijdig kunnen zijn.
+    quality_status = _derive_quality_status_from_triggers(trigger_events)
+    outcome = decide_qc_outcome(qc_result.needs_review, quality_status)
+    final_issues = list(qc_result.issues)
+    if quality_status == QualityStatus.INVALID and not qc_result.needs_review:
+        final_issues.append(
+            "Kwaliteitscontrole: QualityStatus.INVALID (zie aanleiding-triggers) -- "
+            "onderliggende data niet betrouwbaar genoeg voor QC_PASSED, ongeacht de tekstkwaliteit"
+        )
 
     narrative_claim = Claim(
         domain=domain,
@@ -417,9 +505,16 @@ def run_deep_dive(
         mode=Mode.DEEP_DIVE,
         generated_at=now,
         claims=claims + [narrative_claim],
-        needs_review=qc_result.needs_review,
-        review_issues=qc_result.issues,
+        needs_review=outcome == QCCaseStatus.QC_FAILED,
+        review_issues=final_issues,
     )
     domain_output_id = save_domain_output(conn, output)
     record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events), event_id=event_id)
+
+    if qc_case is not None:
+        advance_qc_case(conn, qc_case.id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=domain_output_id)
+        advance_qc_case(conn, qc_case.id, outcome, now, quality_status=quality_status, qc_issues=final_issues)
+        if outcome == QCCaseStatus.QC_FAILED:
+            advance_qc_case(conn, qc_case.id, QCCaseStatus.NEEDS_REVIEW, now)
+
     return output

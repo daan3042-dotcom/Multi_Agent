@@ -12,12 +12,12 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | Module | Rol | Roadmap-stap |
 |---|---|---|
 | `contract/output_contract.py` | `Claim` en `DomainOutput` — de vorm waar elke domain agent zich aan houdt | A.1 |
-| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7), sources (Source Registry, roadmap 1.4) | A.2 / 1.2 / 1.4 / 1.7 |
+| `storage/schema.py` | SQLite source of truth: claims, trigger-events, data-health, agent-runs (audit-log per monitoring/deep-dive-cyclus, roadmap 1.2, nu ook idempotency-dedup via `event_id`, roadmap 1.7), sources (Source Registry, roadmap 1.4), qc_cases (QC-state-machine, roadmap 1.6) | A.2 / 1.2 / 1.4 / 1.6 / 1.7 |
 | `sources/registry.py` | `SourceConfig` — de vorm van één geregistreerde bron (provider, domain, max_age, frequency, latency, cost, quality_score, fallback_source_key) | 1.4 |
 | `health/data_health.py` | Staleness/onbereikbaarheid per databron, revisie-detectie, completeness/validity/consistency/continuity-checks, en het `QualityStatus`-rollup (HEALTHY/DEGRADED/INVALID) — allemaal roadmap 1.3, vóór de trigger-laag | A.3 / 1.3 |
 | `health/system_health.py` | Centrale status-per-component-functie (source/ingestion/database/trigger/agent/LLM), roadmap 1.7 deel 1 — backend voor de latere Dashboard-laag (5.2). `sources_from_registry()` vult de `sources`-parameter automatisch vanuit 1.4's register | 1.7 |
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
-| `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW` | A.5 |
+| `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW`; sinds 1.6 ook `QCCaseStatus`/`QC_TRANSITIONS`/`decide_qc_outcome()` (de state machine zelf) | A.5 / 1.6 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
 | `agents/base.py` | Gedeelde scaffolding: `run_monitoring()`, `evaluate_deltas()` (delta-trigger, losgetrokken zodat C.1 'm ook kan gebruiken), `run_deep_dive()`, `SHARED_QUALITY_RULES` | B.1/B.2 |
 | `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) — alleen vakinhoudelijke deep-dive-prompt | B.1 |
@@ -233,6 +233,71 @@ synthesizer.synthesizer.synthesize_simultaneous(plan, {domain: deep_dive_output,
   synthese-laag (sectie 3), net als `quality_score` uit 1.4 — deze
   rollup oordeelt bewust alleen per losse claim/metric, geen aggregatie
   eroverheen.
+- **1.6's QC-state-machine: eigen `qc_cases`-tabel, en de PASSED/FAILED/
+  NEEDS_REVIEW-vertaling van `QualityStatus` is zelf ook geen
+  vanzelfsprekende 1-op-1-mapping.**
+
+  **Eigen entiteit, geen overload.** Consistent met hoe 1.2 (`agent_runs`)
+  en 1.4 (`sources`) nieuwe concepten hebben ingebed: `qc_cases` is een
+  NIEUWE tabel (`storage/schema.py`), niet een uitbreiding van
+  `domain_outputs.needs_review` (dat blijft bestaan — het blijft de vlag
+  die de synthesizer/manager direct leest). Reden: `needs_review` is een
+  EINDOORDEEL op één `DomainOutput`; een QC-case volgt de VOLLEDIGE
+  levenscyclus van een escalatie (van trigger tot archivering), een
+  ander soort ding met een eigen historie.
+
+  **RAW/VALIDATED worden bewust niet als losse rijen gepersisteerd** — een
+  case ontstaat pas bij TRIGGERED. Reden: RAW komt overeen met een
+  succesvolle monitoring-`agent_run` (die al apart bestaat sinds 1.2), en
+  VALIDATED zou vandaag altijd hetzelfde ogenblik zijn als RAW (de vier
+  1.3-checks die 'm zouden kunnen laten FALEN zijn bewust nog niet
+  gewired — zie 1.3's afronding). Een aparte rij voor een overgang die nu
+  altijd meteen slaagt, zou alleen ruis toevoegen aan een tabel die anders
+  met elke rustige, niet-triggerende poll zou meegroeien. RAW/VALIDATED
+  blijven wel in `qc.qc.QCCaseStatus`/`QC_TRANSITIONS` voor toekomstig
+  gebruik, zodra 1.3's checks ooit gewired worden.
+
+  **Koppeling case ↔ deep-dive zonder signatuurwijziging.** `run_deep_dive()`
+  zoekt zelf de meest recente TRIGGERED case voor het domein op
+  (`storage.schema.latest_qc_case()`) in plaats van een `case_id`-parameter
+  te eisen — dat zou alle 6 agent-wrappers hebben moeten wijzigen (een
+  brede, hier expliciet vermeden herstructurering). Werkt omdat een domein
+  in de praktijk maximaal één open TRIGGERED case tegelijk heeft; bij
+  meerdere pakt de meest recente. Geen open case (een on-demand/handmatige
+  deep-dive zonder voorafgaande trigger, al bestaand ondersteund gebruik)
+  betekent gewoon: geen case om te volgen.
+
+  **De PASSED/FAILED-mapping zelf (DEEL 2) — ook geen vanzelfsprekende
+  1-op-1-vertaling.** `decide_qc_outcome()` (`qc/qc.py`) combineert het
+  bestaande `needs_review`-oordeel (Layer 1+2, tekst-vs-cijfers) met een
+  optioneel `QualityStatus`-signaal:
+  - `QualityStatus.INVALID` faalt de case ALTIJD, ongeacht een verder
+    perfect geschreven tekst — onbetrouwbare onderliggende data kan een
+    tekst-QC niet "redden". Dit is de reden dat DEEL 2 niet gewoon
+    "voeg `quality_status` toe aan `review_issues`" kon zijn: een
+    INVALID-signaal moet het EINDOORDEEL kunnen omdraaien, niet alleen
+    een extra regel tekst worden.
+  - `QualityStatus.DEGRADED` faalt NIET automatisch. Overwogen en
+    afgewezen: DEGRADED altijd laten falen zou NEEDS_REVIEW snel laten
+    vollopen met bruikbare-maar-niet-perfecte gevallen (bijv. een
+    enigszins verouderde bron) — exact het soort ruis dat 1.3's eigen
+    "DEGRADED faalt de completeness-check ook niet automatisch"-afweging
+    al probeerde te vermijden (zie 1.3's Known problems). Blijft wel
+    zichtbaar via `qc_issues`, alleen geen verplichte FAIL.
+  - Geen enkel signaal (geen data_health-oorsprong-trigger in de
+    aanleiding) → puur `needs_review`, identiek aan het gedrag vóór 1.6.
+  - `DomainOutput.needs_review` en de `qc_case`-status volgen dezelfde,
+    ENE `outcome`-waarde (`agents/base.py::run_deep_dive()`) — nooit
+    losse, mogelijk tegenstrijdige oordelen.
+
+  **Welk `QualityStatus`-signaal daadwerkelijk gebruikt wordt, is bewust
+  beperkt.** Alleen een data_health-oorsprong-trigger (al aanwezig in
+  `trigger_events`, `reason` begint met `"data_health:"`) wordt vertaald
+  naar een `source_status` voor `rollup_quality_status()`. De vier
+  1.3-checks zelf (completeness/validity/consistency/continuity) blijven
+  ONGEWIJZIGD ongewired — dit bouwt NIET op die eerdere, bewuste
+  beslissing terug, het sluit alleen het ene signaal aan dat al door de
+  bestaande pijplijn stroomt zonder nieuwe parameters/drempels te eisen.
 - **Eigen databron-implementatie per domain agent, geen import van
   `analyst_agent.ai`.** `agents/monetary_policy_agent.py` en
   `agents/currency_agent.py` volgen dezelfde conventie als diens
@@ -271,6 +336,7 @@ CLAUDE.md, "eerst voorleggen, niet in stilte kiezen").
 | `qc/qc.py::deterministic_consistency_check` | Nee | Regex/cijfer-matching tussen een Claim en de deep-dive-tekst. |
 | Domain agent deep-dive mode (`agents/base.py::run_deep_dive()`) | **Ja** | Eén call per getriggerd domein: vat de al-berekende claims samen tot een korte, neutrale synthese. Gebonden aan `SHARED_QUALITY_RULES` (alleen aangeleverde claims, geen koop/verkoop-advies, onzekerheid expliciet) — zie sectie hieronder. |
 | `qc/qc.py::default_llm_review` | **Ja** | Eén lichte review-call per deep-dive: checkt neutraliteit/volledigheid/zelfconsistentie van de tekst — GEEN herbeoordeling van de cijfers zelf (dat doet de deterministische laag hierboven al). Bewust niet de 4-parallelle-reviewers-aanpak van `analyst_agent.ai` (zie `qc.py`'s moduledocstring). |
+| `qc/qc.py::decide_qc_outcome`/`validate_qc_transition`, `storage/schema.py`'s qc_cases-functies | Nee | Combineert/routeert al-berekende oordelen (`needs_review`, `QualityStatus`) volgens vaste regels — geen eigen interpretatie, geen LLM. |
 | `synthesizer/synthesizer.py::synthesize_simultaneous` | Nee (nu) | Zet op dit moment al-gegenereerde deep-dive-teksten naief naast elkaar, geen eigen LLM-call. Pijler 3.1 (nog te bouwen: contradictie-detectie, cross-domain-samenvoeging) voegt hier WEL LLM-gebruik toe — deze rij wordt dan bijgewerkt. |
 | `agents/equity_agent.py` (adapter) | Nee (hier) | Adapteert een AL gegenereerd `analyst_agent.ai`-rapport naar claims — het LLM-gebruik zit in dat losse systeem, niet in deze adapter. |
 | Toekomstige "thesis-mode" (roadmap 5.4, nog niet gebouwd) | Ja (gepland) | Enige geplande plek waar EXPLICIET gevraagde directionele/probabilistische redenering is toegestaan (analoog aan `analyst_agent.ai` sectie 18, Variant Perception) — een apart, duidelijk gelabeld kanaal, GEEN aanpassing van `SHARED_QUALITY_RULES` elders (zie `agents/base.py`'s moduledocstring). |

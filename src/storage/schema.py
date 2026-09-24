@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Iterator
 
 from contract.output_contract import Claim, DomainOutput, Mode
+from health.data_health import QualityStatus
+from qc.qc import QCCase, QCCaseStatus, validate_qc_transition
 from sources.registry import SourceConfig
 
 DEFAULT_DB_PATH = "market_intelligence.db"
@@ -122,6 +124,27 @@ CREATE TABLE IF NOT EXISTS sources (
     fallback_source_key TEXT REFERENCES sources(source_key)
 );
 CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
+
+-- Roadmap 1.6: QC & State Machine. Eén rij per escalatie, van trigger tot
+-- archivering -- zie qc/qc.py se moduledocstring voor de volledige
+-- toelichting op het statusmodel en welke overgangen automatisch/handmatig
+-- zijn. RAW/VALIDATED worden bewust niet als losse rijen gepersisteerd,
+-- een case begint daarom altijd bij TRIGGERED.
+CREATE TABLE IF NOT EXISTS qc_cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN (
+        'raw', 'validated', 'triggered', 'deep_dive_complete',
+        'qc_passed', 'qc_failed', 'needs_review', 'archived'
+    )),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    trigger_reasons_json TEXT NOT NULL,
+    domain_output_id INTEGER REFERENCES domain_outputs(id),
+    quality_status TEXT CHECK (quality_status IN ('healthy', 'degraded', 'invalid')),
+    qc_issues_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qc_cases_domain_status ON qc_cases(domain, status);
 """
 
 
@@ -415,3 +438,111 @@ def list_sources(conn: sqlite3.Connection) -> list[SourceConfig]:
     automatisch te vullen i.p.v. met de hand samen te stellen."""
     rows = conn.execute(f"{_SOURCES_SELECT} ORDER BY source_key").fetchall()
     return [_source_config_from_row(row) for row in rows]
+
+
+_QC_CASES_SELECT = (
+    "SELECT id, domain, status, created_at, updated_at, trigger_reasons_json, "
+    "domain_output_id, quality_status, qc_issues_json FROM qc_cases"
+)
+
+
+def _qc_case_from_row(row: tuple) -> QCCase:
+    id_, domain, status, created_at, updated_at, trigger_reasons_json, domain_output_id, quality_status, qc_issues_json = row
+    return QCCase(
+        id=id_,
+        domain=domain,
+        status=QCCaseStatus(status),
+        created_at=datetime.fromisoformat(created_at),
+        updated_at=datetime.fromisoformat(updated_at),
+        trigger_reasons=json.loads(trigger_reasons_json),
+        domain_output_id=domain_output_id,
+        quality_status=QualityStatus(quality_status) if quality_status else None,
+        qc_issues=json.loads(qc_issues_json) if qc_issues_json else [],
+    )
+
+
+def open_qc_case(conn: sqlite3.Connection, domain: str, trigger_reasons: list[str], now: datetime) -> int:
+    """Roadmap 1.6: nieuw QC-geval, status start meteen op TRIGGERED (zie
+    qc.qc se moduledocstring voor waarom RAW/VALIDATED niet apart worden
+    gepersisteerd). Wordt aangeroepen vanuit agents/base.py::
+    run_monitoring() zodra er minstens één trigger is."""
+    cur = conn.execute(
+        "INSERT INTO qc_cases (domain, status, created_at, updated_at, trigger_reasons_json) VALUES (?, ?, ?, ?, ?)",
+        (domain, QCCaseStatus.TRIGGERED.value, now.isoformat(), now.isoformat(), json.dumps(trigger_reasons, ensure_ascii=False)),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_qc_case(conn: sqlite3.Connection, case_id: int) -> QCCase | None:
+    row = conn.execute(f"{_QC_CASES_SELECT} WHERE id = ?", (case_id,)).fetchone()
+    return _qc_case_from_row(row) if row is not None else None
+
+
+def latest_qc_case(conn: sqlite3.Connection, domain: str, status: QCCaseStatus) -> QCCase | None:
+    """Meest recente case in een gegeven status voor dit domein -- de
+    lookup die run_deep_dive() gebruikt om zijn TRIGGERED case te vinden
+    zonder dat er een case_id doorgegeven hoeft te worden (geen wijziging
+    nodig aan run_monitoring()/run_deep_dive()'s signatuur of aan de 6
+    bestaande agent-wrappers)."""
+    row = conn.execute(
+        f"{_QC_CASES_SELECT} WHERE domain = ? AND status = ? ORDER BY created_at DESC LIMIT 1",
+        (domain, status.value),
+    ).fetchone()
+    return _qc_case_from_row(row) if row is not None else None
+
+
+def list_qc_cases(conn: sqlite3.Connection, domain: str, status: QCCaseStatus | None = None, limit: int = 20) -> list[QCCase]:
+    query = f"{_QC_CASES_SELECT} WHERE domain = ?"
+    params: list = [domain]
+    if status is not None:
+        query += " AND status = ?"
+        params.append(status.value)
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    return [_qc_case_from_row(row) for row in rows]
+
+
+def advance_qc_case(
+    conn: sqlite3.Connection,
+    case_id: int,
+    status: QCCaseStatus,
+    now: datetime,
+    domain_output_id: int | None = None,
+    quality_status: QualityStatus | None = None,
+    qc_issues: list[str] | None = None,
+) -> None:
+    """Zet een QC-geval een overgang verder. Valideert EERST tegen
+    qc.qc.QC_TRANSITIONS (InvalidQCTransitionError bij een niet-
+    toegestane sprong) -- dit is wat van `status` een echte state machine
+    maakt, niet zomaar een vrij te overschrijven label. `domain_output_id`/
+    `quality_status`/`qc_issues` worden alleen bijgewerkt als expliciet
+    meegegeven (COALESCE): een latere overgang die deze niet meegeeft laat
+    een eerder gezette waarde onaangeroerd."""
+    current = get_qc_case(conn, case_id)
+    if current is None:
+        raise ValueError(f"qc_case {case_id} bestaat niet")
+    validate_qc_transition(current.status, status)
+    conn.execute(
+        "UPDATE qc_cases SET status = ?, updated_at = ?, "
+        "domain_output_id = COALESCE(?, domain_output_id), "
+        "quality_status = COALESCE(?, quality_status), "
+        "qc_issues_json = COALESCE(?, qc_issues_json) WHERE id = ?",
+        (
+            status.value,
+            now.isoformat(),
+            domain_output_id,
+            quality_status.value if quality_status is not None else None,
+            json.dumps(qc_issues, ensure_ascii=False) if qc_issues is not None else None,
+            case_id,
+        ),
+    )
+    conn.commit()
+
+
+def archive_qc_case(conn: sqlite3.Connection, case_id: int, now: datetime) -> None:
+    """De ENIGE overgang zonder aanroeper in agents/base.py -- expliciet,
+    handmatig (bijv. later door een reviewer of scheduler). Alleen
+    toegestaan vanuit QC_PASSED of NEEDS_REVIEW (zie QC_TRANSITIONS)."""
+    advance_qc_case(conn, case_id, QCCaseStatus.ARCHIVED, now)

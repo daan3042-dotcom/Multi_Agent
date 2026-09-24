@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from agents.base import SHARED_QUALITY_RULES, AlreadyProcessedError, MetricSpec, evaluate_deltas, run_deep_dive, run_monitoring
 from contract.output_contract import Claim, Confidence, Mode
-from storage.schema import init_db, list_agent_runs
+from health.data_health import QualityStatus
+from qc.qc import QCCaseStatus
+from storage.schema import init_db, latest_qc_case, list_agent_runs, list_qc_cases
 
 SPECS = {"fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.25, severity="high")}
 
@@ -338,6 +340,120 @@ def test_run_deep_dive_without_event_id_never_raises(tmp_path):
     run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
     deep_dive_output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
     assert deep_dive_output is not None
+
+
+def test_run_monitoring_opens_qc_case_when_triggered(tmp_path):
+    """Roadmap 1.6: een case ontstaat pas zodra er ECHT een trigger is --
+    geen losse rij voor elke rustige, niet-triggerende poll."""
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=30)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "2026-01-31"}}, SPECS, timedelta(days=35), now=t2)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.TRIGGERED)
+    assert case is not None
+    assert case.domain == "monetary_policy"
+    assert any("Fed funds rate" in r for r in case.trigger_reasons)
+
+
+def test_run_monitoring_no_qc_case_without_a_trigger(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=now)
+
+    assert list_qc_cases(conn, "monetary_policy") == []
+
+
+def test_full_pipeline_ends_at_qc_passed_when_clean(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=30)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "2026-01-31"}}, SPECS, timedelta(days=35), now=t2)
+
+    client = _fake_client('{"issues": []}')
+    run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, triggers, now=t2)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.QC_PASSED)
+    assert case is not None
+    assert case.domain_output_id is not None
+    assert case.qc_issues == []
+
+
+def test_full_pipeline_ends_at_needs_review_when_qc_flags_issue(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=30)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "2026-01-31"}}, SPECS, timedelta(days=35), now=t2)
+
+    client = MagicMock()
+    responses = iter([
+        MagicMock(content=[MagicMock(type="text", text="Dit is de deep-dive tekst.")]),
+        MagicMock(content=[MagicMock(type="text", text='{"issues": ["gevonden probleem"]}')]),
+    ])
+    client.messages.create = lambda **kwargs: next(responses)
+    run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, triggers, now=t2)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.NEEDS_REVIEW)
+    assert case is not None
+    assert case.qc_issues == ["gevonden probleem"]
+
+
+def test_full_pipeline_ends_at_needs_review_when_llm_call_fails(tmp_path):
+    conn = _db(tmp_path)
+    t1 = datetime.now(timezone.utc)
+    t2 = t1 + timedelta(days=30)
+    run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}, SPECS, timedelta(days=35), now=t1)
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "2026-01-31"}}, SPECS, timedelta(days=35), now=t2)
+
+    client = MagicMock()
+    client.messages.create = lambda **kwargs: (_ for _ in ()).throw(Exception("API-fout"))
+    run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, triggers, now=t2)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.NEEDS_REVIEW)
+    assert case is not None
+    assert case.qc_issues == ["API-fout"]
+
+
+def test_data_health_trigger_forces_qc_failed_even_with_clean_text(tmp_path):
+    """DEEL 2, kernafweging: een QualityStatus.INVALID-signaal (hier: een
+    data_health-trigger met severity high, oftewel een onbereikbare bron)
+    faalt de QC-case ALTIJD, ongeacht een verder perfect geschreven tekst
+    -- en forceert ook DomainOutput.needs_review=True."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    def failing_fetch():
+        raise ConnectionError("FRED onbereikbaar")
+
+    output, triggers = run_monitoring(conn, "monetary_policy", "FRED", failing_fetch, SPECS, timedelta(days=35), now=now)
+    assert any(t.reason.startswith("data_health:") for t in triggers)
+
+    client = _fake_client('{"issues": []}')  # tekst-QC zelf is brandschoon
+    deep_dive_output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", [], triggers, now=now)
+
+    assert deep_dive_output.needs_review is True
+    assert any("INVALID" in issue for issue in deep_dive_output.review_issues)
+
+    case = latest_qc_case(conn, "monetary_policy", QCCaseStatus.NEEDS_REVIEW)
+    assert case is not None
+    assert case.quality_status == QualityStatus.INVALID
+
+
+def test_run_deep_dive_without_an_open_case_does_not_crash(tmp_path):
+    """On-demand/handmatige deep-dive zonder voorafgaande trigger (bestaand,
+    ondersteund gebruik -- zie run_deep_dive()'s eigen 'on-demand
+    aangevraagd'-fallback) -- er is dan simpelweg geen case om te volgen,
+    geen foutmelding."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    client = _fake_client('{"issues": []}')
+
+    output = run_deep_dive(conn, client, "monetary_policy", "systeemprompt", [], [], now=now)
+    assert output is not None
+    assert list_qc_cases(conn, "monetary_policy") == []
 
 
 def test_shared_quality_rules_bans_directional_advice_language():

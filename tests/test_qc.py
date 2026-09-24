@@ -1,8 +1,19 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
 from contract.output_contract import Claim
-from qc.qc import apply_qc, default_llm_review, deterministic_consistency_check
+from health.data_health import QualityStatus
+from qc.qc import (
+    QC_TRANSITIONS,
+    InvalidQCTransitionError,
+    QCCaseStatus,
+    apply_qc,
+    decide_qc_outcome,
+    default_llm_review,
+    deterministic_consistency_check,
+    validate_qc_transition,
+)
 
 
 def _claim(**overrides):
@@ -123,3 +134,52 @@ def test_default_llm_review_wired_into_apply_qc_via_partial():
     result = apply_qc([claim], text, llm_review_fn=functools.partial(default_llm_review, client))
     assert result.needs_review is True
     assert result.issues == ["LLM-bevinding"]
+
+
+# -- Roadmap 1.6: het QC-statusmodel zelf --
+
+def test_valid_transition_does_not_raise():
+    validate_qc_transition(QCCaseStatus.TRIGGERED, QCCaseStatus.DEEP_DIVE_COMPLETE)  # geen exception = geslaagd
+
+
+def test_invalid_transition_raises():
+    with pytest.raises(InvalidQCTransitionError):
+        validate_qc_transition(QCCaseStatus.TRIGGERED, QCCaseStatus.ARCHIVED)  # mag niet springen
+
+
+def test_archived_is_a_terminal_state_with_no_further_transitions():
+    assert QC_TRANSITIONS[QCCaseStatus.ARCHIVED] == frozenset()
+
+
+def test_qc_passed_can_only_go_to_archived():
+    assert QC_TRANSITIONS[QCCaseStatus.QC_PASSED] == frozenset({QCCaseStatus.ARCHIVED})
+
+
+def test_qc_failed_can_only_go_to_needs_review():
+    assert QC_TRANSITIONS[QCCaseStatus.QC_FAILED] == frozenset({QCCaseStatus.NEEDS_REVIEW})
+
+
+def test_decide_qc_outcome_passes_when_clean_and_no_quality_signal():
+    assert decide_qc_outcome(needs_review=False, quality_status=None) == QCCaseStatus.QC_PASSED
+
+
+def test_decide_qc_outcome_fails_when_needs_review_true():
+    assert decide_qc_outcome(needs_review=True, quality_status=None) == QCCaseStatus.QC_FAILED
+
+
+def test_decide_qc_outcome_fails_on_invalid_quality_even_if_text_is_clean():
+    """Kern van de afweging: onbetrouwbare data kan geen goede tekst
+    'redden' -- INVALID faalt ALTIJD, ongeacht qc_result.needs_review."""
+    assert decide_qc_outcome(needs_review=False, quality_status=QualityStatus.INVALID) == QCCaseStatus.QC_FAILED
+
+
+def test_decide_qc_outcome_does_not_auto_fail_on_degraded_alone():
+    """DEGRADED (bijv. een stale bron) dwingt GEEN automatische FAIL af --
+    dat zou NEEDS_REVIEW te snel laten vollopen met bruikbare-maar-niet-
+    perfecte gevallen. Blijft zichtbaar via qc_issues, niet via een
+    verplichte FAIL (zie docs/architecture.md)."""
+    assert decide_qc_outcome(needs_review=False, quality_status=QualityStatus.DEGRADED) == QCCaseStatus.QC_PASSED
+
+
+def test_decide_qc_outcome_fails_when_both_needs_review_and_degraded():
+    assert decide_qc_outcome(needs_review=True, quality_status=QualityStatus.DEGRADED) == QCCaseStatus.QC_FAILED

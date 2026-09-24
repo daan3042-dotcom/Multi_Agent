@@ -30,12 +30,20 @@ blijven inhoudelijk kloppen, alleen de sectie-nummers zijn vervangen):
 ## Huidige focus
 
 **Sectie 1 (Infrastructuur & Data) eerst écht solide maken, vóór er verder
-gebouwd wordt aan sectie 2 (meer agents/modellen).** Veel van sectie 1 is
-gebouwd in een eenvoudigere vorm dan wat hieronder staat (zie de
-niet-afgevinkte items in 1.1–1.8) — dat gat dichten heeft nu prioriteit
-boven C.5 (economic agent) of verdere Finetune-modellen. Testen (tegen
-echte databronnen, zodra netwerktoegang dat toelaat) hoort bij dit werk,
-niet erna.
+gebouwd wordt aan sectie 2 (meer agents/modellen).** Stand per 24-09-2026:
+1.1, 1.3, 1.4, 1.6, 1.7 en 1.8 staan volledig afgevinkt. Nog open:
+- **1.2**: de basis (claims, triggers, agent_runs, sources) staat, maar
+  observations/entities/measurements/events/expectations/evidence/
+  deep_dives/syntheses blijven BEWUST open — elk met een eigen, vastgelegde
+  reden (zie de losse regels onder 1.2 hieronder), geen gaten die nog
+  "gewoon" gebouwd moeten worden.
+- **1.5**: enige nog écht openstaande sectie — trigger severity-model
+  (INFO/WATCH/SIGNIFICANT/CRITICAL), trigger-versioning, en twee
+  ontbrekende triggertypes (regime-transitie, cross-variable/
+  correlatiebreuk).
+
+Testen (tegen echte databronnen, zodra netwerktoegang dat toelaat) hoort
+bij dit werk, niet erna.
 
 ---
 
@@ -136,9 +144,23 @@ niet erna.
 - [x] Layer 1 — mechanische QC (`src/qc/qc.py::deterministic_consistency_check`)
 - [x] Layer 2 — domain QC, lichte LLM-review, geen 4 parallelle reviewers
       (`src/qc/qc.py::default_llm_review`)
-- [ ] Statusmodel: RAW → VALIDATED → TRIGGERED → DEEP_DIVE_COMPLETE →
-      QC_PASSED/FAILED → NEEDS_REVIEW → ARCHIVED (nu: alleen een
-      `needs_review`-vlag, geen volledige state machine)
+- [x] Statusmodel: RAW → VALIDATED → TRIGGERED → DEEP_DIVE_COMPLETE →
+      QC_PASSED/FAILED → NEEDS_REVIEW → ARCHIVED
+      (`src/qc/qc.py::QCCaseStatus/QC_TRANSITIONS`, eigen `qc_cases`-tabel
+      in `src/storage/schema.py`, automatisch gewired in
+      `agents/base.py::run_monitoring/run_deep_dive`; ARCHIVED is de enige
+      handmatige overgang, `storage.schema.archive_qc_case()`).
+      `DomainOutput.needs_review` blijft bestaan — een case volgt de
+      VOLLEDIGE levenscyclus, `needs_review` blijft het eindoordeel dat de
+      synthesizer/manager direct leest.
+- [x] `QualityStatus` (roadmap 1.3) gewired als (mede-)input voor
+      QC_PASSED/FAILED (`qc.qc.decide_qc_outcome`) — een data_health-
+      oorsprong-trigger met severity high (INVALID) faalt een case ALTIJD,
+      ongeacht een verder schone tekst. GEEN vanzelfsprekende 1-op-1-
+      mapping, uitgebreid beargumenteerd in `docs/architecture.md`
+      ("Ontwerpkeuzes"). De vier 1.3-checks zelf (completeness/validity/
+      consistency/continuity) blijven bewust ongewired, zoals bij 1.3
+      afgesproken.
 
 ### 1.7 Observability
 - [x] System health per component (source, ingestion, database, trigger,
