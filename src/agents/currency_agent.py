@@ -94,15 +94,15 @@ def fetch_snapshot() -> dict:
     return snapshot
 
 
-def monitor(conn, now=None):
+def monitor(conn, now=None, event_id=None):
     """register_source() is een idempotente upsert (roadmap 1.4) -- veilig
     om op elke cyclus te herhalen."""
     register_source(
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
         frequency="continu (wisselkoersen)", latency="~1s per call (REST)", cost="gratis (Alpha Vantage, rate-limited)",
     )
-    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)
 
 
-def deep_dive(conn, client, claims, trigger_events, now=None):
-    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, claims, trigger_events, now=now)
+def deep_dive(conn, client, claims, trigger_events, now=None, event_id=None):
+    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, claims, trigger_events, now=now, event_id=event_id)

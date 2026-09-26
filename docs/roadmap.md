@@ -62,8 +62,11 @@ alle onderdelen met hun vaste nummers.
 
 ## Huidige focus
 
-**Fase 0 (Deblokkeren) — sectie 1.11.** Zolang het systeem niet elke dag
-automatisch met echte data draait, is elke andere taak voorbarig.
+**Fase 0 (Deblokkeren) — sectie 1.11.** Stand per 26-09-2026: de runner,
+de notificatielaag en het entrypoint zijn gebouwd en getest (280 tests
+groen). Wat nog open is, is niet-code: de VPS kiezen en uitrollen (API-keys
++ `MI_WEBHOOK_URL` + cron), en daarna de back-fill. Zolang dat niet draait,
+is elke andere taak voorbarig.
 
 ## De drie harde blokkades
 
@@ -86,9 +89,9 @@ grens is per 26-09-2026 verlegd.
 
 | Taak | Sectie | Definition of done |
 |---|---|---|
-| Ingestion uit de sandbox halen; eigen fetch-runner op eigen infra | 1.11 | FRED + Alpha Vantage leveren 7 dagen op rij data zonder handmatige actie |
-| `run_daily.py` + cron, idempotent via `event_id` | 1.11 | Twee keer draaien op dezelfde dag geeft geen dubbele rijen |
-| Fail-loud-notificatie bij een mislukte of stille run | 1.7 / 1.11 | Bericht als een bron 2 dagen stil is, niet pas als iemand toevallig kijkt |
+| ~~`run_daily.py` + cron-entrypoint, idempotent via `event_id`~~ **gebouwd** | 1.11 | ✅ Twee keer draaien op dezelfde dag geeft geen dubbele rijen (`tests/test_runtime_daily.py`) |
+| ~~Fail-loud-notificatie bij een mislukte of stille run~~ **gebouwd** | 1.7 / 1.11 | ✅ Melding zodra een bron zijn `max_age` overschrijdt of een agent faalt |
+| VPS kiezen en uitrollen (API-keys, `MI_WEBHOOK_URL`, cron) | 1.11 | FRED + Alpha Vantage leveren 7 dagen op rij data zonder handmatige actie |
 | Back-fill van de historische reeksen | 1.11 | Elke gemonitorde metric heeft ≥5 jaar historie in de database |
 | Triggerdrempels kalibreren tegen die historie | 1.5 / 4.2 | Per regel bekend hoe vaak hij de afgelopen 5 jaar zou zijn gevuurd |
 
@@ -298,7 +301,11 @@ De volgorde waarin dit gebouwd wordt staat in deel A, niet hier.
 - [ ] Event-model: raw data → observation → event (conceptueel pad, wordt
       concreet zodra de entiteiten hieronder er zijn om het te dragen)
 - [x] Entiteit: claims (`src/storage/schema.py`, al vanaf de start)
-- [x] Entiteit: triggers (`trigger_events`-tabel, al vanaf de start)
+- [x] Entiteit: triggers (`trigger_events`-tabel, al vanaf de start;
+      **sinds 1.11 ook daadwerkelijk gevuld** — `record_trigger_event()`
+      werd tot dan toe alleen in tests aangeroepen, dus vuurden er triggers
+      die nergens werden vastgelegd. Dat gat zat in precies de reeks die
+      1.5/4.2 nodig hebben om drempels te kalibreren)
 - [x] Entiteit: agent_runs — audit-log per monitoring/deep-dive-run
       (`src/storage/schema.py::record_agent_run/list_agent_runs`)
 - [x] Entiteit: sources (`src/storage/schema.py` — `sources`-tabel,
@@ -431,13 +438,15 @@ De volgorde waarin dit gebouwd wordt staat in deel A, niet hier.
       `src/agents/base.py::AlreadyProcessedError`, gewired in
       `run_monitoring`/`run_deep_dive` — op `agent_runs`-niveau, niet
       `claims`; zie `docs/architecture.md` "Ontwerpkeuzes" voor de
-      afweging. Optioneel/backward-compatible: geen enkele bestaande
-      agent geeft nu al een event_id mee, dat komt met de scheduler van
-      1.11)
-- [ ] **[nieuw]** Uitgaande notificatie bij een stille run — de bestaande
-      `system_health()` is een functie die iemand moet aanroepen. Vanaf
-      T₀ draait niemand handmatig, dus er moet iets actief melden. Zie
-      1.11.
+      afweging. **Sinds 1.11 daadwerkelijk in gebruik:** `runtime/daily.py`
+      geeft `daily:<UTC-datum>` mee en alle 5 agent-wrappers zetten 'm
+      door, dus een tweede run op dezelfde dag wordt overgeslagen i.p.v.
+      dubbel geteld)
+- [x] **Uitgaande notificatie bij een stille run** — de bestaande
+      `system_health()` was een functie die iemand moest aanroepen. Vanaf
+      T₀ draait niemand handmatig, dus er moet iets actief melden.
+      Gebouwd in `src/runtime/notifications.py`, aangeroepen aan het eind
+      van elke `run_daily()`-cyclus
 
 ### 1.8 Orchestrator / Manager
 - [x] Deterministische dispatch-logica (`src/manager/manager.py`)
@@ -494,16 +503,44 @@ wordt.
       Pi, of een van onze machines) die alleen ruwe data ophaalt en in de
       SQLite schrijft. Agents en LLM-calls mogen blijven waar ze zijn.
       Lost de 403/org-egress-policy op die sinds 24-09-2026 live
-      validatie blokkeert
-- [ ] **`run_daily.py` + cron.** Idempotent via de `event_id` uit 1.7 —
-      die is gebouwd maar wordt door geen enkele agent meegegeven; dit is
-      de aanroeper waarop 1.7 wachtte
-- [ ] **Actieve fail-loud-notificatie** (zie 1.7): melding als een bron 2
-      dagen stil is
+      validatie blokkeert. **Code is klaar (zie hieronder); wat rest is
+      het uitrollen op de gekozen machine met echte API-keys.**
+- [x] **`run_daily.py` + cron.** Idempotent via de `event_id` uit 1.7 —
+      die was gebouwd maar werd door geen enkele agent meegegeven; dit is
+      de aanroeper waarop 1.7 wachtte. `src/runtime/daily.py` (cyclus,
+      foutisolatie per agent, opt-in deep-dives), `run_daily.py`
+      (entrypoint + exit codes), `event_id` doorgezet in alle 5
+      monitor/deep_dive-wrappers. Cron-regel staat in `run_daily.py`'s
+      docstring. Zie `docs/architecture.md` ("Ontwerpkeuzes in de
+      runtime-laag") voor de afwegingen
+- [x] **Actieve fail-loud-notificatie** (zie 1.7):
+      `src/runtime/notifications.py` — kanaal-onafhankelijk
+      (`webhook_notifier` werkt met ntfy/Telegram/Discord/Slack), meldt
+      alleen als er iets mis is, en drempels komen uit de Source Registry
+      in plaats van uit een eigen constante. **Let op:** zonder
+      `MI_WEBHOOK_URL` gaat een melding alleen naar de log, en dat is op
+      een onbeheerde machine geen fail-loud — die URL is onderdeel van het
+      uitrollen
 - [ ] **Back-fill** van elke gemonitorde metric, ≥5 jaar
 - [ ] Per-domein cadans: welke agent draait dagelijks, welke wekelijks.
       Dit was bewust uitgesteld "tot er een scheduler is" — die is er nu,
       dus de beslissing komt hier terug
+- [ ] **Externe dead man's switch.** `run_daily()` detecteert nu zelf
+      gaten in de afgelopen 7 dagen, maar alleen bij de eerstvolgende run
+      die wél draait. Staat de machine drie weken uit, dan hoort niemand
+      iets — elke melding komt uit een draaiende run. Een externe
+      heartbeat-ping die alarmeert bij UITBLIJVEN hoort buiten dit systeem
+      te draaien
+- [ ] **Atomiciteit tussen claims en de dedup-rij** (`agents/base.py::
+      run_monitoring`). `schema.py` commit per insert, dus een crash tussen
+      `save_domain_output()` en `record_agent_run()` laat claims achter
+      zonder dedup-rij, en de volgende run slaat dezelfde claims nog een
+      keer op. Vraagt om transactiecontrole in `schema.py` — raakt alle
+      bestaande aanroepers, dus bewust niet stilletjes meegenomen in 1.11
+- [ ] **Ouderdomsgrens in `system_health()`**: één mislukte deep-dive maakt
+      `llm` en `agent:<domein>` permanent `unreachable`, wat elke dag een
+      kritieke melding geeft — precies de alert-moeheid die de
+      notificatielaag moet voorkomen
 
 ---
 

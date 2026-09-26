@@ -142,7 +142,7 @@ def fetch_snapshot() -> dict:
     return snapshot
 
 
-def monitor(conn, now=None):
+def monitor(conn, now=None, event_id=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
     volledige gedrag (data-health, claims opslaan, delta-triggers).
     register_source() is een idempotente upsert (roadmap 1.4) -- veilig
@@ -151,7 +151,7 @@ def monitor(conn, now=None):
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
         frequency="dagelijks (slotkoersen)", latency="~1s per call (REST)", cost="gratis (Alpha Vantage, rate-limited)",
     )
-    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)
 
 
 def _fetch_change_percent(symbol: str, api_key: str) -> float | None:
@@ -164,7 +164,7 @@ def _fetch_change_percent(symbol: str, api_key: str) -> float | None:
     return quote["change_percent"]
 
 
-def deep_dive(conn, client, claims, trigger_events, now=None):
+def deep_dive(conn, client, claims, trigger_events, now=None, event_id=None):
     """Deep-dive mode na een trigger. Voegt, voor elke sector-ETF-claim in
     `claims`, de relatieve sterkte t.o.v. SPY toe als extra claim (zie
     moduledocstring en analysis/relative_strength.py) -- puur Python, geen
@@ -203,4 +203,4 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                     )
                 )
 
-    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now)
+    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now, event_id=event_id)

@@ -139,7 +139,7 @@ def fetch_snapshot() -> dict:
     return snapshot
 
 
-def monitor(conn, now=None):
+def monitor(conn, now=None, event_id=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
     volledige gedrag (data-health, claims opslaan, delta-triggers).
     register_source() is een idempotente upsert (roadmap 1.4) -- veilig
@@ -148,7 +148,7 @@ def monitor(conn, now=None):
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
         frequency="maandelijks (meeste FRED-reeksen hier)", latency="~1s per call (REST)", cost="gratis (FRED API)",
     )
-    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)
 
 
 def _fetch_taylor_rule_inputs() -> dict | None:
@@ -188,7 +188,7 @@ def _fetch_taylor_rule_inputs() -> dict | None:
     }
 
 
-def deep_dive(conn, client, claims, trigger_events, now=None):
+def deep_dive(conn, client, claims, trigger_events, now=None, event_id=None):
     """Deep-dive mode na een trigger. Voegt, als er een fed_funds_rate-
     claim tussen zit, de Taylor Rule-impliciete rente en de afwijking
     t.o.v. de daadwerkelijke rente toe als extra claims (zie
@@ -232,4 +232,4 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                     source_time=now,
                 )
             )
-    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now)
+    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now, event_id=event_id)

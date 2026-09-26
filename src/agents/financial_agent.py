@@ -124,7 +124,7 @@ def fetch_snapshot() -> dict:
     return snapshot
 
 
-def monitor(conn, now=None):
+def monitor(conn, now=None, event_id=None):
     """Eén monitoring-cyclus: zie agents.base.run_monitoring voor het
     volledige gedrag (data-health, claims opslaan, delta-triggers).
     register_source() is een idempotente upsert (roadmap 1.4) -- veilig
@@ -133,10 +133,10 @@ def monitor(conn, now=None):
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
         frequency="wekelijks (NFCI, de traagste van de vier reeksen)", latency="~1s per call (REST)", cost="gratis (FRED API)",
     )
-    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now)
+    return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)
 
 
-def deep_dive(conn, client, claims, trigger_events, now=None):
+def deep_dive(conn, client, claims, trigger_events, now=None, event_id=None):
     """Deep-dive mode na een trigger. Voegt, als er een NFCI-claim tussen
     zit, de NFCI's eigen gepubliceerde interpretatie toe als extra claim
     (zie moduledocstring en analysis/nfci_interpretation.py) -- puur
@@ -157,4 +157,4 @@ def deep_dive(conn, client, claims, trigger_events, now=None):
                 note="0 = historisch gemiddelde sinds 1973; positief = krapper, negatief = ruimer",
             )
         )
-    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now)
+    return run_deep_dive(conn, client, DOMAIN, DEEP_DIVE_SYSTEM_PROMPT, enriched_claims, trigger_events, now=now, event_id=event_id)

@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterator
 
@@ -31,6 +31,7 @@ from contract.output_contract import Claim, DomainOutput, Mode
 from health.data_health import QualityStatus
 from qc.qc import QCCase, QCCaseStatus, validate_qc_transition
 from sources.registry import SourceConfig
+from triggers.trigger_engine import TriggerEvent
 
 DEFAULT_DB_PATH = "market_intelligence.db"
 
@@ -210,9 +211,14 @@ def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
 
 
 def load_latest_claims(conn: sqlite3.Connection, domain: str, metric_key: str | None = None) -> list[Claim]:
-    """Geeft de meest recente claims voor een domein terug (optioneel
-    gefilterd op metric_key), gesorteerd nieuw naar oud -- de trigger-laag
-    (A.4) vergelijkt hiermee de nieuwste waarde tegen een eerdere."""
+    """Geeft de claims voor een domein terug (optioneel gefilterd op
+    metric_key), gesorteerd nieuw naar oud -- de trigger-laag (A.4)
+    vergelijkt hiermee de nieuwste waarde tegen een eerdere.
+
+    LET OP de naam: dit is de VOLLEDIGE historie, niet "de laatste cyclus".
+    Dat is wat de trigger-laag nodig heeft (een revisie kan een periode van
+    meerdere cycli geleden raken), maar het is de verkeerde set om aan een
+    deep-dive te voeren -- gebruik daarvoor `load_monitoring_claims()`."""
     query = (
         "SELECT domain, claim, value_json, source, confidence, event_time, source_time, "
         "ingestion_time, analysis_time, metric_key, note FROM claims WHERE domain = ?"
@@ -222,25 +228,88 @@ def load_latest_claims(conn: sqlite3.Connection, domain: str, metric_key: str | 
         query += " AND metric_key = ?"
         params.append(metric_key)
     query += " ORDER BY analysis_time DESC"
-    rows = conn.execute(query, params).fetchall()
-    claims = []
-    for domain_, claim_, value_json, source, confidence, event_time, source_time, ingestion_time, analysis_time, metric_key_, note in rows:
-        claims.append(
-            Claim(
+    return [_claim_from_row(row) for row in conn.execute(query, params).fetchall()]
+
+
+def load_monitoring_claims(conn: sqlite3.Connection, domain: str) -> list[Claim]:
+    """De claims van de MEEST RECENTE monitoring-cyclus voor dit domein --
+    precies één cyclus, niet de hele historie.
+
+    Bestaat naast `load_latest_claims()` omdat die ondanks zijn naam ALLE
+    claims voor een domein teruggeeft (de trigger-laag heeft die historie
+    nodig om een vorige observatie te vinden). Voor een deep-dive is dat de
+    verkeerde set: `run_deep_dive()` slaat de aangeleverde claims opnieuw op
+    als onderdeel van zijn eigen DomainOutput, dus de hele historie
+    doorgeven verdubbelt de claims-tabel bij elke deep-dive -- 2ⁿ groei,
+    gemeten op 255 rijen na 8 dagen. Zie `docs/architecture.md`
+    ("Ontwerpkeuzes in de runtime-laag").
+
+    Geeft een lege lijst terug als er nog geen monitoring-cyclus was."""
+    row = conn.execute(
+        "SELECT id FROM domain_outputs WHERE domain = ? AND mode = 'monitoring' "
+        "ORDER BY generated_at DESC, id DESC LIMIT 1",
+        (domain,),
+    ).fetchone()
+    if row is None:
+        return []
+    return _claims_for_output(conn, row[0])
+
+
+def _claims_for_output(conn: sqlite3.Connection, domain_output_id: int) -> list[Claim]:
+    rows = conn.execute(
+        "SELECT domain, claim, value_json, source, confidence, event_time, source_time, "
+        "ingestion_time, analysis_time, metric_key, note FROM claims "
+        "WHERE domain_output_id = ? ORDER BY id",
+        (domain_output_id,),
+    ).fetchall()
+    return [_claim_from_row(row) for row in rows]
+
+
+def _claim_from_row(row: tuple) -> Claim:
+    (domain_, claim_, value_json, source, confidence, event_time, source_time,
+     ingestion_time, analysis_time, metric_key_, note) = row
+    return Claim(
+        domain=domain_,
+        claim=claim_,
+        value=json.loads(value_json),
+        source=source,
+        confidence=confidence,
+        event_time=datetime.fromisoformat(event_time) if event_time else None,
+        source_time=datetime.fromisoformat(source_time) if source_time else None,
+        ingestion_time=datetime.fromisoformat(ingestion_time) if ingestion_time else None,
+        analysis_time=datetime.fromisoformat(analysis_time),
+        metric_key=metric_key_,
+        note=note,
+    )
+
+
+def load_trigger_events_for_day(conn: sqlite3.Connection, day: date, domain: str | None = None) -> list[TriggerEvent]:
+    """Alle opgeslagen triggers van één UTC-kalenderdag, optioneel per
+    domein. Nodig voor het retry-pad van de dagelijkse cyclus (roadmap
+    1.11): als monitoring al succesvol was en overgeslagen wordt, zijn de
+    triggers van die dag alleen nog uit de database te halen -- zonder deze
+    functie zou een deep-dive die de eerste keer mislukte nooit meer
+    opnieuw kunnen draaien, en dat gat is permanent."""
+    query = "SELECT domain, triggered_at, reason, severity, metric_key, observed_value_json, threshold_json FROM trigger_events WHERE date(triggered_at) = ?"
+    params: list = [day.isoformat()]
+    if domain is not None:
+        query += " AND domain = ?"
+        params.append(domain)
+    query += " ORDER BY id"
+    events = []
+    for domain_, triggered_at, reason, severity, metric_key, observed_json, threshold_json in conn.execute(query, params):
+        events.append(
+            TriggerEvent(
                 domain=domain_,
-                claim=claim_,
-                value=json.loads(value_json),
-                source=source,
-                confidence=confidence,
-                event_time=datetime.fromisoformat(event_time) if event_time else None,
-                source_time=datetime.fromisoformat(source_time) if source_time else None,
-                ingestion_time=datetime.fromisoformat(ingestion_time) if ingestion_time else None,
-                analysis_time=datetime.fromisoformat(analysis_time),
-                metric_key=metric_key_,
-                note=note,
+                triggered_at=datetime.fromisoformat(triggered_at),
+                reason=reason,
+                severity=severity,
+                metric_key=metric_key,
+                observed_value=json.loads(observed_json) if observed_json is not None else None,
+                threshold=json.loads(threshold_json) if threshold_json is not None else None,
             )
         )
-    return claims
+    return events
 
 
 def record_trigger_event(

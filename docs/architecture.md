@@ -19,6 +19,9 @@ nieuwe pijlers 1-5. Inhoudelijk nog correct; dekt vooral pijler 1
 | `triggers/trigger_engine.py` | Deterministische escalatiebeslissingen (drempel, verrassing, data-health) | A.4 |
 | `qc/qc.py` | Deterministische consistentiecheck + `default_llm_review()` (concrete, pluggable LLM-review), `NEEDS_REVIEW`; sinds 1.6 ook `QCCaseStatus`/`QC_TRANSITIONS`/`decide_qc_outcome()` (de state machine zelf) | A.5 / 1.6 |
 | `manager/manager.py` | Dispatch: groepeert `TriggerEvent`s per domein, signaleert gelijktijdige triggers | A.6 |
+| `runtime/daily.py` | De dagelijkse cyclus: draait alle agents in monitoring-mode onder één `event_id` per kalenderdag, isoleert fouten per agent, dispatcht optionele deep-dives, draait `system_health()` en beslist over een notificatie | 1.11 |
+| `runtime/notifications.py` | Kanaal-onafhankelijke fail-loud-notificatie (`Notification`, `log_notifier`, `webhook_notifier`) — geeft 1.7's pull-only `system_health()` eindelijk een actieve uitgang | 1.7 / 1.11 |
+| `run_daily.py` (repo-root) | Het entrypoint dat cron aanroept. Dun: argumenten, database openen, exit code (0=schoon, 1=agent faalde, 2=cyclus kon niet draaien) | 1.11 |
 | `agents/base.py` | Gedeelde scaffolding: `run_monitoring()`, `evaluate_deltas()` (delta-trigger, losgetrokken zodat C.1 'm ook kan gebruiken), `run_deep_dive()`, `SHARED_QUALITY_RULES` | B.1/B.2 |
 | `agents/monetary_policy_agent.py` | FRED (Fed funds rate, 10Y yield, CPI-index, werkloosheid) — alleen vakinhoudelijke deep-dive-prompt | B.1 |
 | `agents/currency_agent.py` | Alpha Vantage FX (EUR/USD, USD/JPY, GBP/USD) — alleen vakinhoudelijke deep-dive-prompt | B.2 |
@@ -496,10 +499,126 @@ claims én deep-dive-claims — daadwerkelijk in de database staat.
 `tests/test_equity_agent.py` bewijst hetzelfde voor C.1, plus specifiek de
 ticker-namespacing en de interoperabiliteit met de al-bestaande manager.
 
+## Ontwerpkeuzes in de runtime-laag (1.11)
+
+- **`event_id` is de UTC-kalenderdag (`daily:2026-11-10`), geen UUID.** De
+  eenheid van herhaling is "is de cyclus van DEZE DAG al verwerkt". Met
+  een UUID per aanroep zou elke retry een nieuw id krijgen en zou 1.7's
+  dedup nooit aanslaan — precies in de scenario's waar hij voor bedoeld is
+  (cron vuurt twee keer, machine herstart halverwege, DD draait 'm
+  handmatig na een storing). Gevolg van 1.7's partial unique index
+  (`WHERE event_id IS NOT NULL AND success = 1`): een GESLAAGDE dag kan
+  niet dubbel geteld worden, een MISLUKTE dag mag wel opnieuw. Dat is de
+  gewenste asymmetrie — een retry na een storing is precies wat je wilt
+  kunnen, dubbeltelling in het track record niet.
+- **Foutisolatie per agent, met drie soorten "niet goed".**
+  `AgentOutcome.status` onderscheidt `failed` (datapull mislukt — de
+  buitenwereld werkt niet mee, er is al een data-health-trigger),
+  `crashed` (onverwachte exception — een bug bij ons, altijd kritiek) en
+  `skipped` (al verwerkt — geen fout, maar bewijs dat idempotency werkt).
+  Ze vragen om verschillend handelen, dus ze krijgen niet één gedeelde
+  "mislukt"-vlag. Eén stukke agent stopt de cyclus niet: anders zou een bug
+  in de commodity agent een gat slaan in de monetary-reeks, die het prima
+  deed.
+- **Deep-dives zijn opt-in via een meegegeven `client`.** Monitoring is
+  goedkoop en deterministisch; deep-dives kosten geld per aanroep en
+  draaien straks onbeheerd. De kosten van een onbeheerd systeem horen een
+  expliciete keuze van de aanroeper te zijn, geen bijwerking van "de cron
+  staat aan". De triggers worden hoe dan ook opgeslagen, dus een later
+  gedraaide deep-dive mist niets.
+- **Geen "alles goed"-notificatie.** `build_notification()` geeft `None`
+  terug als er niets mis is. Een dagelijkse bevestiging traint de lezer
+  binnen twee weken om meldingen te negeren, en dan is de melding die er
+  wél toe doet ook onzichtbaar. Getriggerde metrics zijn op zichzelf geen
+  reden om te melden — dat is het systeem dat doet waarvoor het gebouwd is,
+  en hoort bij het alert-mechanisme (5.3), niet bij fail-loud.
+- **Drempels voor "te lang stil" staan NIET in de notificatielaag.** Die
+  vraag wordt al per bron beantwoord door de `max_age` in de Source
+  Registry (1.4), via `system_health()`. Een eigen constante hier zou een
+  tweede, concurrerende waarheid introduceren naast een register dat er
+  speciaal voor bestaat.
+- **Een mislukte notificatie laat de cyclus nooit vallen**
+  (`daily._notify_safely`). Op dat punt is de data al opgehaald en gecommit;
+  een crash daarna laat een geslaagde dag eruitzien als een mislukte. De
+  fout plus de niet-afgeleverde inhoud gaan naar de log — anders zou
+  uitgerekend de fail-loud-laag stil falen. Om dezelfde reden roept
+  `webhook_notifier` `raise_for_status()` aan: `requests.post` gooit niet
+  bij 4xx/5xx, dus zonder die regel telt een webhook die elke keer 500
+  teruggeeft als succes.
+
+### Correcties uit de code-review van 26-09-2026
+
+De eerste versie van deze laag had vier fouten die pas bij een gerichte
+review bovenkwamen. Ze staan hier omdat het denkfouten waren, niet
+typefouten — dezelfde valkuilen liggen klaar bij de volgende uitbreiding.
+
+- **Claims groeiden exponentieel (gemeten: 255 rijen na 8 dagen).**
+  `load_latest_claims()` geeft ondanks zijn naam de HELE historie van een
+  domein terug, en `run_deep_dive()` slaat de aangeleverde claims opnieuw
+  op als onderdeel van zijn eigen `DomainOutput`. De hele historie
+  doorgeven verdubbelde de tabel dus elke dag. Opgelost door de claims van
+  DEZE cyclus door te geven (uit `AgentOutcome.claims`), met
+  `load_monitoring_claims()` — één cyclus, niet de historie — als
+  terugvaloptie op het retry-pad. Nu lineair. De naam
+  `load_latest_claims()` is misleidend maar blijft staan: de trigger-laag
+  heeft die volledige historie echt nodig (een revisie kan een periode van
+  meerdere cycli geleden raken), en hernoemen zou die aanroepers raken
+  zonder iets op te lossen.
+- **Triggers werden nergens opgeslagen.** `record_trigger_event()` bestond
+  al sinds A.2 maar werd alleen in tests aangeroepen, dus vuurden er
+  triggers die alleen als `agent_runs.trigger_count` (een geheel getal) en
+  als vrije tekst in `qc_cases` bestonden. Dat is precies de reeks die
+  1.5/4.2 nodig hebben om drempels te kalibreren — het gat zat in de
+  belangrijkste data van het hele forward-testing-plan. Nu schrijft
+  `daily._persist_triggers()` elke trigger weg met het `dispatch_batch_id`
+  erbij.
+- **Een mislukte deep-dive kon nooit opnieuw draaien.** De deep-dive-lijst
+  kwam uit de triggers die monitoring in DIT proces opleverde. Op een
+  herhaalde run is monitoring `skipped`, dus was die lijst leeg en werd de
+  deep-dive overgeslagen — permanent, en uitgerekend in de aanbevolen
+  werkwijze (cron zonder `--deep-dives`, later met de hand). Opgelost door
+  `_escalations_for_deep_dives()` de opgeslagen triggers van die
+  kalenderdag terug te laten halen (`load_trigger_events_for_day`). Dit is
+  ook de reden dat triggerpersistentie hierboven niet alleen een
+  boekhoudkwestie is.
+- **Een mislukte deep-dive was onzichtbaar.** `has_problems` keek alleen
+  naar de monitoring-status, dus kon de deep-dive-helft elke dag falen
+  terwijl cron exit 0 gaf en er geen melding uitging. Bovendien
+  overschreef de deep-dive-fout het `error`-veld van monitoring, waardoor
+  een melding "de datapull mislukte: LLM down" rapporteerde — de verkeerde
+  diagnose, precies wanneer er niemand is om het te corrigeren. Nu heeft
+  `AgentOutcome` een apart `deep_dive_error`-veld en telt dat mee in
+  `has_problems` en in de notificatie.
+
+Verder aangescherpt: een `IntegrityError` van de dedup-index wordt
+herkend als `skipped` in plaats van `crashed` (twee overlappende cron-runs
+zijn geen bug, en de crontab-regel heeft nu `flock`); een domein waarvan de
+pull mislukte krijgt geen deep-dive meer (geen claims om te duiden, dus
+een betaalde LLM-call over niets); en de orchestratiefase na monitoring
+staat in vangnetten, zodat een randgeval in de health- of
+notificatieberekening een run met al-gecommitte data niet alsnog als
+totale mislukking laat eindigen.
+
+### Wat nog open staat na die review
+
+Twee bevindingen raken bestaande code buiten deze laag en zijn bewust NIET
+stilzwijgend aangepast — ze staan als openstaand punt bij 1.11:
+
+- **Geen atomiciteit tussen `save_domain_output()` en `record_agent_run()`**
+  (`agents/base.py::run_monitoring`). `schema.py` commit per insert, dus
+  een crash tussen die twee laat de claims staan zonder de dedup-rij; de
+  volgende run haalt dan opnieuw op en slaat dezelfde claims nog een keer
+  op. Fixen vraagt om transactiecontrole in `schema.py`, wat alle
+  bestaande aanroepers raakt.
+- **`system_health()` kent geen ouderdomsgrens** voor de laatste
+  `agent_run` per modus (`_latest_run_status`). Eén mislukte deep-dive
+  maakt `llm` en `agent:<domein>` daardoor permanent `unreachable`, wat
+  elke volgende dag een kritieke melding oplevert — precies de
+  alert-moeheid die de notificatielaag juist wil voorkomen.
+
 ## Wat hierna komt
 
-Sectie C.2-C.5 (`docs/roadmap.md`): financial, sector, commodity, economic
-agents, in die volgorde. Ook de eerste gelegenheid om `qc.qc.default_llm_review()`
-en `agents.base.run_deep_dive()` (B.1/B.2) tegen een échte Anthropic-call te
-draaien in plaats van tegen een fake client — dat gebeurt niet via C.1 zelf
-(die heeft geen eigen LLM-call, zie hierboven).
+Het kritieke pad naar T₀ (`docs/roadmap.md` deel A): na 1.11 volgen de
+causale graaf (1.10), het predictiecontract (1.2 + 4.1) en de scoring
+engine met baselines (4.5 + 4.6). Meer domain agents en Finetune-modellen
+zijn bewust post-T₀.

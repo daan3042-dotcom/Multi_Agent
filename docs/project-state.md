@@ -415,17 +415,24 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 volgorde.** Alles hieronder in strikte volgorde; `docs/roadmap.md` deel A
 heeft de uitgebreide onderbouwing per fase.
 
-1. **1.11 Scheduler & Runtime — de enige sectie waaraan nu gewerkt wordt.**
-   Drie blokkades die T₀ tegenhouden:
-   a. Ingestion uit de sandbox halen (fetch-runner op eigen infra), want
-      FRED/Alpha Vantage zijn hier 403 door de org-egress-policy — zonder
-      live data is forward testing per definitie onmogelijk.
-   b. `run_daily.py` + cron, idempotent via de al gebouwde maar ongebruikte
-      `event_id` uit 1.7. Dit is de aanroeper waar 1.7 op wachtte.
-   c. Back-fill ≥5 jaar per gemonitorde metric, plus een actieve
-      fail-loud-notificatie.
-   **Eerste te nemen beslissing: waar draait de fetch-runner?** (VPS, Pi,
-   eigen machine.) Zie Open questions.
+1. **1.11 Scheduler & Runtime — code klaar, uitrollen open.**
+   Gebouwd op 26-09-2026: `src/runtime/daily.py` (dagelijkse cyclus,
+   foutisolatie per agent, opt-in deep-dives), `src/runtime/notifications.py`
+   (fail-loud, kanaal-onafhankelijk), `run_daily.py` (cron-entrypoint),
+   en `event_id` doorgezet in alle 5 monitor/deep_dive-wrappers — waarmee
+   1.7's idempotency voor het eerst daadwerkelijk gebruikt wordt. 280
+   tests groen (was 261).
+   Nog te doen, en dat is geen codewerk:
+   a. **VPS kiezen en uitrollen.** FRED/Alpha Vantage zijn hier 403 door
+      de org-egress-policy; de code is provider-onafhankelijk en draait
+      overal. Nodig op de machine: `FRED_API_KEY`,
+      `ALPHAVANTAGE_API_KEY`, `MI_DB_PATH`, `MI_WEBHOOK_URL` en de
+      cron-regel uit `run_daily.py`'s docstring.
+   b. **Back-up van het SQLite-bestand.** Dat bestand *is* het track
+      record; kwijtraken betekent dat de klok opnieuw begint.
+   c. **Back-fill** ≥5 jaar per gemonitorde metric.
+   d. **Per-domein cadans** — welke agent dagelijks, welke wekelijks. Was
+      uitgesteld "tot er een scheduler is"; die is er nu.
 2. **1.10 Causale graaf** — handwerk voor DD + partner, parallel aan 1.
    Sjabloon staat in `docs/causal-graph.md`. Levert daarna
    `src/contract/graph.py` op (knopen als enum).
@@ -465,10 +472,9 @@ concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
 
-- **Waar draait de fetch-runner? — blokkeert alles.** VPS, Raspberry Pi,
-  of een van DD's eigen machines. Dit is de eerstvolgende beslissing die
-  genomen moet worden; zonder deze keuze kan 1.11 niet starten en dus T₀
-  niet gehaald worden.
+- **Waar draait de fetch-runner? — DD kiest een VPS (26-09-2026).**
+  Richting bepaald; de concrete provider/instance moet nog besteld en
+  ingericht worden. De code veronderstelt niets over de machine.
 - **Domeinprioritering (continu vs. on-demand per domein) — komt nu
   terug.** Was bewust uitgesteld "tot er een scheduler is" (vastgelegd
   tijdens 1.6): geen scheduler, geen cadans-veld, ook geen stub, en
