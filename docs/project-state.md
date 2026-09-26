@@ -1,8 +1,32 @@
 # Current Project State
 
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 
-## Belangrijke koerswijziging (24-09-2026)
+## Belangrijke koerswijziging (26-09-2026) — volgorde omgedraaid rond T₀
+
+`docs/roadmap.md` is opnieuw herzien. De vijf pijlers en hun nummering
+blijven ongewijzigd (code-comments die naar "roadmap 1.7" verwijzen
+kloppen nog), maar de **uitvoeringsvolgorde** wordt niet meer door die
+nummering bepaald. Reden: LLM-agents zijn niet eerlijk te backtesten —
+elk model dat in 2026 naar maart 2020 kijkt, weet al wat er volgde.
+Forward testing is daarmee de enige geldige weg, en dat kost
+kalendertijd in plaats van werktijd. Pijler 4 (Evaluatie & Learning
+Loop) is daarom grotendeels naar voren gehaald.
+
+Nieuwe volgorde: deblokkeren → causale graaf → voorspellingscontract →
+scoring → **T₀ (streefdatum 10-11-2026)** → verdiepen terwijl het draait
+→ Bayesiaanse laag (mei 2027).
+
+**De regel "pijler 1 helemaal af vóór pijler 2" vervalt** en wordt
+vervangen door: alles op het kritieke pad naar T₀ eerst, ongeacht in
+welke pijler het staat. Zie `docs/roadmap.md` deel A.
+
+Nieuwe secties sinds deze herziening: 1.10 (causale graaf), 1.11
+(scheduler & runtime), 3.4 (probabilistische aggregatie), 4.5 (scoring
+engine), 4.6 (baselines). Nieuw bestand: `docs/causal-graph.md`
+(sjabloon, in te vullen in fase 1).
+
+## Eerdere koerswijziging (24-09-2026)
 
 `docs/roadmap.md` is volledig herschreven rond een nieuwe, veel preciezere
 doelarchitectuur (DD's artifact "Market Intelligence Platform —
@@ -10,11 +34,8 @@ Systeemoverzicht"), georganiseerd in vijf pijlers: Infrastructuur & Data →
 Domain Agents → Synthese & Intelligence → Evaluatie & Learning Loop →
 Output & Interfaces. De oude, eenvoudigere planning (secties A–I) is
 vervangen, niet aangevuld — zie de mapping-tabel bovenaan de nieuwe
-roadmap. Geen deadline meer; **huidige prioriteit is sectie 1
-(Infrastructuur & Data) écht solide maken vóórdat er verder gebouwd wordt
-aan sectie 2 (meer agents/modellen)**. Dit document (project-state.md)
-volgt hieronder nog de oude, kleinere scope tot het is bijgewerkt naar de
-nieuwe structuur.
+roadmap. De prioritering uit die ronde ("sectie 1 eerst volledig af") is
+op 26-09-2026 vervangen, zie hierboven.
 
 ## Current architecture
 
@@ -390,44 +411,81 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
 
 ## Next priorities
 
-**Herzien op 24-09-2026 — sectie 1 (Infrastructuur & Data) eerst, niet
-meer agents.** Stand: 1.1, 1.3, 1.4, 1.6, 1.7, 1.8 volledig afgevinkt.
-Concreet, in volgorde:
+**Herzien op 26-09-2026 — kritiek pad naar T₀, niet meer pijler-op-
+volgorde.** Alles hieronder in strikte volgorde; `docs/roadmap.md` deel A
+heeft de uitgebreide onderbouwing per fase.
 
-1. **1.5 (Trigger Engine)** is nu de enige nog écht openstaande sectie-1-
-   post: trigger severity-model (INFO/WATCH/SIGNIFICANT/CRITICAL,
-   nu low/medium/high), trigger-versioning (welke regel-versie was actief
-   toen dit triggerde), en twee ontbrekende triggertypes (regime-transitie,
-   cross-variable/correlatiebreuk).
-2. 1.2's overige entiteiten (observations/entities/measurements/events/
-   expectations/evidence/deep_dives/syntheses) blijven BEWUST open, elk
-   met een vastgelegde reden (zie de losse regels onder 1.2 in
-   `docs/roadmap.md`) — geen "nog te doen"-lijst, een bewuste grens.
-3. Live validatie tegen echte databronnen (FRED/Alpha Vantage), zodra
-   netwerktoegang dat toelaat — zie "Known problems" hieronder
-   (24-09-2026: beide geblokkeerd in de huidige sandbox-omgeving,
-   organisatie-egress-policy, 403). Anthropic-calls werken al wel
-   (gevalideerd op 24-09-2026).
-4. C.5 (economic agent) en verdere Finetune-modellen: bewust NA sectie 1,
-   niet ervoor.
-4. De daadwerkelijke koppeling voor C.1/2.3 (hoe een `analyst_agent.ai`-run
-   zijn output naar `AnalystAgentReport` vertaald krijgt) — nog geen
-   concrete trigger wanneer dit relevant wordt.
+1. **1.11 Scheduler & Runtime — de enige sectie waaraan nu gewerkt wordt.**
+   Drie blokkades die T₀ tegenhouden:
+   a. Ingestion uit de sandbox halen (fetch-runner op eigen infra), want
+      FRED/Alpha Vantage zijn hier 403 door de org-egress-policy — zonder
+      live data is forward testing per definitie onmogelijk.
+   b. `run_daily.py` + cron, idempotent via de al gebouwde maar ongebruikte
+      `event_id` uit 1.7. Dit is de aanroeper waar 1.7 op wachtte.
+   c. Back-fill ≥5 jaar per gemonitorde metric, plus een actieve
+      fail-loud-notificatie.
+   **Eerste te nemen beslissing: waar draait de fetch-runner?** (VPS, Pi,
+   eigen machine.) Zie Open questions.
+2. **1.10 Causale graaf** — handwerk voor DD + partner, parallel aan 1.
+   Sjabloon staat in `docs/causal-graph.md`. Levert daarna
+   `src/contract/graph.py` op (knopen als enum).
+3. **1.2 + 4.1 Predictions als entiteit en contract.** `predictions` stond
+   onder 1.2 als "bewust nog niet nu" (pijler 4/5) — die grens is verlegd,
+   want zonder deze tabel is er niets te scoren. Verplichte velden:
+   `probability`, `resolution_rule`, `resolves_at`, `graph_node`,
+   `trigger_version`.
+4. **4.5 + 4.6 Scoring engine en baselines.** Resolver, Brier, log loss,
+   kalibratiecurve, discrimination (AUC), plus random-walk en climatology
+   als meedraaiende baselines.
+5. **1.5 trigger-versioning + drempelkalibratie tegen de back-fill.**
+   Versioning is kritiek pad: zonder versienummer is een kalibratie over
+   een periode waarin een drempel verschoof niet te interpreteren. De
+   overige 1.5-items (severity-model, regime-transitie- en
+   cross-variable-triggertypes) zijn post-T₀.
+6. **T₀ — streefdatum 10-11-2026.** Checklist staat in `docs/roadmap.md`.
+   Vanaf dan zijn graaf, predictiecontract en resolution rules
+   semi-bevroren; elke wijziging krijgt een versienummer en start een
+   nieuw cohort.
+
+Post-T₀, in volgorde van waarde (fase 4): economic agent (2.7, de graaf
+heeft groei-knopen die niemand bedient), news monitor smal opgezet (2.8),
+contradictie-detectie (3.1), kalibratiedashboard (5.2). Alle
+Finetune-items en PCA (3.2) blijven bewust laag geprioriteerd tot de
+kalibratie laat zien welk domein zwak is.
+
+1.2's overige entiteiten (observations/entities/measurements/events/
+expectations/evidence/deep_dives/syntheses) blijven BEWUST open, elk met
+een vastgelegde reden — geen "nog te doen"-lijst, een bewuste grens.
+`predictions` en `evaluations` vallen daar per 26-09-2026 niet meer
+onder.
+
+De daadwerkelijke koppeling voor C.1/2.3 (hoe een `analyst_agent.ai`-run
+zijn output naar `AnalystAgentReport` vertaald krijgt) blijft zonder
+concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
 
-- **Domeinprioritering (continu vs. on-demand per domein) bewust
-  uitgesteld tot er een scheduler is — voorlopig draait alles handmatig.**
-  (Vastgelegd tijdens 1.6.) DD heeft besloten: geen scheduler,
-  geen per-domein continue-vs-on-demand-instelling, geen configuratie-
-  systeem of cadans-veld hiervoor — bewust NIET gebouwd, ook geen stub.
-  Dit is een tijdelijke keuze; DD komt hier op terug zodra een scheduler +
-  de Nasdaq/NQ-regime-agent (2.9) relevant worden. Tot die tijd: alle 6
-  agents worden handmatig/on-demand gedraaid, geen enkele agent geeft een
-  `event_id` mee (zie 1.7's idempotency — blijft daardoor ongebruikt in
-  de praktijk).
-- Zie `docs/roadmap.md` sectie H — met name: de prioritering ICT-trading
-  (kort) vs. macro/mid-term (lang), aangezien dat de volgorde van sectie 2
-  kan beïnvloeden. Ook: zijn de illustratieve tolerance-waarden in B.1/B.2
-  bruikbaar als startpunt, of moeten die eerst vervangen worden voordat
-  dit tegen live data draait?
+- **Waar draait de fetch-runner? — blokkeert alles.** VPS, Raspberry Pi,
+  of een van DD's eigen machines. Dit is de eerstvolgende beslissing die
+  genomen moet worden; zonder deze keuze kan 1.11 niet starten en dus T₀
+  niet gehaald worden.
+- **Domeinprioritering (continu vs. on-demand per domein) — komt nu
+  terug.** Was bewust uitgesteld "tot er een scheduler is" (vastgelegd
+  tijdens 1.6): geen scheduler, geen cadans-veld, ook geen stub, en
+  daarom geeft geen enkele agent een `event_id` mee (1.7's idempotency
+  bleef daardoor ongebruikt). Met 1.11 komt die scheduler er, dus de
+  beslissing is weer aan de orde: welke agent draait dagelijks, welke
+  wekelijks.
+- **Hoeveel predictions per agent per week, en op welke graafknopen.**
+  De richtlijn van ~5 per agent per week (horizonnen 5/21/63 dagen) komt
+  uit de rekensom over statistische power in `docs/roadmap.md` fase 2, en
+  is een startpunt, geen uitkomst.
+- De illustratieve tolerance-waarden in B.1/B.2 worden vervangen door de
+  drempelkalibratie tegen de back-fill (fase 0). Dat is nu ingepland en
+  geen open vraag meer.
+- ~~Prioritering ICT-trading (kort) vs. macro/mid-term (lang)~~ —
+  **beslist op 26-09-2026**: dit systeem is de macro/mid-term-kant van
+  TCE. Het verbetert DD's intraday-handel op MNQ niet en dat is geen
+  doel; het kan hooguit de directionele bias en het risicobudget per dag
+  kleuren, en zelfs dat pas nadat de scoring engine het aantoont. Zie
+  "Scope-afbakening" in `docs/roadmap.md` deel A.

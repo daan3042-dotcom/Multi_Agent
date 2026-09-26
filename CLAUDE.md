@@ -13,14 +13,21 @@ gesynthetiseerd tot marktintelligentie. Bouwt naast, en later bovenop,
 (de bestaande single-ticker equity-researchpijplijn voor **The Collective
 Edge (TCE)**).
 
-**Volledige planning (bron van waarheid): `docs/roadmap.md`.** Sinds
-24-09-2026 georganiseerd rond vijf pijlers — Infrastructuur & Data →
-Domain Agents → Synthese & Intelligence → Evaluatie & Learning Loop →
-Output & Interfaces — vertaald uit DD's artifact "Market Intelligence
-Platform — Systeemoverzicht". Geen deadline; **huidige prioriteit is
-pijler 1 (Infrastructuur & Data) echt solide maken vóórdat er verder
-gebouwd wordt aan pijler 2 (meer agents/modellen)** — zie `docs/roadmap.md`
-se "Huidige focus" en `docs/project-state.md`.
+**Volledige planning (bron van waarheid): `docs/roadmap.md`.** De vijf
+pijlers — Infrastructuur & Data → Domain Agents → Synthese & Intelligence
+→ Evaluatie & Learning Loop → Output & Interfaces — zijn de **catalogus**
+en hun nummering is stabiel. Sinds 26-09-2026 bepaalt die nummering NIET
+meer de volgorde van werken: dat doet het kritieke pad naar **T₀**
+(streefdatum 10-11-2026), het moment waarop het systeem dagelijks draait
+en elke voorspelling gescoord wordt.
+
+Reden: LLM-agents zijn niet eerlijk te backtesten — een model dat nu naar
+2020 kijkt, weet al wat er volgde. Forward testing is daarmee de enige
+geldige weg, en dat kost kalendertijd in plaats van werktijd. Alles wat
+geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
+
+**Huidige focus: sectie 1.11 (Scheduler & Runtime).** Zie
+`docs/roadmap.md` deel A en `docs/project-state.md`.
 
 ## De regels die uit `analyst_agent.ai` zijn overgenomen (en waarom)
 
@@ -49,6 +56,7 @@ se "Huidige focus" en `docs/project-state.md`.
 | QC + `NEEDS_REVIEW` | `src/qc/qc.py` |
 | Manager-dispatch (gelijktijdige triggers) | `src/manager/manager.py` |
 | Volledige planning | `docs/roadmap.md` |
+| **De causale graaf (fase 1, handwerk)** | `docs/causal-graph.md` |
 | Huidige status | `docs/project-state.md` |
 | Architectuur/datastroom van het fundament | `docs/architecture.md` |
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
@@ -56,10 +64,10 @@ se "Huidige focus" en `docs/project-state.md`.
 
 ## Voordat je iets verandert
 
-- Lees `docs/roadmap.md` — de volgorde binnen elke sectie is een bewuste
-  afhankelijkheidsketen, geen willekeurige lijst. Pijler 1 (Infrastructuur
-  & Data) moet solide staan voordat pijler 2 (agents) verder uitgebreid
-  wordt, enzovoort — zie "Huidige focus" bovenaan de roadmap.
+- Lees `docs/roadmap.md` — deel A bepaalt de volgorde (kritiek pad naar
+  T₀), deel B is de catalogus met de vaste pijlernummers. De volgorde
+  binnen een sectie is een bewuste afhankelijkheidsketen, geen
+  willekeurige lijst.
 - Draai `pytest` voor en na elke wijziging.
 - Nieuwe deterministische logica krijgt een test in `tests/`, naar het
   patroon van de bestaande testbestanden (één "correct"-geval, één
@@ -79,11 +87,19 @@ se "Huidige focus" en `docs/project-state.md`.
   achtergronddraaien over meerdere domain agents. Zie `docs/architecture.md`.
 - Geen LLM-arithmetiek in de trigger-laag of manager — die blijven
   deterministisch.
-- Geen roadmap-pijlers overslaan of herordenen zonder de afhankelijkheid in
-  `docs/roadmap.md` te checken — met name: geen nieuwe agents/modellen
-  (pijler 2) toevoegen zolang pijler 1 (Infrastructuur & Data) nog
-  openstaande, niet-triviale items heeft (zie "Huidige focus" bovenaan de
-  roadmap). Twijfel over of iets bij pijler 1 hoort? Eerst voorleggen.
+- Geen roadmap-items oppakken die niet op het kritieke pad naar T₀ liggen
+  zolang T₀ niet gehaald is (zie `docs/roadmap.md` deel A, "Huidige
+  focus"). Dat betekent concreet: **geen nieuwe agents, geen
+  Finetune-modellen en geen synthese-uitbreidingen** tot de zes punten
+  van de T₀-checklist staan, hoe verleidelijk ook. Twijfel je of iets op
+  het kritieke pad ligt? Eerst voorleggen.
+- **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
+  (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
+  trigger-drempels zonder versienummer.** Elke zo'n wijziging start
+  effectief een nieuw cohort in de scoring. Een drempel verschuiven
+  omdat de resultaten tegenvallen, levert geen track record op maar een
+  overfit. Adaptieve thresholds (4.2) mogen pas na het
+  T₀+6-maanden-herzieningsmoment.
 
 ## Werkwijze met DD
 
