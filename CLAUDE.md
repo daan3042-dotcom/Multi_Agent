@@ -68,6 +68,8 @@ en `docs/project-state.md`.
 | Huidige status | `docs/project-state.md` |
 | Architectuur/datastroom van het fundament | `docs/architecture.md` |
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
+| API-quota/callvolume per bron | `docs/data-sources.md` |
+| VPS-inrichting + dry-run-plan (checkpoint 3) | `docs/deployment.md` |
 | Tests | `tests/` |
 
 ## Voordat je iets verandert
