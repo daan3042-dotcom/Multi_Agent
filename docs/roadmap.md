@@ -152,8 +152,8 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 |---|---|---|---|
 | ~~`run_daily.py` + cron, idempotent~~ | 1.11 | ✅ `tests/test_runtime_daily.py` | — |
 | ~~Fail-loud-notificatie~~ | 1.7/1.11 | ✅ | — |
-| VPS bestellen en inrichten: keys, `MI_DB_PATH`, `MI_WEBHOOK_URL`, cron met `flock` | 1.11 | eerste geslaagde `run_daily` op de VPS, melding ontvangen op je telefoon | DD |
-| API-quota meten — callvolume geteld, ✅ `docs/data-sources.md`. **Tier-verificatie tegen DD's eigen AV-key blokkeert nog** (netwerk hier hard geblokkeerd, zie dat bestand) | 1.11 | dagelijks callvolume (monitoring + deep-dives) < limiet van de gebruikte tier; anders bron wisselen vóór T₀ᵃ | DD (verificatie) |
+| ~~VPS bestellen en inrichten: keys, `MI_DB_PATH`, `MI_WEBHOOK_URL`, cron met `flock`~~ | 1.11 | ✅ 27-09-2026: DigitalOcean-droplet (Ubuntu 24.04, UTC), `.env` gevuld, handmatige `run_daily.sh`-run geslaagd (exit 0, alle 5 agents ok), ntfy.sh-webhook getest, cron+`flock`+logrotatie staan. Eerste automatische run: ma 28-09 07:15 UTC | — |
+| API-quota meten — ✅ `docs/data-sources.md` + **27-09-2026 op de VPS bevestigd**: de monitoring-bodem (24 AV-calls in één cyclus: sector 11 + commodity 10 + currency 3) is in de praktijk gelukt op DD's eigen key. Worst case (46 calls, met deep-dives) nog niet getest — dat kan pas zodra er een trigger is | 1.11 | dagelijks callvolume (monitoring + deep-dives) < limiet van de gebruikte tier; anders bron wisselen vóór T₀ᵃ | — |
 | Geautomatiseerde offsite back-up | 1.11 | dagelijkse kopie buiten de VPS (Litestream of `.backup` + rclone) én één keer daadwerkelijk hersteld op een andere machine | DD |
 | Externe heartbeat / dead man's switch | 1.11 | alarm bij UITBLIJVEN van een run, getest door de machine bewust een dag uit te zetten | DD |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |

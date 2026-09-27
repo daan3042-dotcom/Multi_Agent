@@ -151,6 +151,30 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
 
 ## Currently working on / just finished
 
+- 27-09-2026, avond: **VPS live** (roadmap 1.11, fase 0a) — samen met DD
+  stap voor stap doorlopen (zie `docs/deployment.md`). DigitalOcean-droplet
+  (Ubuntu 24.04 LTS, UTC, Python 3.12.3), repo gecloned op de
+  `claude/ecstatic-fermat-3uunqw`-branch (nog niet gemerged naar main —
+  daar staan `run_daily.sh`/`.env.example`/`docs/deployment.md`/de
+  economic agent nog niet), venv + dependencies, `.env` gevuld
+  (`FRED_API_KEY`, `ALPHAVANTAGE_API_KEY`, `MI_DB_PATH`,
+  `MI_WEBHOOK_URL` — `ANTHROPIC_API_KEY` bewust nog leeg, geen
+  `--deep-dives` tijdens de dry-run). Handmatige `run_daily.sh`-run: exit
+  0, alle 5 agents `ok`. Een tweede run dezelfde dag toonde alle vijf als
+  `skipped` — de idempotency (roadmap 1.7) voor het eerst ECHT bewezen
+  buiten de testsuite. ntfy.sh als notificatiekanaal opgezet en getest
+  (losse `curl`-call kwam aan op DD's telefoon). Cron met `flock` +
+  logrotatie geïnstalleerd (`15 7 * * 1-5`, eerste automatische run ma
+  28-09 07:15 UTC). **Los, positief bijeffect:** dit bevestigt ook 0a-3's
+  open vraag uit `docs/data-sources.md` — de Alpha Vantage-monitoring-
+  bodem (24 calls/cyclus) werkt op DD's eigen tier.
+
+  **Nu in het dry-run-plan uit `docs/deployment.md`** (checkpoint 3,
+  `CLAUDE.md`): 3 dagen monitoring-only volgen via
+  `/var/log/mi/daily.log` + de `agent_runs`-tabel, vóór `--deep-dives`
+  aan gaat. Nog niet gedaan: back-up (0a-5) en externe heartbeat (0a-6) —
+  bewust NA de dry-run, zie `docs/deployment.md`'s laatste sectie.
+
 - 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
   **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
   `save_domain_output()` en `record_agent_run()` committen nu als ÉÉN
@@ -521,18 +545,18 @@ concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
 
-- **Alpha Vantage-tierlimiet tegen je eigen key bevestigen (27-09-2026,
-  0a-3).** `docs/data-sources.md` telt het callvolume exact uit de code
-  (monitoring-bodem: 24 AV-calls/dag, al tegen de publiek gedocumenteerde
-  free-tier-limiet van 25/dag; worst case met deep-dives: 46/dag) maar kon
-  dat cijfer niet tegen jouw eigen abonnement verifiëren — FRED/Alpha
-  Vantage zijn in de sandbox-sessie hard geblokkeerd. Doe dit vóór T₀ᵃ
-  (3 oktober): één test-call op de VPS, of het AV-dashboard van je account.
-  Klopt het, dan is de keuze tier upgraden vs. bron wisselen (bijv.
-  yfinance) aan jou.
-- **Waar draait de fetch-runner? — DD kiest een VPS (26-09-2026).**
-  Richting bepaald; de concrete provider/instance moet nog besteld en
-  ingericht worden. De code veronderstelt niets over de machine.
+- ~~Alpha Vantage-tierlimiet tegen je eigen key bevestigen~~ — **27-09-2026
+  bevestigd:** de monitoring-bodem (24 AV-calls in één cyclus: sector 11 +
+  commodity 10 + currency 3) is op de VPS tegen DD's eigen key gelukt
+  (`monetary_policy=ok, currency=ok, financial=ok, sector=ok,
+  commodity=ok`, exit 0). Worst case (46 calls, met deep-dives) nog niet
+  getest — dat kan pas zodra er een trigger is en `--deep-dives` aan
+  staat.
+- ~~Waar draait de fetch-runner? — DD kiest een VPS~~ — **27-09-2026
+  gedaan:** DigitalOcean-droplet (Ubuntu 24.04 LTS, 1 vCPU/1GB, regio
+  AMS3), ingericht en eerste handmatige run geslaagd. Zie
+  `docs/deployment.md` voor het volledige runbook en de huidige status
+  hieronder bij "Currently working on".
 - **Domeinprioritering (continu vs. on-demand per domein) — komt nu
   terug.** Was bewust uitgesteld "tot er een scheduler is" (vastgelegd
   tijdens 1.6): geen scheduler, geen cadans-veld, ook geen stub, en
