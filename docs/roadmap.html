@@ -204,7 +204,16 @@ const PHASES = [
      why:"Niet retroactief te reconstrueren. Opslaan is goedkoop; later alsnog willen hebben is onmogelijk."},
     {id:"2-10", who:"DD", sec:"2.1", t:"Beslissing: FOMC-statement als tekstinput voor de monetary agent?",
      dod:"Ja/nee vastgelegd in Open beslissingen. Bij ja: statement-tekst in deep-dive en forecast-ronde van 2.1 (geen nieuwe agent).",
-     why:"De enige input in cohort 0 die Python niet kan lezen. Zonder tekst heeft het LLM geen informatievoordeel op de derde baseline — dat is een geaccepteerde uitkomst, geen bug, maar wel een keuze."}
+     why:"De enige input in cohort 0 die Python niet kan lezen. Zonder tekst heeft het LLM geen informatievoordeel op de derde baseline — dat is een geaccepteerde uitkomst, geen bug, maar wel een keuze."},
+    {id:"2-11", who:"CC", sec:"1.1", t:"Instrument-mapping in domain_ontology.py",
+     dod:"Per <code>metric_key</code> het verhandelbare contract (NQ, ZN, CL, 6E; DXY als index-referentie) en de eenheid (log-rendement, bp); expliciet <code>None</code> waar geen equivalent bestaat. Vóór de freeze.",
+     why:"Een paar regels nu; een latere trading-laag hoeft dan niet te raden welk instrument bij welke voorspelling hoort."},
+    {id:"2-12", who:"CC", sec:"2.0 / 4.1", t:"Synthesizer-doelen op verhandelbare instrumenten + referentieprijs in resolution_rule",
+     dod:"Synthesizer voorspelt log-rendement NQ, ZN, CL, 6E over 5 hd (kwantielen). <code>resolution_rule</code> legt settlement bij <code>created_at</code>, contractmaand en roll-regel vast (front bij creatie aanhouden; expiratie binnen horizon → volgend contract). Dagelijkse prijsbron voor CL gekozen in 1.4.",
+     why:"Een trading-laag heeft niets aan een voorspelling over CPI, wel aan een verdeling over een prijs. Hiermee is later een schaduw-P&L met terugwerkende kracht vanaf T₀ᵇ te berekenen."},
+    {id:"2-13", who:"CC", sec:"1.2 / 1.4", t:"Niet-reconstrueerbare data opslaan: consensus, expected moves, ruwe headlines",
+     dod:"In <code>expectations</code>: consensus vóór elke release (CPI, PAYEMS, UNRATE, ICSA, FOMC) en opties-geïmpliceerde expected move rond grote events. In <code>events</code>: ruwe headlines met <code>source_time</code>/<code>ingestion_time</code>. Alleen waar een gratis/goedkope bron bestaat; niet T₀-blokkerend.",
+     why:"Achteraf niet (gratis) terug te halen. Prijzen, COT en FRED wél — die hoeven nu niet."}
   ]
 },
 {

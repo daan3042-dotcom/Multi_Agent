@@ -20,6 +20,7 @@ Vink items af zodra ze klaar zijn én groen zijn in de testsuite.
 | 24-09-2026 | Vijf pijlers ingevoerd, oude secties A–I vervangen | Preciezere doelarchitectuur (Systeemoverzicht-artifact) |
 | 26-09-2026 | Uitvoeringsvolgorde losgekoppeld van pijlernummering; pijler 4 naar voren | LLM-agents zijn niet eerlijk te backtesten → forward testing is het kritieke pad → kalendertijd is de schaarse resource |
 | 27-09-2026 | Zie hieronder | Externe review van de roadmap (Claude Fable 5.1) |
+| 28-09-2026 | Synthesizer-doelen op verhandelbare instrumenten, instrument-mapping, referentieprijs in de `resolution_rule`, en extra niet-reconstrueerbare data (consensus, expected moves, ruwe headlines). Gemarkeerd met **[28-09]** | Voorbereiding op een mogelijke swing-trading-laag (1–3 dagen) over 1–1,5 jaar, zonder die nu te bouwen. Zie "Beslist op 28-09-2026" |
 
 **Mapping oude lettering → nieuwe nummering** (voor code-comments als
 "stap B.1" of "sectie C.1"): A→1, B+C→2, D→2.8, E→2.9, F→3.1, G→5,
@@ -123,7 +124,7 @@ geen groei-knopen heeft.
 | currency | voorspelt — controlegroep | EUR/USD, USD/JPY, GBP/USD 5/21/63 hd; verwachting ≈ random walk |
 | commodity | alleen monitoring | AV-commodity-endpoint is maandelijks (40 dagen vers) — niet resolvbaar op korte horizon; predictions vanaf cohort v1 met dagelijkse bron |
 | equity (adapter) | buiten cohort 0 | Company Intelligence, eigen spoor via `analyst_agent.ai`; kwartaalfundamentals passen niet op 5/21/63 |
-| synthesizer | wordt gescoord | zelfde doelen als de domain agents, cross-domein |
+| synthesizer | wordt gescoord | zelfde doelen als de domain agents, cross-domein; **[28-09]** plus log-rendement NQ, ZN, CL, 6E over 5 hd (kwantielen) |
 | DD, partner | worden gescoord | wekelijks, vrije keuze uit dezelfde doelen (4.8) |
 
 Wat er bewust NIET bij komt vóór T₀, en waar het wél thuishoort: news
@@ -206,6 +207,11 @@ vanaf cohort v1 verplicht.
 - Marktimpliciete referenties opslaan waar gratis beschikbaar (fed
   funds futures, forwards) — niet om nu tegen te scoren, wel omdat ze
   niet retroactief te reconstrueren zijn (1.2 `expectations`).
+- **[28-09]** Synthesizer krijgt vier extra doelen op verhandelbare
+  instrumenten (NQ, ZN, CL, 6E; log-rendement over 5 hd, kwantielen),
+  met referentieprijs, contractmaand en roll-regel in de
+  `resolution_rule` (4.1). Instrument-mapping in de ontologie (1.1).
+  Moet vóór de freeze in fase 3b staan; daarna is het een nieuw cohort.
 
 ## Fase 3 — Scoring engine en baselines (13 okt – 2 nov)
 
@@ -356,6 +362,14 @@ gebouwd wordt staat in deel A, niet hier.
       welke knoop uit de causale graaf (1.10) dit raakt. **[27-09]**
       Optioneel in cohort 0, verplicht vanaf cohort v1: resolutie
       gebeurt op metrics, dus de graaf is geen voorwaarde om te scoren.
+- [ ] **[28-09]** Instrument-mapping in `src/contract/domain_ontology.py`:
+      per `metric_key` het bijbehorende verhandelbare contract (bijv.
+      NQ, ZN, CL, 6E; DXY als index-referentie) en de eenheid waarin
+      een doel daarop wordt uitgedrukt (log-rendement, bp). Een paar
+      regels nu; voorkomt dat een latere trading-laag moet raden welk
+      instrument bij welke voorspelling hoort. Metrics zonder
+      verhandelbaar equivalent krijgen expliciet `None`. Vóór de freeze
+      (fase 3b).
 
 ### 1.2 Database & Event Store
 - [x] Database-schema als source of truth (`src/storage/schema.py`)
@@ -398,13 +412,29 @@ gebouwd wordt staat in deel A, niet hier.
 - [ ] Entiteit: measurements (afgeleide/berekende waarden, nu impliciet
       onderdeel van claims met source="Berekend (...)")
 - [ ] Entiteit: events (nieuws/agenda-gebeurtenissen, hoort bij 2.8 News
-      Monitor Agent)
+      Monitor Agent). **[28-09]** Ruwe headlines met eigen tijdstempel
+      (bron, `source_time`, `ingestion_time`, titel, eventueel
+      ticker/topic-tags) bewaren, niet alleen de samenvatting van de
+      agent. Het nieuws zoals het toen bekend was is achteraf niet
+      betrouwbaar te reconstrueren. Begint zodra er een feed draait —
+      bij voorkeur al mee in de ingestieklok (T₀ᵃ) als een gratis bron
+      past (1.4), anders uiterlijk met 2.8. Niet T₀-blokkerend.
 - [ ] Entiteit: expectations (echte marktverwachting i.p.v. "vorige
       observatie" als trigger-referentie). **[27-09]** Deels naar voren:
       vanaf T₀ᵇ worden marktimpliciete referenties (fed funds futures,
       forwards) *opgeslagen* waar gratis beschikbaar — niet om tegen te
       scoren, wel omdat ze niet retroactief te reconstrueren zijn. De
       trigger-referentie zelf blijft post-T₀.
+      **[28-09]** Uitgebreid met twee reeksen, zelfde logica
+      (niet-reconstrueerbaar, dus nu opslaan, later pas gebruiken):
+      - **Consensusverwachting vóór elke release** (CPI, NFP/PAYEMS,
+        UNRATE, ICSA, FOMC) — de verrassing t.o.v. consensus is later
+        het echte signaal, niet de print zelf.
+      - **Opties-geïmpliceerde expected move rond grote events** (FOMC,
+        CPI, big-tech earnings voor NQ) — nodig voor stop-afstanden en
+        sizing in een eventuele trading-laag.
+      Beide alleen waar een gratis/goedkope bron bestaat (1.4); welke
+      bron is nog open. Niet T₀-blokkerend.
 - [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
 - [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
       mode=DEEP_DIVE, geen eigen entiteit)
@@ -961,6 +991,17 @@ gescoord wordt er al in.
       scores in de aparte `evaluations`-tabel (1.2)
 - [ ] Mechanische QC weigert een prediction zonder kwantielen/kans, regel,
       horizon of model_id (zie 1.6)
+- [ ] **[28-09]** Prijsdoelen (instrument-doelen van de synthesizer,
+      zie 1.1) hebben een `resolution_rule` die expliciet vastlegt:
+      welke prijs (settlement van de dag van `created_at`), welke
+      contractmaand, en de roll-regel — het contract dat bij
+      `created_at` front is wordt tot `resolves_at` aangehouden; valt
+      de expiratie binnen de horizon, dan geldt vanaf creatie het
+      volgende contract. Geen vintage-probleem (settlements worden niet
+      gereviseerd), wel een dubbelzinnigheidsprobleem zonder deze regel.
+      Daarmee is een schaduw-P&L van de synthesizer later met
+      terugwerkende kracht te berekenen vanaf T₀ᵇ, zonder die nu te
+      bouwen.
 
 ### 4.2 Trigger-kalibratie — loopt mee vanaf T₀
 - [ ] Held-vs-breached-tracking per trigger-regel, per `trigger_version`
@@ -1167,6 +1208,26 @@ kalibratie-deel van 5.2.
       "financial philosophy agent" uit DD's eindbeeld thuishoort: geen
       voorspeller, maar een kennislaag (RAG) die de prompts van de
       andere agents voedt.
+
+## Beslist op 28-09-2026
+
+- **Voorbereiding op een swing-trading-laag (1–3 dagen), zonder die te
+  bouwen.** DD overweegt over 1–1,5 jaar een trading agent bovenop dit
+  systeem. Die komt pas na de 6-maandenevaluatie (T₀ᵇ + 6 maanden) en
+  staat bewust niet in deze roadmap. Wat nu wél gebeurt, omdat het
+  goedkoop is en later niet in te halen: instrument-doelen voor de
+  synthesizer (deel A cohort 0, 4.1), instrument-mapping (1.1),
+  referentieprijs/roll-regel in de `resolution_rule` (4.1), en
+  consensus, expected moves en ruwe headlines opslaan (1.2).
+- **Bewust niet toegevoegd:** een 1–3-dagenhorizon in cohort 0 (de
+  macro-laag wordt voor swing-trades waarschijnlijk een filter/bias op
+  5 hd, niet de timing), een apart conviction-veld (richting en
+  overtuiging volgen uit de kwantielen, en zijn dan wél gekalibreerd en
+  gescoord), en een schaduw-P&L-module (met terugwerkende kracht te
+  berekenen uit predictions + referentieprijzen).
+- **Aandachtspunt:** CL-doel van de synthesizer vraagt een dagelijkse
+  prijsbron; de commodity agent blijft alleen-monitoring omdat de
+  huidige AV-bron maandelijks is. Kiezen in 1.4 vóór de freeze.
 
 ## Beslist op 27-09-2026 (was open)
 
