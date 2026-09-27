@@ -134,7 +134,7 @@ en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
 dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
 dry-run.
 
-## Externe heartbeat (0a-6): healthchecks.io
+## Externe heartbeat (0a-6): healthchecks.io — ✅ 27-09-2026
 
 1. Account aanmaken op [healthchecks.io](https://healthchecks.io) (gratis
    tier is ruim genoeg voor één dagelijkse check).
@@ -173,7 +173,11 @@ dry-run.
    tijdelijk uitschakelen en checken dat er een e-mail van healthchecks.io
    komt. Niet nu meteen nodig, wel vóór T₀ᵃ als afgerond geldt.
 
-## Offsite back-up (0a-5): DigitalOcean Spaces + rclone
+**Status:** ping-URL werkt (getest met een losse `curl`, groen vinkje in
+het dashboard), cron-regel staat (`crontab -l` bevestigd). Alleen punt 6
+(de daadwerkelijke "machine uitzetten"-test) staat nog open.
+
+## Offsite back-up (0a-5): DigitalOcean Spaces + rclone — ✅ 27-09-2026, met een bekende beperking
 
 1. In het DigitalOcean-dashboard: **Spaces & Object Storage → Create
    Space** — zelfde regio als de droplet (AMS3), een unieke naam (bijv.
@@ -219,3 +223,27 @@ dry-run.
    ```
    Een niet-nul aantal rijen bevestigt dat de back-up een bruikbare,
    herstelbare database is — niet alleen "het bestand bestaat".
+
+**Bevinding, expliciet gevlagd (checkpoint 4 uit `CLAUDE.md`):** een
+Spaces-key die bij aanmaken beperkt wordt tot ÉÉN specifieke bucket
+("Read/Write/Delete" op alleen `mi-backups-multi-agent`) kon in de
+praktijk niet SCHRIJVEN (`rclone copy` gaf `AccessDenied`, ook na de key
+te verwijderen en helemaal opnieuw aan te maken) — terwijl lezen
+(`rclone lsd`) op diezelfde beperkte key wél werkte. Een key met
+**"Full Access"** (alle Spaces-buckets in het account, niet beperkt tot
+één) werkte META wél voor schrijven. Dit wijst op een beperking/bug in
+DigitalOcean's relatief nieuwe "beperk tot één bucket"-functie, niet op
+een fout in onze configuratie (rclone-config, regio en endpoint waren
+identiek in beide pogingen). **Bewuste, geaccepteerde afwijking:** de
+VPS gebruikt nu een Full-Access-Spaces-key i.p.v. de bedoelde, striktere
+per-bucket-scoping — breder dan strikt nodig (kan bij alle Spaces-buckets
+in het account, niet DigitalOcean's volledige account/droplets/billing),
+geaccepteerd omdat er op dit moment maar één Space bestaat en "geen
+back-up" een groter risico is. Kandidaat om later opnieuw te proberen als
+DigitalOcean deze functie bijwerkt, of te vervangen door een aparte
+sub-account-achtige oplossing als er meer Spaces bijkomen.
+
+**Status:** Space aangemaakt (regio AMS3), rclone geconfigureerd en
+werkend, `backup.sh` + cron-regel staan, restore-test geslaagd (bestand
+gedownload naar DD's laptop, geopend met DB Browser for SQLite, `agent_runs`
+toont de 5 verwachte rijen van de eerste succesvolle cyclus).

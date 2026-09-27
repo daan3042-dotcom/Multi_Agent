@@ -172,8 +172,29 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   **Nu in het dry-run-plan uit `docs/deployment.md`** (checkpoint 3,
   `CLAUDE.md`): 3 dagen monitoring-only volgen via
   `/var/log/mi/daily.log` + de `agent_runs`-tabel, vóór `--deep-dives`
-  aan gaat. Nog niet gedaan: back-up (0a-5) en externe heartbeat (0a-6) —
-  bewust NA de dry-run, zie `docs/deployment.md`'s laatste sectie.
+  aan gaat.
+
+  **Later diezelfde avond: back-up (0a-5) en heartbeat (0a-6) alsnog
+  meteen opgepakt**, niet na de dry-run zoals eerder hierboven stond —
+  die volgorde bleek onnodig voorzichtig (back-up/heartbeat draaien los
+  van `run_daily.py`, kunnen de dry-run niet verstoren, en elke dag
+  zonder back-up is dagdata die je bij een storing kwijt bent). **Heartbeat:**
+  healthchecks.io, cron-schedule-check (`15 7 * * 1-5`, UTC), ping
+  toegevoegd aan de crontab-regel (`;` i.p.v. `&&`, ook bij een mislukte
+  cyclus), getest. **Back-up:** DigitalOcean Spaces (`mi-backups-
+  multi-agent`, regio AMS3) + rclone, `backup.sh` + eigen cron-regel
+  (`0 8 * * *`), restore-test geslaagd op DD's laptop (DB Browser for
+  SQLite, `agent_runs` toont de 5 verwachte rijen). **Bevinding,
+  expliciet gevlagd (checkpoint 4):** een Spaces-key beperkt tot één
+  bucket kon niet schrijven (`AccessDenied`, ook na opnieuw aanmaken) —
+  vermoedelijk een beperking/bug in DigitalOcean's relatief nieuwe
+  per-bucket-scoping, niet onze configuratie (een "Full Access"-key
+  werkte meteen wél). Bewust geaccepteerd: de VPS gebruikt nu die
+  bredere key, gedocumenteerd als afwijking in `docs/deployment.md`.
+
+  **Alle vier taken uit fase 0a zijn nu gedaan.** Openstaand: T₀ᵃ zelf
+  (7 dagen op rij zonder handmatige actie) en de heartbeat's eigen
+  "machine bewust een dag uitzetten"-test.
 
 - 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
   **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
