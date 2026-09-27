@@ -123,12 +123,99 @@ op rij zonder handmatige actie draait (roadmap 1.11's eigen DoD).
 
 **Stop en meld het hier** als er op enig moment een dag ONTBREEKT (geen
 enkele rij in `agent_runs` voor die datum) — dat is precies het
-faalscenario dat de externe heartbeat (0a-6, hieronder) moet opvangen als
-niemand kijkt, maar tijdens de dry-run kijk je zelf.
+faalscenario dat de externe heartbeat hieronder moet opvangen als niemand
+kijkt, maar tijdens de dry-run kijk je zelf.
 
-## Nog niet hier: back-up en heartbeat
+**Correctie t.o.v. een eerdere versie van dit document:** back-up en
+heartbeat hoeven NIET te wachten tot na de dry-run — ze draaien los van
+`run_daily.py` zelf en kunnen de dry-run niet verstoren. Sterker nog: elke
+dag zonder back-up is een dag data die je kwijt bent bij een VPS-storing,
+en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
+dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
+dry-run.
 
-Taken 0a-5 (offsite back-up) en 0a-6 (externe heartbeat) staan los van
-deze inrichting — zie `docs/roadmap.md` fase 0 voor de DoD per taak. Pak
-die na deze dry-run op, niet ervoor: een back-up van een database die nog
-geen enkele echte dag heeft gedraaid is niet zinvol te testen.
+## Externe heartbeat (0a-6): healthchecks.io
+
+1. Account aanmaken op [healthchecks.io](https://healthchecks.io) (gratis
+   tier is ruim genoeg voor één dagelijkse check).
+2. Nieuwe check aanmaken, naam `mi-daily`. Kies **"Cron Schedule"** als
+   schema-type (niet "Simple"/period) en vul exact dezelfde expressie in
+   als de crontab-regel: `15 7 * * 1-5`, tijdzone **UTC**, grace-tijd
+   bijv. 2 uur (marge voor een trage run of een tijdelijke netwerk-
+   hapering). Cron-schema i.p.v. een vaste periode voorkomt een vals
+   alarm in het weekend, wanneer er terecht geen run is.
+3. Kopieer de ping-URL (`https://hc-ping.com/<uuid>`).
+4. Pas de crontab-regel aan zodat de ping ALTIJD verstuurd wordt, ongeacht
+   of `run_daily.sh` slaagde of faalde — de heartbeat moet specifiek
+   detecteren of de cron/het script ÜBERHAUPT gedraaid heeft, dat is een
+   ander signaal dan "lukte de datapull" (dat dekt de ntfy-melding via
+   `runtime/notifications.py` al):
+
+   ```bash
+   crontab -e
+   ```
+
+   Vervang de bestaande regel door (`;` i.p.v. `&&` -- de ping moet ook bij
+   een mislukte cyclus verstuurd worden):
+
+   ```
+   15 7 * * 1-5 /usr/bin/flock -n /tmp/mi-daily.lock /opt/multi_agent/run_daily.sh >> /var/log/mi/daily.log 2>&1; curl -fsS -m 10 --retry 3 https://hc-ping.com/<uuid> >> /var/log/mi/daily.log 2>&1
+   ```
+
+5. Test de ping-URL direct (bevestigt dat 'ie in het dashboard geregistreerd wordt):
+   ```bash
+   curl -fsS -m 10 https://hc-ping.com/<uuid>
+   ```
+   Zou in het healthchecks.io-dashboard meteen een groene "laatste ping"
+   moeten laten zien.
+6. **Nog te doen, apart, later:** de DoD ("getest door de machine bewust
+   een dag uit te zetten") écht uitvoeren — bijv. de cron-regel één dag
+   tijdelijk uitschakelen en checken dat er een e-mail van healthchecks.io
+   komt. Niet nu meteen nodig, wel vóór T₀ᵃ als afgerond geldt.
+
+## Offsite back-up (0a-5): DigitalOcean Spaces + rclone
+
+1. In het DigitalOcean-dashboard: **Spaces & Object Storage → Create
+   Space** — zelfde regio als de droplet (AMS3), een unieke naam (bijv.
+   `mi-backups-<jouw-suffix>`).
+2. **API → Spaces Keys → Generate New Key** — noteer de Access Key en
+   Secret Key (de secret wordt maar ÉÉN keer getoond).
+3. Op de VPS, rclone installeren en configureren (niet-interactief, geen
+   losse config-stappen nodig):
+   ```bash
+   sudo apt install -y rclone
+   rclone config create do-spaces s3 provider=DigitalOcean \
+     access_key_id=<ACCESS_KEY> secret_access_key=<SECRET_KEY> \
+     endpoint=ams3.digitaloceanspaces.com region=ams3
+   ```
+4. Testen dat de Space zichtbaar is:
+   ```bash
+   rclone lsd do-spaces:
+   ```
+5. Back-upscript aanmaken (`/opt/multi_agent/backup.sh`):
+   ```bash
+   #!/usr/bin/env bash
+   set -euo pipefail
+   cd /opt/multi_agent
+   DATE=$(date -u +%F)
+   sqlite3 market_intelligence.db ".backup /tmp/mi-backup-$DATE.db"
+   rclone copy "/tmp/mi-backup-$DATE.db" "do-spaces:<jouw-space-naam>/backups/"
+   rm "/tmp/mi-backup-$DATE.db"
+   ```
+   ```bash
+   chmod +x /opt/multi_agent/backup.sh
+   ```
+6. Cron-regel toevoegen (ná de dagelijkse cyclus, dus de back-up bevat de
+   verse data van vandaag):
+   ```
+   0 8 * * * /opt/multi_agent/backup.sh >> /var/log/mi/backup.log 2>&1
+   ```
+7. **Restore-test (verplicht onderdeel van de DoD, "op een andere
+   machine"):** vanaf je eigen laptop (met `rclone` of gewoon via het
+   DigitalOcean-dashboard een bestand downloaden uit de Space):
+   ```bash
+   rclone copy do-spaces:<jouw-space-naam>/backups/mi-backup-<datum>.db ./restore-test.db
+   sqlite3 restore-test.db "SELECT COUNT(*) FROM agent_runs;"
+   ```
+   Een niet-nul aantal rijen bevestigt dat de back-up een bruikbare,
+   herstelbare database is — niet alleen "het bestand bestaat".
