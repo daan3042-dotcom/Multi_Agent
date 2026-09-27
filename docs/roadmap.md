@@ -357,6 +357,16 @@ De volgorde waarin dit gebouwd wordt staat in deel A, niet hier.
       bron-freshness) — een nieuw, complementair rollup-type over de vier
       checks hierboven. Uitgebreid beargumenteerd in `docs/architecture.md`
       ("Ontwerpkeuzes"), inclusief mapping-tabel tussen beide vocabulaires.
+- [ ] **[nieuw]** Plausibiliteitscheck tussen bronnen, los van
+      `evaluate_consistency`. Die laatste vergelijkt een gestelde waarde
+      tegen een herberekende waarde uit dezelfde bron — vangt geen waarde
+      die binnen een geldig bereik valt maar sterk afwijkt van wat
+      gerelateerde reeksen elders in de causale graaf (1.10) zouden doen
+      verwachten (bijv. een FX-koers die geldig is maar niet past bij de
+      bijbehorende rentedifferentie-beweging). Relevant zodra een bron
+      gecorrumpeerd of gemanipuleerd raakt zonder buiten zijn eigen
+      geldige bereik te vallen — dat scenario wordt nu niet gedekt door
+      HEALTHY/DEGRADED/INVALID.
 
 ### 1.4 Source Registry
 - [x] Centraal register per databron: provider, frequency, latency, cost,
@@ -447,6 +457,11 @@ De volgorde waarin dit gebouwd wordt staat in deel A, niet hier.
       T₀ draait niemand handmatig, dus er moet iets actief melden.
       Gebouwd in `src/runtime/notifications.py`, aangeroepen aan het eind
       van elke `run_daily()`-cyclus
+- [ ] **[nieuw]** Decision-latency als bewaakte metric per agent-cyclus
+      (monitoring én deep-dive), naast het bestaande succes/faal-signaal in
+      `agent_runs`. Geen risico bij de huidige dagelijkse cadans, maar wel
+      relevant zodra 2.9 (NQ regime/bias) korter-cyclisch wordt — dan is
+      vooraf al bekend welke agent de bottleneck zou worden.
 
 ### 1.8 Orchestrator / Manager
 - [x] Deterministische dispatch-logica (`src/manager/manager.py`)
@@ -641,6 +656,14 @@ eerste bruikbare versie.
 - [ ] 3–5 betrouwbare feeds, handmatig gedefinieerde entiteiten
 - [ ] Event extraction naar graafknopen (who/did what/when/expected impact)
 - [ ] Koppeling aan de trigger-laag (1.5) als aanvullende triggerbron
+- [ ] **[nieuw]** Provenance-eis vóór een claim de trigger-laag bereikt:
+      bron + publicatietijdstip vastleggen, en waar het feitelijk beweerbaar
+      is (een cijfer, een besluit) bevestiging door minstens één tweede,
+      onafhankelijke feed. Dit is de enige agent die ongestructureerde
+      tekst van externe bronnen omzet in claims — de mechanische QC (1.6)
+      checkt interne consistentie, niet of de brontekst zelf betrouwbaar of
+      gemanipuleerd is. Zonder dit staat de deur open voor een enkele
+      vervuilde of nep-bron die zich voordoet als een geldige triggerbron.
 - [ ] **Later:** entity resolution, deduplicatie tussen bronnen, novelty
       detection
 
@@ -678,6 +701,16 @@ die andere agents bekend is hoe betrouwbaar ze zijn.
 - [ ] ~~Confidence-weging (Bayesiaans)~~ → **verplaatst naar 3.4**; kan
       niet hier blijven omdat het track record uit 4.5 een harde
       voorwaarde is
+- [ ] **[nieuw]** Gedeelde-bron-vlag als tussenstap vóór 3.4 er is: als
+      meerdere domain agents in dezelfde dispatch-batch (1.8) in dezelfde
+      richting escaleren, expliciet markeren of dat samenvalt met een
+      gedeelde onderliggende gebeurtenis (bijv. één Fed-besluit dat
+      monetary + currency + equity tegelijk raakt — verwacht en gewenst)
+      of dat er geen gedeelde oorzaak zichtbaar is (verdacht: mogelijk
+      hetzelfde signaal vijf keer geteld, precies het probleem dat 3.4
+      later statistisch oplost). Puur een vlag op de `DispatchPlan`, geen
+      correctie — de correctie zelf blijft terecht in 3.4, dit dekt alleen
+      het gat tussen nu en mei 2027.
 
 ### 3.2 Statistische synthese-laag — post-T₀
 - [ ] Z-score-normalisatie over domeinen heen
@@ -774,6 +807,13 @@ gescoord wordt er al in.
 ### 4.3 Agent Track Records — loopt mee vanaf T₀
 - [ ] Precision/recall/hallucination-rate per agent (QC-kant)
 - [ ] Agent-reliability-scores als input voor de aggregatie (3.4)
+- [ ] **[nieuw]** Root-cause bij een verkeerd gescoorde prediction: niet
+      alleen dat hij faalde, maar via `causal_chain`/`evidence_claim_ids`
+      (4.1) terugvinden welke schakel brak — een verkeerde claim, een
+      goede claim met een verkeerde causale aanname, of een correcte keten
+      die alsnog niet uitkwam. Zonder dit blijft 4.3 tellen wát fout ging,
+      nooit waarom, en mist het systeem het equivalent van FinCon's
+      belief-revisie tussen episodes.
 
 ### 4.4 Historical Replay Engine — post-T₀
 Blijft nuttig voor de **deterministische** lagen (triggers, berekende
@@ -811,6 +851,26 @@ alleen kosten gemaakt. Beide draaien vanaf T₀ mee als volwaardige
 - [ ] **Climatology** — de onvoorwaardelijke historische basisrate
 - [ ] Afspraak: een agent die na zes maanden geen van beide verslaat,
       gaat eruit
+
+### 4.7 Systeembrede noodstop — **[nieuw]**, loopt mee vanaf T₀
+
+`NEEDS_REVIEW` (1.6) en de per-item kill-criteria (`analyst_agent.ai`'s
+patroon) vangen elk een individueel geval. Geen van beide vangt het
+scenario waarin de kalibratie zelf (4.5) structureel verslechtert — dat
+zou nu alleen zichtbaar worden als iemand toevallig de kalibratiecurve
+bekijkt.
+
+- [ ] Harde, niet-optionele drempel: als de kalibratie (Brier/AUC, 4.5)
+      over een gedefinieerde periode significant onder de baselines (4.6)
+      zakt, gaat er een melding uit die om review van de **hele
+      trigger-configuratie** vraagt — niet van één agent of één
+      kill-criterium. Zelfde notificatiepad als 1.7's stille-run-melding,
+      andere trigger.
+- [ ] Dit is bewust geen automatische ingreep (geen auto-freeze van
+      agents) — alleen een verplichte melding. Een automatische reactie op
+      een ruwe kalibratiemeting met weinig data zou zelf een nieuwe bron
+      van overfit worden, precies wat de bevriezingsafspraak (zie "Wat
+      NIET te doen zonder te vragen" in `CLAUDE.md`) probeert te voorkomen.
 
 ---
 

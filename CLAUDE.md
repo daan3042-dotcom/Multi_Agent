@@ -101,6 +101,46 @@ geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
   overfit. Adaptieve thresholds (4.2) mogen pas na het
   T₀+6-maanden-herzieningsmoment.
 
+## Checkpoints — wanneer stoppen voor menselijke review
+
+Dit systeem draait doorgaans zonder tussenkomst door — dat mag, behalve op
+de volgende momenten. Daar wordt altijd gestopt en gewacht op DD's review,
+ook als de wijziging correct en laag-risico lijkt:
+
+1. **Na elke nieuwe domain/functionele agent, vóór hij aan de trigger-
+   engine of manager wordt gekoppeld.** Laat zien: wat hij monitort, welke
+   triggers hij kan geven, hoe zijn output op het output-contract
+   aansluit.
+2. **Vóór elke wijziging aan de deterministische trigger-engine of QC-
+   logica** (`src/triggers/`, `src/qc/`). Dit zijn de veiligheidsgordels
+   van het hele systeem — nooit verzwakken of omzeilen om een nieuwe
+   agent's output te laten passen.
+3. **Vóór elke uitrol naar de VPS of elke wijziging die onbeheerd draaien
+   beïnvloedt** (scheduler, cron, `run_daily.py`). Stel eerst een
+   dry-run-plan voor: hoe lang alleen-loggen draait voordat het vertrouwd
+   wordt, en wat DD in de logs moet controleren.
+4. **Zodra een databron, drempel of aanname niet met vertrouwen te
+   verifiëren is** (vergelijkbaar met de FINRA-schema-discovery in
+   `analyst_agent.ai`). Nooit stilzwijgend doorgaan met een beste gok —
+   expliciet vlaggen als het minst zekere deel van het werk.
+
+Niet-onderhandelbare kwaliteitseisen, doorlopend, niet alleen bij de
+checkpoints hierboven:
+- Elke nieuwe module krijgt tests, naar het patroon van `tests/`. Nooit
+  "tests komen later".
+- Elke agent-beslissing/output blijft herleidbaar (welke data, welke
+  drempel/trigger vuurde, tijdstempel) — dit is al het bestaande patroon
+  via `agent_runs`/lineage, geen nieuwe aanpak verzinnen.
+- Python rekent, Claude vertelt — geen numeriek werk via een LLM-call waar
+  deterministische code het kan doen.
+- Nooit stilzwijgend een check overslaan voor een pad met ontbrekende/
+  onvolledige data (terugkerend bugpatroon in dit project — checks die na
+  een early-return staan, worden overgeslagen).
+
+Sluit een werksessie altijd af met: wat is gebouwd, wat is bewust
+uitgesteld en waarom, wat is nog ongetest of onzeker, en wat is het
+volgende checkpoint.
+
 ## Werkwijze met DD
 
 - Na elke coderonde: een korte samenvatting van welke bestanden zijn
