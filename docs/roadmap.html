@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap handleiding — Market Intelligence Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f4ef; --paper:#ffffff; --ink:#1c1b18; --muted:#6b6660; --line:#e2ddd3;
+    --accent:#1f4e3d; --accent-soft:#e3efe8; --warn:#8a5a1a; --warn-soft:#f6ead7;
+    --done:#2f7a5c; --gate:#5b2d6b; --gate-soft:#efe6f3; --shadow:0 1px 2px rgba(0,0,0,.05);
+    --serif:"Cormorant Garamond",Georgia,serif; --mono:"DM Mono",ui-monospace,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#141311; --paper:#1d1c19; --ink:#ebe7df; --muted:#9a948a; --line:#2e2c27;
+      --accent:#7fc4a2; --accent-soft:#1c2c25; --warn:#e0a85a; --warn-soft:#2e2416;
+      --done:#7fc4a2; --gate:#c9a3dd; --gate-soft:#2a2130; --shadow:none;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141311; --paper:#1d1c19; --ink:#ebe7df; --muted:#9a948a; --line:#2e2c27;
+    --accent:#7fc4a2; --accent-soft:#1c2c25; --warn:#e0a85a; --warn-soft:#2e2416;
+    --done:#7fc4a2; --gate:#c9a3dd; --gate-soft:#2a2130; --shadow:none;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13.5px;line-height:1.55}
+  body{padding:0 16px 80px}
+  .wrap{max-width:960px;margin:0 auto}
+  header{padding:40px 0 18px;border-bottom:1px solid var(--line)}
+  h1{font-family:var(--serif);font-weight:600;font-size:40px;line-height:1.05;margin:0 0 6px}
+  h1 small{display:block;font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400;margin-top:10px;letter-spacing:.04em}
+  .lede{font-family:var(--serif);font-size:19px;line-height:1.4;margin:14px 0 0;max-width:720px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 0}
+  button,label.btn{font-family:var(--mono);font-size:12px;padding:6px 11px;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;cursor:pointer}
+  button:hover,label.btn:hover{border-color:var(--accent)}
+  .toolbar .spacer{flex:1}
+  .overall{margin:22px 0 6px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+  .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+  nav.toc{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 0}
+  nav.toc a{font-size:11.5px;text-decoration:none;color:var(--muted);border:1px solid var(--line);padding:3px 8px;border-radius:999px;background:var(--paper)}
+  nav.toc a:hover{color:var(--accent);border-color:var(--accent)}
+  section.phase{margin-top:38px;scroll-margin-top:16px}
+  .phead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+  .phead h2{font-family:var(--serif);font-size:28px;font-weight:600;margin:0}
+  .phead .when{font-size:12px;color:var(--muted)}
+  .phead .pct{margin-left:auto;font-size:12px;color:var(--muted)}
+  .goal{font-family:var(--serif);font-size:17px;color:var(--ink);margin:4px 0 12px;max-width:760px}
+  .goal em{color:var(--muted)}
+  .pbar{height:3px;background:var(--line);margin-bottom:12px}
+  .pbar i{display:block;height:100%;background:var(--accent);width:0}
+  section.gate .pbar i,section.gate .bar i{background:var(--gate)}
+  .task{display:grid;grid-template-columns:22px 1fr;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:8px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .task input{margin:3px 0 0;width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+  section.gate .task input{accent-color:var(--gate)}
+  .task.done{opacity:.55}
+  .task.done .t{text-decoration:line-through;text-decoration-color:var(--muted)}
+  .task .t{font-family:var(--serif);font-size:18px;font-weight:500;line-height:1.25}
+  .task .meta{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+  .tag{font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);letter-spacing:.03em}
+  .tag.who{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .tag.who.dd{background:var(--warn-soft);color:var(--warn)}
+  .tag.who.partner{background:var(--gate-soft);color:var(--gate)}
+  .task .dod{color:var(--muted);font-size:12.5px}
+  .task .dod b{color:var(--ink);font-weight:500}
+  .task .why{font-size:12.5px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);color:var(--ink)}
+  .task.blocked{border-left:3px solid var(--warn)}
+  section.gate{padding:18px;border:1px solid var(--gate);border-radius:12px;background:var(--gate-soft)}
+  section.gate .phead h2{color:var(--gate)}
+  section.later .task{background:transparent}
+  .note{font-size:12.5px;color:var(--muted);margin:8px 0 0;max-width:760px}
+  .hidden{display:none}
+  footer{margin-top:50px;font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+  @media (max-width:560px){h1{font-size:32px}.task .t{font-size:16.5px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Roadmap — handleiding<small>MARKET INTELLIGENCE PLATFORM · THE COLLECTIVE EDGE · versie 27-09-2026</small></h1>
+  <p class="lede">Alles in de volgorde waarin het moet gebeuren. Vink af wat af is; de stand wordt in deze browser bewaard. Bron van waarheid blijft <code>docs/roadmap.md</code> — dit is er de weergave van.</p>
+  <div class="toolbar">
+    <button id="toggleOpen">Toon alleen open taken</button>
+    <button id="exportBtn">Exporteer stand (JSON)</button>
+    <label class="btn" for="importFile">Importeer stand</label>
+    <input type="file" id="importFile" accept="application/json" class="hidden">
+    <span class="spacer"></span>
+    <button id="themeBtn">Thema</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+  <div class="overall"><span id="overallLabel">0 van 0 taken</span><span id="overallDate"></span></div>
+  <div class="bar"><i id="overallBar"></i></div>
+  <nav class="toc" id="toc"></nav>
+</header>
+
+<main id="main"></main>
+
+<footer>
+  Handleiding gegenereerd uit <code>docs/roadmap.md</code> deel A (herziening 27-09-2026). Sectienummers verwijzen naar deel B. Wie: <b>DD</b> = handwerk/beslissing van DD, <b>partner</b> = handwerk partner, <b>CC</b> = Claude Code onder de checkpoints uit <code>CLAUDE.md</code>. Een oranje rand = blokkeert een volgende stap.
+</footer>
+</div>
+
+<script>
+const PHASES = [
+{
+  id:"0a", title:"Fase 0a — Deblokkeren", when:"29 sep – 5 okt 2026",
+  goal:"Het systeem haalt elke dag zonder tussenkomst echte data op. <em>Uitkomst: T₀ᵃ, de ingestieklok loopt (streefdatum 3 oktober).</em>",
+  tasks:[
+    {id:"0a-1", who:"DD", sec:"1.11", blocked:true, t:"VPS-provider kiezen en instance bestellen",
+     dod:"Machine bereikbaar via SSH, Python 3.12+, tijdzone UTC.",
+     why:"Enige open beslissing die alles blokkeert. De code veronderstelt niets over de machine; een kleine VPS volstaat, dit is geen rekenwerk."},
+    {id:"0a-2", who:"DD", sec:"1.11", blocked:true, t:"Keys en omgeving inrichten",
+     dod:"<code>FRED_API_KEY</code>, <code>ALPHAVANTAGE_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>MI_DB_PATH</code>, <code>MI_WEBHOOK_URL</code> staan in <code>.env</code>; een handmatige <code>run_daily.py</code> slaagt en de melding komt op je telefoon aan (ntfy/Telegram).",
+     why:"Zonder <code>MI_WEBHOOK_URL</code> gaat een melding alleen naar de log — op een onbeheerde machine is dat geen fail-loud."},
+    {id:"0a-3", who:"CC", sec:"1.11", blocked:true, t:"API-quota meten tegen het dagelijkse callvolume",
+     dod:"Callvolume per cyclus geteld (monitoring + deep-dives); limiet van de gebruikte Alpha Vantage-tier geverifieerd op je eigen key; uitkomst in <code>docs/data-sources.md</code>. Past het niet: bron wisselen (bijv. yfinance) vóór T₀ᵃ.",
+     why:"Sector (11 ETF's + SPY) + commodity (10) + FX (3) = 25 calls per cyclus. Zit de tier op 25/dag, dan breekt de cyclus op dag 1."},
+    {id:"0a-4", who:"DD", sec:"1.11", t:"Cron met flock installeren",
+     dod:"Cron-regel uit de docstring van <code>run_daily.py</code> staat; twee overlappende runs geven één <code>skipped</code>, geen dubbele rijen.",
+     why:"Idempotency via <code>event_id = daily:&lt;UTC-datum&gt;</code> is gebouwd; cron is de aanroeper waarop het wachtte."},
+    {id:"0a-5", who:"DD", sec:"1.11", blocked:true, t:"Geautomatiseerde offsite back-up van de SQLite",
+     dod:"Dagelijkse kopie buiten de VPS (Litestream of <code>sqlite3 .backup</code> + rclone naar object storage) én één keer daadwerkelijk hersteld op een andere machine.",
+     why:"Dat bestand ís het track record. Kwijt = de klok begint opnieuw."},
+    {id:"0a-6", who:"DD", sec:"1.11", blocked:true, t:"Externe heartbeat / dead man's switch",
+     dod:"Een externe dienst alarmeert bij UITBLIJVEN van de dagelijkse ping; getest door de VPS bewust één dag uit te zetten.",
+     why:"<code>run_daily()</code> ziet gaten alleen bij de eerstvolgende run die wél draait. Staat de machine drie weken uit, hoort niemand iets."},
+    {id:"0a-7", who:"—", sec:"1.11", t:"T₀ᵃ: de ingestieklok loopt",
+     dod:"7 dagen op rij data zonder handmatige actie; triggers zichtbaar in <code>trigger_events</code>.",
+     why:"Elke dag zonder VPS is een verloren dag point-in-time-data voor de Alpha Vantage-reeksen — die zijn niet retroactief te reconstrueren."}
+  ]
+},
+{
+  id:"0b", title:"Fase 0b — Historie en runtime-fixes", when:"6 – 12 okt 2026",
+  goal:"De database bevat de volledige historie; de groei-knopen van de graaf worden bediend; de twee bekende runtime-gaten zijn dicht.",
+  tasks:[
+    {id:"0b-1", who:"CC", sec:"1.11", t:"Back-fill — volledige historie waar de bron dat toelaat",
+     dod:"Elke gemonitorde metric heeft historie in de DB; macroreeksen ≥ 20 jaar (FRED geeft 50+), Alpha Vantage wat het endpoint geeft.",
+     why:"Niet '≥5 jaar': 2021–2026 is één verkrapping en één verruiming, te dun om drempels of climatology op te ijken."},
+    {id:"0b-2", who:"CC", sec:"2.7", t:"Economic agent — lean",
+     dod:"Monitoring + deep-dive op ICSA (wekelijks), UNRATE, PAYEMS; <code>src/analysis/sahm_rule.py</code>; registry-entry <code>FRED:economic</code>; sectie in <code>docs/agents.md</code>; checkpoint 1 uit <code>CLAUDE.md</code> doorlopen vóór koppeling aan de manager.",
+     why:"Enige uitzondering op 'geen nieuwe agents pre-T₀': zonder groei-knopen leert de forward test een half jaar niets over groei en arbeidsmarkt. ICSA is de snelst resolvende macroreeks die er is."},
+    {id:"0b-3", who:"CC", sec:"1.11", t:"Atomiciteit claims / dedup-rij",
+     dod:"Transactie rond <code>save_domain_output()</code> + <code>record_agent_run()</code>; een gesimuleerde crash ertussen laat geen claims zonder dedup-rij achter (regressietest).",
+     why:"Op een VPS die herstart is dit geen theoretisch geval. Dubbele claims verstoren revisie-detectie én delta-triggers."},
+    {id:"0b-4", who:"CC", sec:"1.11", t:"Ouderdomsgrens in system_health()",
+     dod:"Eén mislukte deep-dive maakt <code>llm</code>/<code>agent:&lt;domein&gt;</code> niet permanent <code>unreachable</code>; geen dagelijkse kritieke melding meer over een oude fout.",
+     why:"Alert-moeheid is precies wat de notificatielaag moest voorkomen."}
+  ]
+},
+{
+  id:"1", title:"Fase 1 — De causale graaf (parallel, niet blokkerend)", when:"6 – 26 okt 2026",
+  goal:"Eén gedeeld, handgeschreven model van de economische machine. <em>Handwerk van DD en partner; T₀ᵇ hangt er niet van af.</em>",
+  tasks:[
+    {id:"1-1", who:"partner", sec:"1.10", t:"15–25 knopen vastleggen in docs/causal-graph.md",
+     dod:"Tabel 'Knopen' gevuld: id, concept, waarneembare metric(s), bediend door. Eerst zonder naar de bestaande agents te kijken.",
+     why:"Een knoop is een concept (kredietimpuls), geen reeks (TOTBKCR). Meer dan 25 knopen = meer parameters dan cycli in de data."},
+    {id:"1-2", who:"partner", sec:"1.10", t:"Pijlen met richting, vertraging en zekerheid",
+     dod:"Tabel 'Pijlen' gevuld; oneens-punten expliciet onderaan bij 'Open punten'.",
+     why:"De vertraging bepaalt straks op welke horizon een agent op die knoop mag voorspellen; jullie zekerheid wordt later de prior."},
+    {id:"1-3", who:"CC", sec:"1.10 / 4.4", t:"Elke pijl deterministisch toetsen op de back-fill",
+     dod:"Lead-lag-correlatie op de opgegeven vertraging over de volledige historie; kolom 'houdt stand / niet / onbeslist' in <code>causal-graph.md</code>. Pijlen die niet standhouden gaan naar 'Open punten', niet naar de enum.",
+     why:"Geen LLM in de lus, dus geen hindsight. Dit is de enige toets van jullie eigen model die vóór mei 2027 iets kan bewijzen."},
+    {id:"1-4", who:"CC", sec:"1.10", t:"src/contract/graph.py — knopen als enum + dekking per agent in docs/agents.md",
+     dod:"Enum bestaat, tests groen; per agent staat welke knopen hij bedient en welke gaten er zijn.",
+     why:"Gaten in de dekking zijn de input voor de prioritering van fase 4."},
+    {id:"1-5", who:"DD", sec:"1.10", t:"Beslissing bij T₀ᵇ: graaf v0 mee, of uitgesteld naar cohort v1",
+     dod:"Versieregel in <code>causal-graph.md</code> ingevuld (v0 + datum) óf expliciet 'v1, na T₀ᵇ' vastgelegd.",
+     why:"<code>graph_node</code> is optioneel in cohort 0. Resolutie gebeurt op metrics; de graaf is een label voor attributie en contradictie, geen voorwaarde om te scoren."}
+  ]
+},
+{
+  id:"2", title:"Fase 2 — Het voorspellingscontract", when:"6 – 19 okt 2026",
+  goal:"Agents en mensen produceren falsifieerbare uitspraken in één onveranderlijke tabel.",
+  tasks:[
+    {id:"2-1", who:"CC", sec:"1.2 / 4.1", blocked:true, t:"predictions-tabel en Prediction-contract",
+     dod:"Velden uit 4.1: <code>agent</code>, <code>cohort</code>, <code>contract_version</code>, <code>model_id</code>, <code>prompt_version</code>, <code>target_metric_key</code>, <code>kind</code> (quantile/binary), <code>q10/q50/q90</code> of <code>probability</code>+<code>event_rule</code>, <code>horizon_kind</code>+<code>horizon_n</code>, <code>evidence_claim_ids</code>, <code>trigger_version</code>, <code>trigger_conditioned</code>, <code>resolves_at</code>, <code>resolution_rule</code>, <code>market_implied_ref</code>. Onveranderlijk na insert.",
+     why:"Kwantielen i.p.v. binaire richting+drempel: meer informatie per resolutie, en richtings-/drempelkansen volgen er automatisch uit. <code>model_id</code> omdat Anthropic modellen deprecateert binnen een cohortduur."},
+    {id:"2-2", who:"CC", sec:"4.1", blocked:true, t:"resolution_rule machine-uitvoerbaar, inclusief vintage",
+     dod:"Regel: eerste print zoals opgeslagen in de eigen claims-historie op <code>resolves_at + 3 dagen</code>; revisies wijzigen een uitkomst nooit. Test met een gesimuleerde revisie.",
+     why:"Zonder vintage-regel volgt in maand 6 alsnog de discussie 'wat bedoelde de agent'. Jullie hebben revisie-detectie gebouwd — gebruik 'm hier."},
+    {id:"2-3", who:"CC", sec:"4.1 / 2.0", t:"Cadans-bewuste horizonnen",
+     dod:"<code>trading_days</code> 5/21/63 voor dagreeksen; <code>releases</code> 1/2/3 voor week-/maandreeksen. QC weigert een release-horizon op een dagreeks en andersom.",
+     why:"Een 5-daagse voorspelling op CPI of UNRATE bestaat niet — er is geen nieuwe print."},
+    {id:"2-4", who:"CC", sec:"1.2 / 2.0", t:"evaluations-tabel",
+     dod:"Aparte tabel: resolved_value, outcome, pinball/CRPS, Brier, log loss; FK naar prediction.",
+     why:"Een prediction is onveranderlijk; een evaluation ontstaat later. Nooit in dezelfde rij."},
+    {id:"2-5", who:"CC", sec:"2.0 / 1.8", blocked:true, t:"Forecast-ronde in agents/base.py en de dispatch",
+     dod:"Wekelijks, vaste dag, één LLM-call per voorspellende agent die alle doelen van die agent in één JSON zet; los van de trigger-keten. Triggers mogen extra predictions geven met <code>trigger_conditioned=1</code>. Agent ziet: eigen claims + <code>src/analysis/</code>-uitkomsten, niet alle domeinen.",
+     why:"Predictions alleen bij triggers = selectiebias (alleen in volatiele weken). Alle domeinen tonen = zeven keer de synthesizer meten."},
+    {id:"2-6", who:"CC", sec:"2.0", blocked:true, t:"Doelenlijst per agent voor cohort 0",
+     dod:"Vastgelegd in <code>docs/agents.md</code>: monetary (DGS10 5/21/63; FEDFUNDS richting volgende 1/2 FOMC), financial (HY OAS, VIX, T10Y2Y 5/21/63; NFCI 1/4/12 weekprints), sector (RS vs SPY per ETF, 11 doelen, 5/21), economic (ICSA 1/4 weekprints; UNRATE, PAYEMS 1/3 maandprints), currency (3 paren 5/21/63, controlegroep). Commodity: alleen monitoring.",
+     why:"Niet 'hoeveel per week' maar 'hoeveel onafhankelijke doelen'. Herhaling op één knoop levert geen power; breedte wel."},
+    {id:"2-7", who:"CC", sec:"1.6", t:"Mechanische QC weigert onscoorbare predictions",
+     dod:"Geweigerd (niet gevlagd): ontbrekende kwantielen/kans, regel, horizon, <code>model_id</code>; niet-monotone kwantielen; horizon past niet bij de cadans.",
+     why:"De ene plek waar NEEDS_REVIEW niet volstaat — een onscoorbare voorspelling vervuilt het track record permanent."},
+    {id:"2-8", who:"CC", sec:"4.8", t:"Invoerpad voor menselijke voorspellers",
+     dod:"CLI of formulier: DD en partner leggen wekelijks kwantielen/kansen vast op een vrije keuze uit de cohort-0-doelen, <code>agent='human:dd'</code> / <code>'human:partner'</code>, zelfde QC. Blind: vóórdat de forecast-ronde van die week zichtbaar is.",
+     why:"De baseline die er voor TCE echt toe doet, én direct een kalibratie-instrument voor jullie eigen macro-oordeel — ongeacht hoe de agents presteren."},
+    {id:"2-9", who:"CC", sec:"1.2", t:"Marktimpliciete referenties opslaan",
+     dod:"Waar gratis beschikbaar (fed funds futures, forwards): waarde op het moment van voorspellen in <code>market_implied_ref</code>. Niet gebruikt in scoring cohort 0.",
+     why:"Niet retroactief te reconstrueren. Opslaan is goedkoop; later alsnog willen hebben is onmogelijk."},
+    {id:"2-10", who:"DD", sec:"2.1", t:"Beslissing: FOMC-statement als tekstinput voor de monetary agent?",
+     dod:"Ja/nee vastgelegd in Open beslissingen. Bij ja: statement-tekst in deep-dive en forecast-ronde van 2.1 (geen nieuwe agent).",
+     why:"De enige input in cohort 0 die Python niet kan lezen. Zonder tekst heeft het LLM geen informatievoordeel op de derde baseline — dat is een geaccepteerde uitkomst, geen bug, maar wel een keuze."}
+  ]
+},
+{
+  id:"3", title:"Fase 3 — Scoring engine en baselines", when:"13 okt – 2 nov 2026",
+  goal:"Elke voorspelling wordt automatisch en onherroepelijk gescoord, tegen drie baselines, met eerlijke onzekerheid.",
+  tasks:[
+    {id:"3-1", who:"CC", sec:"4.5", blocked:true, t:"Resolver in run_daily",
+     dod:"Pakt dagelijks elke prediction met verstreken <code>resolves_at</code>, past de regel toe (incl. vintage), schrijft een evaluation. Kan een release-horizon afwikkelen (wacht op de print). Minstens één cohort correct afgewikkeld in een test.",
+     why:"Zonder resolver is een voorspelling een mening."},
+    {id:"3-2", who:"CC", sec:"4.5", t:"Scores: pinball loss + CRPS, Brier + log loss, kalibratie (PIT), AUC",
+     dod:"Per prediction en per agent; uitsplitsing per domein, horizon, <code>model_id</code>. Tests met bekende uitkomsten.",
+     why:"Proper scoring rules belonen eerlijkheid; kalibratie zonder discriminatie is nutteloos."},
+    {id:"3-3", who:"CC", sec:"4.5", blocked:true, t:"Effectieve n en onzekerheidsband via block-bootstrap",
+     dod:"Elke score heeft een band uit een block-bootstrap over overlappende horizonnen en gecorreleerde doelen; effectieve n staat naast de nominale n.",
+     why:"Vijf voorspellingen per week op 63 dagen overlappen negen weken. Zonder dit leest iemand in februari 'n=130' en beslist op n≈4."},
+    {id:"3-4", who:"CC + DD", sec:"4.5", t:"Skill-posterior per agent, met vooraf vastgelegde prior",
+     dod:"P(skill &gt; 0 t.o.v. beste baseline) per agent; de prior staat gedocumenteerd vóór de freeze en verandert niet meer.",
+     why:"Dit is het getal waarop het 6-maanden-moment beslist — geen p-waarde, geen puntschatting."},
+    {id:"3-5", who:"CC", sec:"4.6", blocked:true, t:"Baseline 1: persistence",
+     dod:"Kwantielen uit de historische verdeling van veranderingen over de horizon; draait als agent mee in de scoring.",
+     why:"'Het blijft zoals het is' is verrassend moeilijk te verslaan."},
+    {id:"3-6", who:"CC", sec:"4.6", blocked:true, t:"Baseline 2: climatology (incl. seizoenscomponent)",
+     dod:"Onvoorwaardelijke historische verdeling uit de volledige back-fill, conditioneel op kalender waar dat zinvol is; draait als agent mee.",
+     why:"Seasonals horen hier, niet in een aparte agent."},
+    {id:"3-7", who:"CC", sec:"4.6", blocked:true, t:"Baseline 3: deterministisch model op de agent's eigen inputs",
+     dod:"Ridge/logistische regressie op precies de z-scores en analysis-uitkomsten die het LLM ziet; gefit op de back-fill vóór T₀ᵇ, daarna bevroren; draait als agent mee.",
+     why:"Verslaat het LLM dít niet, dan voegt het niets toe boven zijn inputs en zit de winst in tekst (news agent). Dat is een uitkomst, geen mislukking."},
+    {id:"3-8", who:"CC", sec:"4.5", t:"Synthesizer als gescoorde agent",
+     dod:"Cross-domein forecast-ronde, zelfde doelen, <code>agent='synthesizer'</code>.",
+     why:"Het enige wat jullie uiteindelijk lezen. Als alleen de domain agents gescoord worden, weet je in mei niets over het product."},
+    {id:"3-9", who:"CC", sec:"1.5 / 4.2", t:"Trigger-versioning + drempelkalibratie tegen de volledige historie",
+     dod:"<code>trigger_version</code> op elke trigger; per regel bekend hoe vaak hij historisch gevuurd zou hebben; illustratieve waarden vervangen; held-vs-breached-tracking staat klaar.",
+     why:"Een drempel die 200× per jaar vuurt is ruis, één die 2× vuurt is blind. Puur deterministisch, dus dit backtesten is wél geldig."}
+  ]
+},
+{
+  id:"3b", title:"Fase 3b — Pseudo-out-of-sample, dry-run, freeze", when:"27 okt – 9 nov 2026",
+  goal:"Bugs eruit vóór de klok loopt, en een eerste — indicatieve — kalibratie.",
+  tasks:[
+    {id:"3b-1", who:"CC", sec:"4.4", t:"Pseudo-OOS-run juli – september 2026",
+     dod:"Forecast-ronde op point-in-time-data, web search uit, geen data van na de voorspeldatum in de prompt; <code>cohort='pseudo_oos'</code>; resolver en scores draaien erover; bevindingen (contract-/resolverfouten) verwerkt.",
+     why:"Fable 5.1's cutoff is juni 2026: van daarna weet het model niets. Drie maanden echte OOS-test, vandaag beschikbaar."},
+    {id:"3b-2", who:"CC", sec:"4.4", t:"Pseudo-OOS-run 2025 met ouder model",
+     dod:"Zelfde opzet met een model waarvan de cutoff vóór 2025 ligt; apart gelabeld; nooit gemengd met het echte cohort.",
+     why:"~18 maanden extra, met een volledige overgang van verkrapping naar verruiming. Indicatief: residuele lekkage via latere fine-tuning is niet uit te sluiten."},
+    {id:"3b-3", who:"DD + CC", sec:"CLAUDE.md cp. 3", blocked:true, t:"Dry-run-week: volledige cyclus, alleen loggen",
+     dod:"7 dagen incl. forecast-ronde, resolver, baselines en menselijke invoer; DD controleert dagelijks de logs tegen een vaste lijst; gevonden fouten gefixt vóór de freeze.",
+     why:"Checkpoint 3 uit CLAUDE.md. Fouten die je hier vindt kosten een dag; fouten die je in december vindt kosten een cohort."},
+    {id:"3b-4", who:"DD", sec:"CLAUDE.md cp. 5", blocked:true, t:"Freeze met versienummers",
+     dod:"Contract v0, resolution rules, drempels, prompts, <code>model_id</code>, doelenlijst en prior voor de skill-posterior expliciet bevestigd en gecommit; graaf v0 of 'v1 later'.",
+     why:"Na de freeze: contract/graaf/rules wijzigen = nieuw cohort; prompt-woord, bugfix of modelwissel = covariaat in hetzelfde cohort. Drempels verschuiven omdat de resultaten tegenvallen: nooit."}
+  ]
+},
+{
+  id:"t0", gate:true, title:"T₀ᵇ — de predictieklok loopt", when:"streefdatum 10 november 2026",
+  goal:"Alle punten verplicht. Dit is geen taak maar een poort: pas als alles hieronder staat, begint het cohort.",
+  tasks:[
+    {id:"t0-1", who:"—", sec:"1.11", t:"Dagelijkse automatische run met live data, 14 dagen op rij zonder handmatige actie", dod:""},
+    {id:"t0-2", who:"—", sec:"1.11", t:"Offsite back-up loopt dagelijks én is één keer hersteld", dod:""},
+    {id:"t0-3", who:"—", sec:"1.11", t:"Externe heartbeat actief en getest door de machine uit te zetten", dod:""},
+    {id:"t0-4", who:"—", sec:"1.11", t:"API-quota gemeten tegen het dagelijkse callvolume incl. deep-dives", dod:""},
+    {id:"t0-5", who:"—", sec:"1.5 / 4.2", t:"Back-fill klaar; drempels gekalibreerd tegen de volledige historie", dod:""},
+    {id:"t0-6", who:"—", sec:"2.7", t:"Economic agent lean gebouwd en gekoppeld", dod:""},
+    {id:"t0-7", who:"—", sec:"1.2 / 4.1", t:"predictions-tabel met kwantielen/kans, resolution_rule incl. vintage, model_id, prompt_version", dod:""},
+    {id:"t0-8", who:"—", sec:"2.0 / 4.8", t:"Forecast-ronde draait wekelijks voor vijf agents + synthesizer; menselijke invoer werkt", dod:""},
+    {id:"t0-9", who:"—", sec:"4.5", t:"Resolver heeft minstens één cohort correct afgewikkeld, incl. een release-horizon", dod:""},
+    {id:"t0-10", who:"—", sec:"4.6", t:"Drie baselines draaien mee", dod:""},
+    {id:"t0-11", who:"—", sec:"4.4", t:"Pseudo-OOS-run uitgevoerd en bevindingen verwerkt", dod:""},
+    {id:"t0-12", who:"—", sec:"CLAUDE.md", t:"Dry-run-week doorlopen, freeze vastgelegd met versienummers", dod:""},
+    {id:"t0-13", who:"—", sec:"1.10", t:"Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1", dod:""}
+  ]
+},
+{
+  id:"4", later:true, title:"Fase 4 — Verdiepen terwijl het draait", when:"nov 2026 – apr 2027 · niet blokkerend, op volgorde van waarde",
+  goal:"De klok loopt vanzelf. Alles hieronder loopt ernaast en raakt het cohort niet. <em>Richtinggevend; wordt concreet zodra T₀ᵇ staat.</em>",
+  tasks:[
+    {id:"4-1", who:"CC", sec:"2.8", t:"News Monitor Agent — smal", dod:"3–5 betrouwbare feeds, handmatig gedefinieerde entiteiten, event extraction naar knopen, provenance-eis vóór de trigger-laag. Geen entity resolution/dedup/novelty.", why:"De enige agent waar het LLM iets ziet dat Python niet ziet. Als baseline 3 de LLM's evenaart, is dit de reden."},
+    {id:"4-2", who:"CC", sec:"5.2", t:"Minimaal dashboard", dod:"Kalibratie, CRPS/Brier, effectieve n, skill-posterior per agent — mensen, baselines en synthesizer zonder onderscheid in weergave.", why:"Als je het eigen track record niet dagelijks ziet, stuurt niemand bij."},
+    {id:"4-3", who:"CC", sec:"3.1 / 1.2", t:"node_state-entiteit + contradictie-detectie", dod:"(knoop, agent, datum, richting, sterkte, horizon); conflict = tegengestelde richting op dezelfde knoop en horizon; gedeelde-bron-vlag op de DispatchPlan.", why:"Een label op een claim maakt tegenstrijdigheid nog niet meetbaar."},
+    {id:"4-4", who:"DD + partner", sec:"1.10", t:"Causale graaf v1 verplicht op elke prediction; economic agent uitbreiden", dod:"graph_node verplicht, causal_chain gevuld; output gap, ISM (eigen bron).", why:"Start cohort v1."},
+    {id:"4-5", who:"—", sec:"22 dec 2026", t:"Herzieningsmoment T₀ᵇ + 6 weken — alleen mechanica", dod:"Draait het elke dag, resolven predictions correct incl. release-horizonnen, zitten er gaten in? Niet naar scores kijken.", why:""},
+    {id:"4-6", who:"—", sec:"10 feb 2027", t:"Herzieningsmoment T₀ᵇ + 3 maanden — mechanica + richting", dod:"Is het teken van (agent − baseline) consistent over horizonnen en doelen? Pseudo-OOS naast het echte cohort. Geen significantie.", why:""},
+    {id:"4-7", who:"CC", sec:"3.3", t:"Regime als latente variabele (HMM op dagelijkse marktdata)", dod:"Posterior over vol-/correlatieregimes, geen label; niet op macroreeksen.", why:""},
+    {id:"4-8", who:"CC", sec:"2.9", t:"NQ als conditionele verdeling", dod:"Gegeven regimeposterior en graafstand: verwachte verdeling van NQ over horizon X. Pas na 3.3 en kalibratie van de domain agents.", why:""},
+    {id:"4-9", who:"CC", sec:"3.2 / 2.6", t:"Kalman filter; commodity naar dagelijkse bron en in het cohort", dod:"", why:""}
+  ]
+},
+{
+  id:"5", later:true, title:"Fase 5 — De gewogen pool", when:"vanaf mei 2027",
+  goal:"Pas nu is er waar deze laag op draait: een half jaar gescoorde predictions met effectieve n. <em>Richtinggevend.</em>",
+  tasks:[
+    {id:"5-1", who:"—", sec:"10 mei 2027", t:"Herzieningsmoment T₀ᵇ + 6 maanden — volledige evaluatie", dod:"Skill-posterior per agent; verwijderen alleen bij posterior &lt; 0,2 onder de vooraf vastgelegde prior.", why:""},
+    {id:"5-2", who:"CC", sec:"3.4", t:"Opinion pool met gewichten uit 4.5, partial pooling, shrinkage-correlatiecorrectie, extremizing", dod:"Mensen en baselines als volwaardige leden. Het LLM raakt deze laag nooit aan.", why:"Een 7×7-correlatiematrix uit ~25 effectieve episodes is ruis; Ledoit-Wolf naar een gedeelde correlatie."},
+    {id:"5-3", who:"—", sec:"buiten 3.4", t:"Apart en later: Bayesiaans netwerk over de graaf; Black-Litterman/Kelly in het portefeuilleproject", dod:"", why:"Het BN blijft prior-gedomineerd met ~10–15 macrocycli; BL/Kelly is een beslissingslaag, geen intelligence."}
+  ]
+}
+];
+
+const KEY="mi-roadmap-state-v1";
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")||{};}catch(e){state={};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+let onlyOpen=false;
+
+function render(){
+  const main=document.getElementById("main"); main.innerHTML="";
+  const toc=document.getElementById("toc"); toc.innerHTML="";
+  let total=0,done=0;
+  for(const ph of PHASES){
+    const sec=document.createElement("section");
+    sec.className="phase"+(ph.gate?" gate":"")+(ph.later?" later":"");
+    sec.id="ph-"+ph.id;
+    const pdone=ph.tasks.filter(t=>state[t.id]).length;
+    if(!ph.later){total+=ph.tasks.length;done+=pdone;}
+    const pct=ph.tasks.length?Math.round(100*pdone/ph.tasks.length):0;
+    sec.innerHTML=`<div class="phead"><h2>${ph.title}</h2><span class="when">${ph.when}</span><span class="pct">${pdone}/${ph.tasks.length}</span></div>
+      <p class="goal">${ph.goal}</p><div class="pbar"><i style="width:${pct}%"></i></div>`;
+    for(const t of ph.tasks){
+      const d=!!state[t.id];
+      if(onlyOpen&&d) continue;
+      const el=document.createElement("label");
+      el.className="task"+(d?" done":"")+(t.blocked?" blocked":"");
+      const who=(t.who||"—").split(" + ").map(w=>`<span class="tag who ${w.toLowerCase()==="dd"?"dd":w.toLowerCase()==="partner"?"partner":""}">${w}</span>`).join("");
+      el.innerHTML=`<input type="checkbox" ${d?"checked":""} data-id="${t.id}">
+        <div><div class="t">${t.t}</div>
+        <div class="meta">${who}<span class="tag">§ ${t.sec}</span>${t.blocked?'<span class="tag" style="color:var(--warn);border-color:var(--warn)">blokkeert</span>':""}</div>
+        ${t.dod?`<div class="dod"><b>Klaar als:</b> ${t.dod}</div>`:""}
+        ${t.why?`<div class="why">${t.why}</div>`:""}</div>`;
+      sec.appendChild(el);
+    }
+    main.appendChild(sec);
+    const a=document.createElement("a"); a.href="#ph-"+ph.id; a.textContent=ph.title.split(" — ")[0]; toc.appendChild(a);
+  }
+  document.getElementById("overallLabel").textContent=`${done} van ${total} taken tot en met T₀ᵇ afgerond`;
+  document.getElementById("overallBar").style.width=(total?Math.round(100*done/total):0)+"%";
+  document.getElementById("overallDate").textContent=state._updated?("laatst bijgewerkt "+state._updated):"";
+}
+document.getElementById("main").addEventListener("change",e=>{
+  const id=e.target.getAttribute("data-id"); if(!id) return;
+  if(e.target.checked) state[id]=new Date().toISOString().slice(0,10); else delete state[id];
+  state._updated=new Date().toISOString().slice(0,16).replace("T"," ");
+  save(); render();
+});
+document.getElementById("toggleOpen").onclick=function(){onlyOpen=!onlyOpen;this.textContent=onlyOpen?"Toon alle taken":"Toon alleen open taken";render();};
+document.getElementById("exportBtn").onclick=()=>{
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roadmap-stand-"+new Date().toISOString().slice(0,10)+".json";a.click();
+};
+document.getElementById("importFile").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{try{state=JSON.parse(r.result)||{};save();render();}catch(err){alert("Geen geldig JSON-bestand.");}};
+  r.readAsText(f); e.target.value="";
+};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Alle vinkjes wissen?")){state={};save();render();}};
+document.getElementById("themeBtn").onclick=()=>{
+  const r=document.documentElement; const cur=r.getAttribute("data-theme");
+  const next=cur==="dark"?"light":cur==="light"?null:"dark";
+  if(next) r.setAttribute("data-theme",next); else r.removeAttribute("data-theme");
+  try{localStorage.setItem(KEY+"-theme",next||"");}catch(e){}
+};
+try{const th=localStorage.getItem(KEY+"-theme"); if(th) document.documentElement.setAttribute("data-theme",th);}catch(e){}
+render();
+</script>
+</body>
+</html>
