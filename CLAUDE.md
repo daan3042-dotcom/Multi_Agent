@@ -26,8 +26,16 @@ Reden: LLM-agents zijn niet eerlijk te backtesten — een model dat nu naar
 geldige weg, en dat kost kalendertijd in plaats van werktijd. Alles wat
 geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
 
-**Huidige focus: sectie 1.11 (Scheduler & Runtime).** Zie
-`docs/roadmap.md` deel A en `docs/project-state.md`.
+**Herzien op 27-09-2026 (externe review):** twee klokken — T₀ᵃ
+(ingestieklok, streefdatum 3-10-2026) en T₀ᵇ (predictieklok, 10-11-2026);
+kwantielen i.p.v. binaire richting; drie baselines; pseudo-out-of-sample
+vóór T₀ᵇ; economic agent lean vóór T₀; mensen als gescoorde
+voorspellers; `graph_node` optioneel in cohort 0. Alle correcties met
+onderbouwing in `docs/roadmap.md`, "Wat er op 27-09-2026 veranderd is".
+
+**Huidige focus: sectie 1.11 (Scheduler & Runtime), T₀ᵃ.** Zie
+`docs/roadmap.md` deel A, `docs/roadmap.html` (afvinkbare handleiding)
+en `docs/project-state.md`.
 
 ## De regels die uit `analyst_agent.ai` zijn overgenomen (en waarom)
 
@@ -90,9 +98,24 @@ geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
 - Geen roadmap-items oppakken die niet op het kritieke pad naar T₀ liggen
   zolang T₀ niet gehaald is (zie `docs/roadmap.md` deel A, "Huidige
   focus"). Dat betekent concreet: **geen nieuwe agents, geen
-  Finetune-modellen en geen synthese-uitbreidingen** tot de zes punten
-  van de T₀-checklist staan, hoe verleidelijk ook. Twijfel je of iets op
-  het kritieke pad ligt? Eerst voorleggen.
+  Finetune-modellen en geen synthese-uitbreidingen** tot de punten van
+  de T₀-checklist staan, hoe verleidelijk ook. **Eén uitzondering,
+  beslist op 27-09-2026:** de economic agent komt *lean* vóór T₀ (2.7:
+  ICSA/UNRATE/PAYEMS + Sahm Rule, meer niet), omdat de graaf anders geen
+  groei-knopen heeft. Twijfel je of iets op het kritieke pad ligt? Eerst
+  voorleggen.
+- **Wie berekent de kans (27-09-2026).** In cohort 0 spreekt het LLM per
+  agent zelf kwantielen/een kans uit op een gestructureerde
+  evidence-sheet — dat is precies wat er forward-getest wordt. Python
+  weigert (QC), resolvet en scoort, en **aggregeert nooit over agents
+  heen**; dat is 3.4. Een LLM berekent nooit een baseline, score of
+  gewicht. Zie de LLM-taken-tabel in `docs/architecture.md` (1.8).
+- **Elke prediction draagt `model_id` en `prompt_version`.** Een
+  modelwissel of promptwijziging binnen een cohort is een covariaat, geen
+  nieuw cohort; een wijziging aan contract, graaf of resolution rules
+  wél. Pin het model per cohort; Anthropic deprecateert modellen binnen
+  de cohortduur van zes maanden, dus plan de migratie in plaats van 'm
+  te ondergaan.
 - **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
   (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
   trigger-drempels zonder versienummer.** Elke zo'n wijziging start
@@ -118,7 +141,11 @@ ook als de wijziging correct en laag-risico lijkt:
 3. **Vóór elke uitrol naar de VPS of elke wijziging die onbeheerd draaien
    beïnvloedt** (scheduler, cron, `run_daily.py`). Stel eerst een
    dry-run-plan voor: hoe lang alleen-loggen draait voordat het vertrouwd
-   wordt, en wat DD in de logs moet controleren.
+   wordt, en wat DD in de logs moet controleren. De dry-run-week vóór
+   T₀ᵇ staat op de T₀-checklist in `docs/roadmap.md`.
+5. **Bij de freeze vóór T₀ᵇ** (contract v0, resolution rules, drempels,
+   prompts, `model_id`, de prior voor de skill-posterior): expliciet
+   laten bevestigen, met versienummers, voordat de klok gaat lopen.
 4. **Zodra een databron, drempel of aanname niet met vertrouwen te
    verifiëren is** (vergelijkbaar met de FINRA-schema-discovery in
    `analyst_agent.ai`). Nooit stilzwijgend doorgaan met een beste gok —
