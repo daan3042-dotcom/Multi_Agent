@@ -170,10 +170,15 @@ def open_db(path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
-def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
+def save_domain_output(conn: sqlite3.Connection, output: DomainOutput, commit: bool = True) -> int:
     """Slaat een volledige DomainOutput (en al zijn claims) op in één
     transactie -- een DomainOutput zonder zijn claims, of andersom, zou de
-    database in een staat achterlaten die het contract uit A.1 schendt."""
+    database in een staat achterlaten die het contract uit A.1 schendt.
+
+    `commit=False` (roadmap 1.11, 0b-3): laat de INSERT(s) in de open
+    transactie staan zonder te committen -- voor een aanroeper (agents/
+    base.py) die deze write en een volgende (record_agent_run()) atomisch
+    samen wil vastleggen. Zie die module se `_save_output_and_record_run()`."""
     cur = conn.execute(
         "INSERT INTO domain_outputs (domain, mode, generated_at, needs_review, review_issues_json) "
         "VALUES (?, ?, ?, ?, ?)",
@@ -206,7 +211,8 @@ def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
                 c.note,
             ),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
     return domain_output_id
 
 
@@ -360,6 +366,7 @@ def record_agent_run(
     trigger_count: int = 0,
     error: str | None = None,
     event_id: str | None = None,
+    commit: bool = True,
 ) -> int:
     """Audit-log-regel voor ÉÉN monitoring- of deep-dive-cyclus van een
     domain agent (roadmap 1.2, entiteit agent_runs) -- los van de claims
@@ -375,13 +382,19 @@ def record_agent_run(
     2026-01-01"). Een tweede succesvolle rij met hetzelfde domain+mode+
     event_id wordt door het schema zelf geweigerd (sqlite3.IntegrityError,
     zie idx_agent_runs_event_id) -- een mislukte poging blokkeert een
-    retry met hetzelfde event_id NIET."""
+    retry met hetzelfde event_id NIET.
+
+    `commit=False` (roadmap 1.11, 0b-3): zelfde reden als
+    save_domain_output()'s `commit`-parameter -- laat de aanroeper deze
+    write en de bijbehorende save_domain_output() atomisch samen
+    committen."""
     cur = conn.execute(
         "INSERT INTO agent_runs (domain, mode, run_at, success, domain_output_id, trigger_count, error, event_id) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (domain, mode, run_at.isoformat(), int(success), domain_output_id, trigger_count, error, event_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return cur.lastrowid
 
 

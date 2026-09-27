@@ -188,6 +188,48 @@ def _parse_source_date(raw: str | None) -> datetime | None:
     return parsed
 
 
+def _save_output_and_record_run(
+    conn,
+    output: DomainOutput,
+    domain: str,
+    mode: str,
+    now: datetime,
+    success: bool,
+    trigger_count: int,
+    error: str | None = None,
+    event_id: str | None = None,
+) -> int:
+    """Roadmap 1.11 (0b-3, atomiciteit): save_domain_output() en
+    record_agent_run() horen bij elkaar -- een crash TUSSEN de twee writes
+    (bijv. een VPS die herstart terwijl het proces halverwege stond) zou
+    anders een domain_output + claims achterlaten zonder de bijbehorende
+    agent_runs-dedup-rij. Draait dit domein met een `event_id`, dan ziet
+    has_successful_run() dat event_id vervolgens als NOG NIET verwerkt --
+    een terechte retry zou dan de fetch/deep-dive opnieuw doen en de
+    claims van diezelfde cyclus een tweede keer opslaan, wat de
+    delta-trigger en revisie-detectie in de war stuurt (die vergelijken
+    tegen "de vorige observatie" en zien dan hun eigen duplicaat).
+
+    Beide writes gebeuren hier zonder tussentijdse commit (commit=False);
+    pas als record_agent_run() ook geslaagd is, wordt er ÉÉN keer gecommit.
+    Gooit record_agent_run() een exception (bijv. de dedup-constraint uit
+    schema.py se idx_agent_runs_event_id bij een gelijktijdige run), dan
+    wordt de nog niet gecommitte save_domain_output() teruggedraaid --
+    geen half opgeslagen cyclus, en de exception blijft voor de aanroeper
+    zichtbaar (geen stille slikker, zie CLAUDE.md)."""
+    domain_output_id = save_domain_output(conn, output, commit=False)
+    try:
+        record_agent_run(
+            conn, domain, mode, now, success=success, domain_output_id=domain_output_id,
+            trigger_count=trigger_count, error=error, event_id=event_id, commit=False,
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
+    return domain_output_id
+
+
 def _maybe_open_qc_case(conn, domain: str, triggers: list[TriggerEvent], now) -> None:
     """Opent een QC-case (roadmap 1.6, status TRIGGERED) zodra er
     minstens één trigger is -- geen case voor een rustige, niet-
@@ -299,11 +341,11 @@ def run_monitoring(
         return None, triggers
 
     output = DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=now, claims=claims)
-    domain_output_id = save_domain_output(conn, output)
-
     triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
 
-    record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers), event_id=event_id)
+    domain_output_id = _save_output_and_record_run(
+        conn, output, domain, "monitoring", now, success=True, trigger_count=len(triggers), event_id=event_id,
+    )
     _maybe_open_qc_case(conn, domain, triggers, now)
 
     return output, triggers
@@ -457,9 +499,8 @@ def run_deep_dive(
             needs_review=True,
             review_issues=[str(e)],
         )
-        domain_output_id = save_domain_output(conn, output)
-        record_agent_run(
-            conn, domain, "deep_dive", now, success=False, domain_output_id=domain_output_id,
+        domain_output_id = _save_output_and_record_run(
+            conn, output, domain, "deep_dive", now, success=False,
             trigger_count=len(trigger_events), error=str(e), event_id=event_id,
         )
         if qc_case is not None:
@@ -508,8 +549,9 @@ def run_deep_dive(
         needs_review=outcome == QCCaseStatus.QC_FAILED,
         review_issues=final_issues,
     )
-    domain_output_id = save_domain_output(conn, output)
-    record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events), event_id=event_id)
+    domain_output_id = _save_output_and_record_run(
+        conn, output, domain, "deep_dive", now, success=True, trigger_count=len(trigger_events), event_id=event_id,
+    )
 
     if qc_case is not None:
         advance_qc_case(conn, qc_case.id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=domain_output_id)

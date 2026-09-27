@@ -94,6 +94,35 @@ def test_llm_component_unknown_without_any_deep_dive_run(tmp_path):
     assert report.status_for("llm") == HealthStatus.UNKNOWN
 
 
+def test_llm_component_becomes_unknown_after_stale_after_without_a_retry(tmp_path):
+    """Roadmap 1.11 (0b-4): een mislukte deep-dive die niet binnen
+    `stale_after` opnieuw geprobeerd is (deep-dives zijn opt-in, draaien
+    niet elke dag) mag niet voor altijd een kritieke melding blijven geven
+    -- zie system_health.py se moduledocstring en
+    runtime/notifications.py::build_notification (UNREACHABLE escaleert
+    altijd naar 'critical')."""
+    conn = _db(tmp_path)
+    failed_at = datetime.now(timezone.utc) - timedelta(days=10)
+    now = failed_at + timedelta(days=10)
+    record_agent_run(conn, "monetary_policy", "deep_dive", failed_at, success=False, error="API-fout")
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now, stale_after=timedelta(days=3))
+    assert report.status_for("llm") == HealthStatus.UNKNOWN
+
+
+def test_llm_component_still_unreachable_within_stale_after(tmp_path):
+    """Tegenhanger van de vorige test: BINNEN de grens blijft een mislukte
+    deep-dive gewoon UNREACHABLE -- de grens verzacht alleen oude fouten,
+    ze verbergt geen verse."""
+    conn = _db(tmp_path)
+    failed_at = datetime.now(timezone.utc) - timedelta(days=1)
+    now = failed_at + timedelta(days=1)
+    record_agent_run(conn, "monetary_policy", "deep_dive", failed_at, success=False, error="API-fout")
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now, stale_after=timedelta(days=3))
+    assert report.status_for("llm") == HealthStatus.UNREACHABLE
+
+
 def test_agent_component_combines_monitoring_and_deep_dive_status(tmp_path):
     """agent:<domain> is de OVERALL status -- ook slecht als alleen de
     deep-dive-kant faalt terwijl de monitoring-pull prima werkt."""

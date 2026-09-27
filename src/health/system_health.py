@@ -101,13 +101,27 @@ def _database_status(conn) -> ComponentHealth:
         return ComponentHealth(component="database", status=HealthStatus.UNREACHABLE, detail=str(e))
 
 
-def _latest_run_status(conn, domain: str, mode: str) -> tuple[HealthStatus, str | None]:
+def _latest_run_status(
+    conn, domain: str, mode: str, now: datetime, stale_after: timedelta,
+) -> tuple[HealthStatus, str | None]:
+    """Roadmap 1.11 (0b-4, ouderdomsgrens): een mislukte run telt alleen als
+    UNREACHABLE zolang hij binnen `stale_after` ligt. Zonder grens blijft de
+    LAATSTE run -- vooral bij deep_dive, die alleen op een trigger draait en
+    dus dagenlang niet herhaald wordt -- voor altijd UNREACHABLE totdat er
+    weer een nieuwe poging is, en dat geeft elke dag opnieuw een kritieke
+    melding over een fout die allang niet meer actueel is (zie
+    runtime/notifications.py::build_notification, dat UNREACHABLE altijd
+    escaleert). Voorbij die grens is er geen VERS signaal meer, dus UNKNOWN
+    ("geen actuele info"), niet OK ("gecontroleerd en gezond") -- dat laatste
+    zou een fout verbloemen die simpelweg niet opnieuw geprobeerd is."""
     runs = list_agent_runs(conn, domain, mode=mode, limit=1)
     if not runs:
         return HealthStatus.UNKNOWN, None
     latest = runs[0]
     if latest["success"]:
         return HealthStatus.OK, None
+    if now - latest["run_at"] > stale_after:
+        return HealthStatus.UNKNOWN, None
     return HealthStatus.UNREACHABLE, latest["error"]
 
 
@@ -131,6 +145,7 @@ def system_health(
     sources: dict[str, timedelta],
     domains: list[str],
     now: datetime | None = None,
+    stale_after: timedelta = timedelta(days=3),
 ) -> SystemHealthReport:
     """Roadmap 1.7: de ene centrale query/functie voor de actuele status
     per component. `sources` en `domains` worden door de aanroeper
@@ -139,6 +154,15 @@ def system_health(
     expliciet latere scope; deze functie blijft er bewust los van en
     neemt de topologie als parameter aan, zelfde dependency-injection-
     gedachte als qc.default_llm_review()'s client-parameter.
+
+    `stale_after` (roadmap 1.11, 0b-4) begrenst hoelang een mislukte
+    monitoring/deep_dive-run als UNREACHABLE meetelt -- zie
+    `_latest_run_status()`. Default 3 dagen: ruim boven de dagelijkse
+    cron-cadans van monitoring (een écht aanhoudend probleem daar krijgt
+    linksom elke dag een verse, nog niet vervallen UNREACHABLE-rij, dus de
+    grens doet daar in de praktijk niets af aan een terechte melding), maar
+    kort genoeg om een oude, nooit-opnieuw-geprobeerde deep_dive-fout niet
+    tot in lengte van dagen kritiek te blijven melden.
 
     LET OP, bestaande beperking (niet nieuw, hier alleen zichtbaar
     geworden): data_health.check_source() is per BRONNAAM, niet per
@@ -157,8 +181,8 @@ def system_health(
     ingestion_results: list[tuple[HealthStatus, str | None]] = []
     deep_dive_results: list[tuple[HealthStatus, str | None]] = []
     for domain in domains:
-        ingestion = _latest_run_status(conn, domain, "monitoring")
-        deep_dive = _latest_run_status(conn, domain, "deep_dive")
+        ingestion = _latest_run_status(conn, domain, "monitoring", now=now, stale_after=stale_after)
+        deep_dive = _latest_run_status(conn, domain, "deep_dive", now=now, stale_after=stale_after)
         ingestion_results.append(ingestion)
         deep_dive_results.append(deep_dive)
 

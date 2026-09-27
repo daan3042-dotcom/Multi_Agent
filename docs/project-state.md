@@ -1,6 +1,6 @@
 # Current Project State
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 
 ## Belangrijke koerswijziging (26-09-2026) — volgorde omgedraaid rond T₀
 
@@ -147,9 +147,58 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   de andere drie modellen). Eerste agent met een databron die écht geen
   overlap heeft met B/C.1-C.3.
 
-261 tests groen (`pytest`).
+314 tests groen (`pytest`).
 
 ## Currently working on / just finished
+
+- 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
+  **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
+  `save_domain_output()` en `record_agent_run()` committen nu als ÉÉN
+  transactie (nieuwe `commit=False`-parameter op beide in
+  `storage/schema.py`); een crash/exception ertussen rolt de eerste write
+  terug i.p.v. een domain_output+claims achter te laten zonder de
+  bijbehorende agent_runs-dedup-rij (zie `agents/base.py`'s docstring voor
+  waarom dat een retry met hetzelfde `event_id` in de war zou sturen).
+  2 regressietests (monitoring- en deep_dive-pad) in
+  `tests/test_agents_base.py`. **0b-4, ouderdomsgrens:**
+  `health/system_health.py::system_health()` kreeg een `stale_after`-
+  parameter (default 3 dagen) — een mislukte monitoring/deep_dive-run telt
+  na die grens niet langer als UNREACHABLE (dan UNKNOWN, geen vers signaal)
+  in plaats van voor altijd, wat zonder deze fix elke dag een kritieke
+  melding zou geven over een oude, nooit-opnieuw-geprobeerde fout (vooral
+  relevant voor deep_dive, die alleen op een trigger draait). 2 tests in
+  `tests/test_system_health.py`. **0a-3, API-quota:** callvolume per
+  agent/cyclus EXACT geteld uit de code (geen schatting) en vastgelegd in
+  nieuw `docs/data-sources.md` — monitoring-only bodem is al 8 FRED- +
+  24 Alpha Vantage-calls/dag, worst case (alle vijf domeinen triggeren
+  tegelijk) 12 FRED + 46 Alpha Vantage. **Expliciet geflagd (checkpoint 4
+  uit `CLAUDE.md`), niet stilzwijgend aangenomen:** de AV-free-tier-limiet
+  van 25/dag in dat document is Alpha Vantage's PUBLIEK gedocumenteerde
+  standaardlimiet, NIET tegen DD's eigen key geverifieerd — FRED/Alpha
+  Vantage zijn in deze sandbox-sessie opnieuw hard geblokkeerd op
+  netwerkniveau (zelfde blokkade als 24-09-2026 hieronder). Als dat cijfer
+  klopt, breekt de cyclus al op de monitoring-bodem (24 zit al tegen 25
+  aan) — DD moet dit op de VPS tegen de eigen key bevestigen vóór T₀ᵃ, zie
+  dat document se aanbeveling (tier upgraden of bron wisselen). Geen van
+  de drie taken raakte `docs/agents.md` (0b-3/0b-4 zijn puur infra, zie
+  1.7/1.4's precedent) behalve waar hieronder genoemd.
+
+  Daarna, **2.7 economic agent (lean)** — de ENE toegestane uitzondering op
+  "geen nieuwe agents pre-T₀" (besloten 27-09-2026). Nieuw:
+  `src/analysis/sahm_rule.py` (Sahm Rule, Sahm 2019, zelf berekend uit
+  ruwe UNRATE-historie — zelfde "Python berekent, LLM narrate"-patroon als
+  Taylor Rule/NFCI/relatieve sterkte), `src/agents/economic_agent.py`
+  (ICSA/UNRATE/PAYEMS via FRED, eigen `FRED:economic`-source-key —
+  UNRATE overlapt bewust met monetary_policy_agent, zie dat bestand se
+  docstring voor waarom dat geen bug is), sectie in `docs/agents.md`. 19
+  nieuwe tests (`tests/test_sahm_rule.py`, `tests/test_economic_agent.py`).
+  **CHECKPOINT 1 UIT CLAUDE.MD: BEWUST NIET GEKOPPELD.** Dit bestand is
+  klaar en getest maar staat NIET in `runtime/daily.py::default_agents()`
+  — de dagelijkse cyclus roept 'm dus nog niet aan. Wacht op DD's review
+  (wat hij monitort, welke triggers, output-contract-aansluiting — alles
+  hierboven) vóór die koppeling gemaakt wordt.
+
+  314 tests groen (was 295 aan het begin van deze ronde).
 
 - 24-09-2026: koerswijziging naar de nieuwe, vijf-pijler-doelarchitectuur
   (zie bovenaan) — `docs/roadmap.md` herschreven. Daarna: eerste,
@@ -472,6 +521,15 @@ concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
 
+- **Alpha Vantage-tierlimiet tegen je eigen key bevestigen (27-09-2026,
+  0a-3).** `docs/data-sources.md` telt het callvolume exact uit de code
+  (monitoring-bodem: 24 AV-calls/dag, al tegen de publiek gedocumenteerde
+  free-tier-limiet van 25/dag; worst case met deep-dives: 46/dag) maar kon
+  dat cijfer niet tegen jouw eigen abonnement verifiëren — FRED/Alpha
+  Vantage zijn in de sandbox-sessie hard geblokkeerd. Doe dit vóór T₀ᵃ
+  (3 oktober): één test-call op de VPS, of het AV-dashboard van je account.
+  Klopt het, dan is de keuze tier upgraden vs. bron wisselen (bijv.
+  yfinance) aan jou.
 - **Waar draait de fetch-runner? — DD kiest een VPS (26-09-2026).**
   Richting bepaald; de concrete provider/instance moet nog besteld en
   ingericht worden. De code veronderstelt niets over de machine.

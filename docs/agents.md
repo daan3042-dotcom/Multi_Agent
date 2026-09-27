@@ -312,7 +312,60 @@ C.4's eigen bewoording. Supply-chain-signalen (bijv. een mijnverstoring)
 horen bewust NIET hier — dat is kwalitatief/nieuws-vormig en hoort bij de
 nog te bouwen news monitor agent (sectie D).
 
-## Belangrijk voorbehoud, voor alle zes agents
+## Economic agent (`agents/economic_agent.py`)
+
+**Wat het volgt:** groei- en arbeidsmarktdata, LEAN — de ENE uitzondering
+op "geen nieuwe agents vóór T₀" (besloten 27-09-2026, zie `docs/roadmap.md`
+fase 0 en `CLAUDE.md`, "Wat NIET te doen zonder te vragen"): zonder deze
+agent heeft de causale graaf (1.10) geen groei-knopen. Drie reeksen, alle
+van FRED, elk gezien als "vers" tot 35 dagen oud (afgestemd op de
+traagste twee — UNRATE/PAYEMS zijn maandelijks; ICSA is wekelijks en dus
+altijd ruim vers):
+
+| Metric | FRED-reeks | Wat het meet |
+|---|---|---|
+| Initial Claims | ICSA | Wekelijkse WW-aanvragen — de snelst-resolvende macroreeks hier |
+| Werkloosheidspercentage | UNRATE | Civilian Unemployment Rate (U3) |
+| Nonfarm Payrolls | PAYEMS | Banengroei buiten de landbouw |
+
+**Let op:** UNRATE wordt OOK door de monetary policy agent gevolgd
+(zelfde FRED-reeks, andere reden: daar als beleidscontext, hier als
+arbeidsmarkt-/groei-context, en als input voor de Sahm Rule hieronder).
+Eigen, domein-gescopete bronregistratie (`FRED:economic`, roadmap 1.4)
+voorkomt dat dit de gedeelde-databron-bug van vóór 1.4 herintroduceert —
+zie de monetary policy agent se sectie hierboven voor de volledige
+toelichting op dat patroon.
+
+**Wanneer het triggert:** zelfde delta-aanpak als de andere agents:
+
+| Metric | Afwijking die triggert | Severity |
+|---|---|---|
+| Initial Claims | > 20.000 aanvragen | medium |
+| Werkloosheidspercentage | > 0,3 procentpunt | high |
+| Nonfarm Payrolls | > 150.000 banen | high |
+
+**Waar de deep-dive over gaat:** duidt wat de cijfers betekenen voor de
+arbeidsmarkt/groei — alleen als de cijfers dat zelf rechtvaardigen.
+
+**Onderbouwing (Python berekent, de LLM narrate):** bij een trigger met
+een werkloosheidspercentage-claim berekent Python
+(`src/analysis/sahm_rule.py`) de **Sahm Rule** — Claudia Sahm's (2019)
+realtime recessie-indicator: het 3-maands-voortschrijdend-gemiddelde van
+UNRATE nu, minus het laagste 3-maands-gemiddelde over de afgelopen 12
+maanden. Een uitkomst ≥ 0,50 procentpunt is het OFFICIEEL gepubliceerde
+signaal dat een recessie is begonnen — geen zelfbedachte tussenband, net
+als de NFCI-interpretatie bij de financial agent. Kost precies ÉÉN extra
+FRED-call (14 maanden UNRATE-historie in één keer, `sort_order=asc`), geen
+14 losse calls.
+
+**Bijzonderheid — checkpoint 1 uit `CLAUDE.md` (nog niet gekoppeld aan de
+manager):** dit bestand bestaat en heeft tests, maar staat BEWUST nog niet
+in `runtime/daily.py::default_agents()` — de dagelijkse cyclus roept 'm
+dus nog niet aan. Dat wachten is opzettelijk (checkpoint 1: een nieuwe
+agent laat eerst zien wat hij monitort/triggert/aansluit vóór hij
+gekoppeld wordt), niet een gat.
+
+## Belangrijk voorbehoud, voor alle zeven agents
 
 Alle tolerances in de tabellen hierboven zijn **illustratieve
 plaatshouders** — geen door DD gevalideerde drempels. Welk absoluut niveau
