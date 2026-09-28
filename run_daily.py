@@ -5,19 +5,22 @@ Roadmap 1.11 -- het bestand dat cron aanroept. Bewust dun: alle logica
 zit in `src/runtime/daily.py`, hier staat alleen wat een entrypoint moet
 doen (argumenten, database openen, exit code).
 
-Gebruik op de VPS:
+Gebruik op de VPS (zie docs/deployment.md voor de volledige inrichting):
 
     # elke werkdag om 07:15 UTC. `flock` voorkomt dat een trage run overlapt
     # met de volgende -- twee gelijktijdige runs komen allebei langs de
     # idempotency-check voordat een van beide zijn agent_run wegschrijft.
-    15 7 * * 1-5 /usr/bin/flock -n /tmp/mi-daily.lock /opt/multi_agent/.venv/bin/python /opt/multi_agent/run_daily.py >> /var/log/mi/daily.log 2>&1
+    # run_daily.sh laadt eerst .env (deze module leest environment-
+    # variabelen, geen dotenv-dependency, zie run_daily.sh se eigen
+    # commentaar) en start dan dit bestand.
+    15 7 * * 1-5 /usr/bin/flock -n /tmp/mi-daily.lock /opt/multi_agent/run_daily.sh >> /var/log/mi/daily.log 2>&1
 
 Zet ook logrotatie op `/var/log/mi/daily.log` -- die groeit anders
 ongelimiteerd.
 
-Vereiste environment-variabelen:
+Vereiste environment-variabelen (zie .env.example):
 
-    FRED_API_KEY            -- monetary_policy + financial agent
+    FRED_API_KEY            -- monetary_policy + financial + economic agent
     ALPHAVANTAGE_API_KEY    -- currency + sector + commodity agent
     MI_DB_PATH              -- pad naar de SQLite (default: ./market_intelligence.db)
     MI_WEBHOOK_URL          -- optioneel; zonder deze gaat een melding
