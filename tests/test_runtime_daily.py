@@ -13,7 +13,7 @@ import sqlite3
 from agents.base import AlreadyProcessedError, MetricSpec, run_monitoring
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode
 from health.data_health import HealthStatus
-from runtime.daily import AgentSpec, daily_event_id, run_daily
+from runtime.daily import AgentSpec, daily_event_id, default_agents, run_daily
 from storage.schema import init_db, list_agent_runs, register_source
 from triggers.trigger_engine import TriggerEvent
 
@@ -71,6 +71,17 @@ def _crashing_agent(domain):
 # --------------------------------------------------------------------------
 # event_id -- de kern van de idempotency (roadmap 1.7, hier eindelijk gebruikt)
 # --------------------------------------------------------------------------
+
+
+def test_default_agents_includes_all_six_live_domains():
+    """Regressietest voor roadmap 2.7: de economic agent moest na
+    checkpoint 1 uit CLAUDE.md (DD's review, 28-09-2026) aan deze lijst
+    toegevoegd worden -- pint de volledige samenstelling zodat een
+    volgende agent die er per ongeluk niet bij komt (of een die er per
+    ongeluk uit valt) meteen opvalt. equity_agent hoort hier bewust niet
+    bij (geen eigen live fetch, zie default_agents()'s docstring)."""
+    domains = {spec.domain for spec in default_agents()}
+    assert domains == {"monetary_policy", "currency", "financial", "sector", "commodity", "economic"}
 
 
 def test_daily_event_id_is_stable_per_calendar_day():

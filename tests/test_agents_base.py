@@ -456,6 +456,54 @@ def test_run_deep_dive_without_an_open_case_does_not_crash(tmp_path):
     assert list_qc_cases(conn, "monetary_policy") == []
 
 
+def test_run_monitoring_crash_between_save_and_record_leaves_no_orphan(tmp_path, monkeypatch):
+    """Roadmap 1.11 (0b-3, atomiciteit): een gesimuleerde crash TUSSEN
+    save_domain_output() en record_agent_run() (hier: record_agent_run()
+    zelf gooit) mag geen domain_output/claims achterlaten zonder de
+    bijbehorende agent_runs-dedup-rij -- zie agents/base.py::
+    _save_output_and_record_run(). Zonder de fix zou dit een domain_output
+    + claims committen en pas daarna falen."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    fetch = lambda: {"fed_funds_rate": {"value": "5.50", "date": "2026-01-01"}}
+    # De crash wordt gesimuleerd op de agent_run-insert BINNEN
+    # save_output_with_run(): dat is de tweede write van de transactie,
+    # dus precies het venster dat deze regressie bewaakt.
+    monkeypatch.setattr("storage.schema._insert_agent_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gesimuleerde crash")))
+
+    with pytest.raises(RuntimeError, match="gesimuleerde crash"):
+        run_monitoring(conn, "monetary_policy", "FRED", fetch, SPECS, timedelta(days=35), now=now)
+
+    assert conn.execute("SELECT COUNT(*) FROM domain_outputs").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM agent_runs").fetchone()[0] == 0
+
+
+def test_run_deep_dive_crash_between_save_and_record_leaves_no_orphan(tmp_path, monkeypatch):
+    """Zelfde regressie als hierboven, voor het deep_dive-pad -- de write
+    die daar het risico loopt is de narrative-claim-output plus de
+    bijbehorende agent_run."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    output, _ = run_monitoring(conn, "monetary_policy", "FRED", lambda: {"fed_funds_rate": {"value": "5.85", "date": "x"}}, SPECS, timedelta(days=35), now=now)
+    output_count_after_monitoring = conn.execute("SELECT COUNT(*) FROM domain_outputs").fetchone()[0]
+
+    client = _fake_client('{"issues": []}')
+    # De crash wordt gesimuleerd op de agent_run-insert BINNEN
+    # save_output_with_run(): dat is de tweede write van de transactie,
+    # dus precies het venster dat deze regressie bewaakt.
+    monkeypatch.setattr("storage.schema._insert_agent_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gesimuleerde crash")))
+
+    with pytest.raises(RuntimeError, match="gesimuleerde crash"):
+        run_deep_dive(conn, client, "monetary_policy", "systeemprompt", output.claims, [], now=now)
+
+    # Alleen de monitoring-output van vóór de crash mag er staan -- geen
+    # extra, ongecommitte deep-dive-output erbij.
+    assert conn.execute("SELECT COUNT(*) FROM domain_outputs").fetchone()[0] == output_count_after_monitoring
+    deep_dive_runs = [r for r in list_agent_runs(conn, "monetary_policy") if r["mode"] == "deep_dive"]
+    assert deep_dive_runs == []
+
+
 def test_shared_quality_rules_bans_directional_advice_language():
     """Vangnet tegen zelf een keer per ongeluk de kernregels verzwakken --
     dit zijn de concrete, niet-onderhandelbare eisen uit de afspraak in
