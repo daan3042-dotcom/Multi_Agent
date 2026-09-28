@@ -27,7 +27,9 @@ timedatectl          # controleer dat de tijdzone UTC is (of zet 'm:
 ```bash
 sudo mkdir -p /opt/multi_agent
 sudo chown $USER:$USER /opt/multi_agent
-git clone <repo-url> /opt/multi_agent
+# De machine hoort ALTIJD de default branch te volgen, niet een
+# feature-branch. Zie sectie 6 hieronder voor waarom dat uitmaakt.
+git clone --branch claude/beautiful-cori-f9p6h6 <repo-url> /opt/multi_agent
 cd /opt/multi_agent
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
@@ -96,6 +98,90 @@ sudo tee /etc/logrotate.d/mi-daily <<'EOF'
     notifempty
 }
 EOF
+```
+
+## 6. De VPS bijwerken na een merge
+
+**De machine volgt de default branch (`claude/beautiful-cori-f9p6h6`), nooit
+een feature-branch.** Een feature-branch kan gesloten, hernoemd of verwijderd
+worden zonder dat iemand aan de VPS denkt; dan faalt de volgende `git pull`
+stil en staat de ingestieklok stil op precies de dagen die je niet kunt
+inhalen. De default branch verdwijnt niet.
+
+### Standaardprocedure
+
+```bash
+cd /opt/multi_agent
+git fetch origin
+git status                       # werkboom moet schoon zijn; .env staat in .gitignore
+git pull --ff-only origin claude/beautiful-cori-f9p6h6
+.venv/bin/pip install -r requirements.txt   # alleen nodig als requirements.txt veranderde
+.venv/bin/python -m pytest -q    # moet groen zijn VOORDAT de volgende cron vuurt
+```
+
+`--ff-only` is bewust: als dat weigert, is er lokaal iets gewijzigd op de VPS
+en dat wil je weten in plaats van wegmergen.
+
+### Eenmalig: overstappen van een feature-branch naar de default
+
+Nodig op 28-09-2026, toen de machine nog `claude/ecstatic-fermat-3uunqw`
+volgde terwijl al dat werk via PR #4 in de default branch terecht was
+gekomen:
+
+```bash
+cd /opt/multi_agent
+git fetch origin
+git checkout claude/beautiful-cori-f9p6h6
+git branch --set-upstream-to=origin/claude/beautiful-cori-f9p6h6
+git pull --ff-only
+git remote set-head origin -a    # lokale notie van de default bijwerken
+.venv/bin/python -m pytest -q
+```
+
+### Wat je daarna in `daily.log` moet zien
+
+Na deze specifieke overstap zijn er drie dingen veranderd die zichtbaar
+horen te worden in de eerstvolgende run:
+
+1. **De monetary agent haalt 8 FRED-reeksen op in plaats van 4.** Er komen
+   claims bij voor `2y_treasury_yield`, `inflation_expectations_5y`,
+   `inflation_expectations_10y` en `fed_balance_sheet`. Ontbreken die, dan
+   is de pull mislukt of klopt de reeks-id niet.
+2. **De Sahm Rule rekent met 15 waarnemingen in plaats van 14.** Bij een
+   deep-dive op de economic agent hoort er een Sahm-claim te verschijnen.
+   Blijft die weg, dan levert FRED te weinig UNRATE-historie -- dat is geen
+   fout maar een weigering (het model rekent niet op een te korte reeks),
+   en het hoort eenmalig gecontroleerd te worden.
+3. **De economic agent draait mee.** `agent_runs` hoort een regel met
+   `domain='economic'` te krijgen.
+
+Controleren kan zonder de logs door te spitten:
+
+```bash
+sqlite3 "$MI_DB_PATH" "SELECT domain, mode, run_at, success, trigger_count
+                       FROM agent_runs ORDER BY run_at DESC LIMIT 10;"
+sqlite3 "$MI_DB_PATH" "SELECT metric_key, value_json FROM claims
+                       WHERE domain='monetary_policy'
+                       ORDER BY analysis_time DESC LIMIT 10;"
+```
+
+### Drie tolerances die op deze machine geverifieerd moeten worden
+
+Niet vanuit de ontwikkelomgeving te controleren (geen netwerk naar FRED),
+dus dit is de eerste plek waar het kan. Klopt een eenheid niet, dan staat de
+drempel ordes van grootte naast de werkelijkheid en triggert hij nooit of
+altijd:
+
+| Metric | Aanname | Drempel |
+|---|---|---|
+| `fed_balance_sheet` (WALCL) | miljoenen USD, niveau ~6-7 miljoen | 100.000 |
+| `initial_claims` (ICSA) | aantal aanvragen, niveau ~200.000-250.000 | 25.000 |
+| `nonfarm_payrolls` (PAYEMS) | duizenden personen, niveau ~155.000-160.000 | 250 |
+
+```bash
+sqlite3 "$MI_DB_PATH" "SELECT metric_key, value_json FROM claims
+                       WHERE metric_key IN ('fed_balance_sheet','initial_claims','nonfarm_payrolls')
+                       ORDER BY analysis_time DESC LIMIT 6;"
 ```
 
 ## Dry-run-plan (checkpoint 3, verplicht vóór "vertrouwd")
