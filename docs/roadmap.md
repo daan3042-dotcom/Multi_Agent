@@ -758,15 +758,32 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 
 ### 2.0 Predictions per agent — **[nieuw]**, fase 2, geldt voor 2.1 t/m 2.9
 
-- [ ] `agents/base.py` uitbreiden met een **forecast-ronde** naast
-      monitoring en deep-dive: wekelijks, vaste dag, één LLM-call per
-      voorspellende agent die alle doelen van die agent in één JSON zet
-      volgens 4.1. **[27-09]** Los van de trigger-keten: predictions die
+- [x] **[28-09]** `agents/base.py` uitgebreid met een **forecast-ronde**
+      naast monitoring en deep-dive: één LLM-call per voorspellende agent
+      die alle doelen in één JSON zet volgens 4.1
+      (`run_forecast_round()`). Een ronde die 9 van de 11 doelen oplevert
+      wordt NIET weggegooid: de geldige voorspellingen worden opgeslagen
+      en de ontbrekende komen in `issues` — dezelfde les als de
+      completeness-check. `agent_runs.mode` kreeg `'forecast'` erbij, met
+      een migratie voor bestaande databases (de VPS-database had de oude
+      CHECK nog).
+      **De wekelijkse cron-aanroep zelf moet nog**, die zit nog niet in
+      `runtime/daily.py`. **[27-09]** Los van de trigger-keten: predictions die
       alleen bij triggers ontstaan geven selectiebias (alleen voorspellen
       in volatiele weken) en onregelmatige aantallen. Een trigger mag
       wél extra predictions opleveren, gevlagd `trigger_conditioned=1`.
-- [ ] Per agent vastleggen welke doelen (metric_keys) hij voorspelt, op
-      welke horizonnen, en — vanaf cohort v1 — welke graafknopen (1.10)
+- [x] **[28-09]** Per agent vastgelegd welke doelen hij voorspelt, op
+      welke horizonnen, met graafknoop en `resolution_rule`
+      (`FORECAST_TARGETS` in monetary/financial/economic/currency: 8, 12, 6
+      en 9 voorspellingen per ronde). Een test bewaakt dat elk doel naar
+      een metric_key verwijst die de agent ook daadwerkelijk ophaalt —
+      anders is de uitkomst nooit te resolven.
+      **OPEN: de sector agent.** Deel A vraagt daar 11 doelen op
+      *relatieve sterkte vs. SPY*, maar die wordt nu pas op deep-dive-tijd
+      berekend en nergens als claim opgeslagen — dus niet resolvbaar. Het
+      alternatief (ruwe ETF-prijzen) meet vooral marktrichting in plaats
+      van rotatie, en dat is precies wat relatieve sterkte moet uitsluiten.
+      Keuze voor DD; niet stilzwijgend ingevuld.
 - [ ] **[27-09]** Richtlijn vervangen: niet "~5 voorspellingen per week"
       maar **zoveel mogelijk onafhankelijke doelen** per agent, elk op
       cadans-bewuste horizonnen (handelsdagen 5/21/63 voor dagreeksen,

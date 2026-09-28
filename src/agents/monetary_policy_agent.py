@@ -66,7 +66,9 @@ from datetime import timedelta
 
 import requests
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
+from contract.horizons import ReleaseCadence
+from contract.prediction import HorizonKind, PredictionKind
 from analysis.taylor_rule import compute_output_gap_pct, compute_taylor_rule_rate
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -147,6 +149,56 @@ GRAPH_MAPPING: dict[str, Node | None] = {
 """Welke graafknoop (1.10) elke opgehaalde reeks helpt schatten. Alle vijf
 knopen die deze agent bezit worden bediend -- `unserved_owned_nodes()`
 bewaakt dat. Tot 28-09-2026 gold dat voor maar een van de vijf."""
+
+FORECAST_TARGETS = (
+    ForecastTarget(
+        metric_key="10y_treasury_yield",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS,
+        horizons=(5, 21, 63),
+        graph_node=Node.TERM_PREMIUM,
+        resolution_rule=(
+            "DGS10 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
+            "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
+            "wijzigen de uitkomst nooit."
+        ),
+    ),
+    ForecastTarget(
+        metric_key="2y_treasury_yield",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS,
+        horizons=(5, 21, 63),
+        graph_node=Node.POLICY_EXPECTATIONS,
+        resolution_rule=(
+            "DGS2 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
+            "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
+            "wijzigen de uitkomst nooit."
+        ),
+    ),
+    ForecastTarget(
+        metric_key="fed_funds_rate",
+        kind=PredictionKind.BINARY,
+        horizon_kind=HorizonKind.RELEASES,
+        horizons=(1, 2),
+        cadence=ReleaseCadence.FOMC,
+        graph_node=Node.POLICY_STANCE,
+        event_rule=(
+            "De Fed funds rate ligt na de {horizon_n}-de FOMC-vergadering na created_at "
+            "HOGER dan de laatst bekende waarde op created_at"
+        ),
+        resolution_rule=(
+            "FEDFUNDS-waarde na de {horizon_n}-de FOMC-vergadering na created_at, "
+            "eerste print, vergeleken met de laatst bekende waarde op created_at. "
+            "Gelijk blijven telt als NIET verhoogd."
+        ),
+    ),
+)
+# Roadmap deel A, "De agents van cohort 0". DGS2 staat niet in de
+# startlijst maar is hier toegevoegd: die reeks kwam er op 28-09 bij om de
+# knoop policy_expectations te bedienen, en een extra ONAFHANKELIJK doel is
+# precies wat de statistische kracht omhoog brengt (correctie 2 van 27-09:
+# breedte telt, herhaling niet).
+
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaans \
 monetair beleid: Fed funds rate, 2- en 10-jaars Treasury yield, CPI-index, werkloosheid, \

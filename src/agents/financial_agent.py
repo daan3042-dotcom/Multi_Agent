@@ -46,7 +46,9 @@ from datetime import timedelta
 
 import requests
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
+from contract.horizons import ReleaseCadence
+from contract.prediction import HorizonKind, PredictionKind
 from analysis.nfci_interpretation import classify_nfci
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -97,6 +99,42 @@ METRIC_SPECS = {
     "vix": MetricSpec(label="VIX", tolerance=5.0, severity="medium"),
     "yield_curve_10y_2y": MetricSpec(label="10Y-2Y yield curve", tolerance=0.15, severity="medium"),
 }
+
+FORECAST_TARGETS = tuple(
+    ForecastTarget(
+        metric_key=key,
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS,
+        horizons=(5, 21, 63),
+        graph_node=node,
+        resolution_rule=(
+            reeks + " zoals EERST gepubliceerd, gemeten op de eerste beschikbare "
+            "observatie op of na resolves_at ({horizon_n} handelsdagen na created_at). "
+            "Latere revisies wijzigen de uitkomst nooit."
+        ),
+    )
+    for key, reeks, node in (
+        ("high_yield_credit_spread", "BAMLH0A0HYM2", Node.CREDIT_RISK_PREMIUM),
+        ("vix", "VIXCLS", Node.RISK_APPETITE),
+        ("yield_curve_10y_2y", "T10Y2Y", Node.TERM_PREMIUM),
+    )
+) + (
+    ForecastTarget(
+        metric_key="financial_conditions_index",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.RELEASES,
+        horizons=(1, 4, 12),
+        cadence=ReleaseCadence.WEEKLY,
+        graph_node=Node.FINANCIAL_CONDITIONS,
+        resolution_rule=(
+            "De {horizon_n}-de NFCI-publicatie na created_at, EERSTE print. "
+            "Latere revisies wijzigen de uitkomst nooit."
+        ),
+    ),
+)
+# Roadmap deel A. De NFCI gaat op releases en niet op handelsdagen: het is
+# een wekelijkse reeks, dus een 5-daagse voorspelling erop bestaat niet.
+
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in financiële-
 marktcondities: de Chicago Fed National Financial Conditions Index (NFCI), \

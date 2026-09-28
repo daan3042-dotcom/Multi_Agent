@@ -56,7 +56,9 @@ from datetime import timedelta
 
 import requests
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
+from contract.horizons import ReleaseCadence
+from contract.prediction import HorizonKind, PredictionKind
 from analysis.sahm_rule import MIN_OBSERVATIONS, compute_sahm_gap, describe_sahm_gap
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -118,6 +120,50 @@ GRAPH_MAPPING: dict[str, Node | None] = {
 bewust leeg in de lean versie -- post-T0, zie roadmap 2.7. Dat is een
 vastgelegde grens, en `unserved_owned_nodes()` maakt hem elke testronde
 opnieuw zichtbaar in plaats van dat hij wegzakt."""
+
+FORECAST_TARGETS = (
+    ForecastTarget(
+        metric_key="initial_claims",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.RELEASES,
+        horizons=(1, 4),
+        cadence=ReleaseCadence.WEEKLY,
+        graph_node=Node.LABOR_TIGHTNESS,
+        resolution_rule=(
+            "De {horizon_n}-de ICSA-publicatie na created_at, EERSTE print. "
+            "Latere revisies wijzigen de uitkomst nooit."
+        ),
+    ),
+    ForecastTarget(
+        metric_key="unemployment_rate",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.RELEASES,
+        horizons=(1, 3),
+        cadence=ReleaseCadence.MONTHLY,
+        graph_node=Node.LABOR_TIGHTNESS,
+        resolution_rule=(
+            "De {horizon_n}-de UNRATE-publicatie na created_at, EERSTE print. "
+            "Latere revisies wijzigen de uitkomst nooit."
+        ),
+    ),
+    ForecastTarget(
+        metric_key="nonfarm_payrolls",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.RELEASES,
+        horizons=(1, 3),
+        cadence=ReleaseCadence.MONTHLY,
+        graph_node=Node.GROWTH,
+        resolution_rule=(
+            "De {horizon_n}-de PAYEMS-publicatie na created_at, EERSTE print, als NIVEAU "
+            "in duizenden personen (eenheid geverifieerd 28-09-2026). Latere revisies "
+            "wijzigen de uitkomst nooit -- en juist bij PAYEMS zijn die revisies fors, "
+            "dus dit is hier geen formaliteit."
+        ),
+    ),
+)
+# Roadmap deel A. ICSA is de snelst resolvende macroreeks die er is, en
+# daarmee het enige macro-doel dat binnen een maand al iets zegt.
+
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in de reële \
 Amerikaanse economie: arbeidsmarkt en groei. Je volgt wekelijkse WW-aanvragen (ICSA), \

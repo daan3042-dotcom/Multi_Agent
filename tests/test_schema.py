@@ -512,3 +512,104 @@ def test_crash_tussen_de_twee_inserts_laat_geen_wees_achter(tmp_path, monkeypatc
 
     assert load_latest_claims(conn, "monetary_policy") == []
     assert schema.list_agent_runs(conn, "monetary_policy") == []
+
+
+# --- Migratie agent_runs.mode (roadmap 2.0, forecast-ronde) ---
+
+
+def _oude_agent_runs_tabel(conn):
+    """Herbouwt agent_runs zoals hij vóór 28-09-2026 op de VPS stond:
+    zonder 'forecast' in de CHECK."""
+    conn.executescript(
+        """
+        DROP TABLE IF EXISTS agent_runs;
+        CREATE TABLE agent_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('monitoring', 'deep_dive')),
+            run_at TEXT NOT NULL,
+            success INTEGER NOT NULL,
+            domain_output_id INTEGER REFERENCES domain_outputs(id),
+            trigger_count INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            event_id TEXT
+        );
+        CREATE INDEX idx_agent_runs_domain ON agent_runs(domain, run_at);
+        CREATE UNIQUE INDEX idx_agent_runs_event_id
+            ON agent_runs(domain, mode, event_id) WHERE success = 1;
+        """
+    )
+    conn.commit()
+
+
+def test_migratie_maakt_forecast_mogelijk_op_een_bestaande_database(tmp_path):
+    """REGRESSIE op een faalpatroon dat je pas in productie ziet.
+
+    CREATE TABLE IF NOT EXISTS raakt een bestaande tabel niet aan, dus de
+    oude CHECK bleef op de draaiende VPS-database staan. Zonder migratie
+    zou de forecast-ronde op een verse testdatabase slagen en daar falen --
+    en die database IS het track record."""
+    import sqlite3
+
+    from storage.schema import _migreer_agent_runs_mode, record_agent_run
+
+    conn = _db(tmp_path)
+    _oude_agent_runs_tabel(conn)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now, success=True)
+
+    # Vóór de migratie: forecast wordt geweigerd door het oude schema.
+    with pytest.raises(sqlite3.IntegrityError):
+        record_agent_run(conn, "monetary_policy", "forecast", now, success=True)
+
+    assert _migreer_agent_runs_mode(conn) is True
+    record_agent_run(conn, "monetary_policy", "forecast", now, success=True)
+
+    modes = {r["mode"] for r in list_agent_runs(conn, "monetary_policy")}
+    assert modes == {"monitoring", "forecast"}
+
+
+def test_migratie_behoudt_bestaande_rijen(tmp_path):
+    """De tabel wordt herbouwd, dus dit is de test die bewijst dat er geen
+    geschiedenis verloren gaat."""
+    from storage.schema import _migreer_agent_runs_mode
+
+    conn = _db(tmp_path)
+    _oude_agent_runs_tabel(conn)
+    now = datetime.now(timezone.utc)
+    for i in range(3):
+        record_agent_run(conn, "financial", "monitoring", now, success=True, trigger_count=i)
+
+    _migreer_agent_runs_mode(conn)
+
+    runs = list_agent_runs(conn, "financial")
+    assert len(runs) == 3
+    assert sorted(r["trigger_count"] for r in runs) == [0, 1, 2]
+
+
+def test_migratie_herstelt_de_idempotency_index(tmp_path):
+    """REGRESSIE. DROP TABLE neemt de indexen mee. De partial unique index
+    op event_id stil kwijtraken zou dubbele verwerking weer mogelijk maken
+    zonder dat iets dat meldt -- precies de bescherming uit 1.7."""
+    import sqlite3
+
+    from storage.schema import _migreer_agent_runs_mode
+
+    conn = _db(tmp_path)
+    _oude_agent_runs_tabel(conn)
+    _migreer_agent_runs_mode(conn)
+
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "sector", "monitoring", now, success=True, event_id="2026-09-28")
+    with pytest.raises(sqlite3.IntegrityError):
+        record_agent_run(conn, "sector", "monitoring", now, success=True, event_id="2026-09-28")
+
+
+def test_migratie_is_idempotent(tmp_path):
+    """Draait bij elke init_db(); op een al-gemigreerde database hoort hij
+    niets te doen."""
+    from storage.schema import _migreer_agent_runs_mode
+
+    conn = _db(tmp_path)
+    assert _migreer_agent_runs_mode(conn) is False
+    assert _migreer_agent_runs_mode(conn) is False

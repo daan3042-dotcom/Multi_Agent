@@ -41,7 +41,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS domain_outputs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     domain TEXT NOT NULL,
-    mode TEXT NOT NULL CHECK (mode IN ('monitoring', 'deep_dive')),
+    mode TEXT NOT NULL CHECK (mode IN ('monitoring', 'deep_dive', 'forecast')),
     generated_at TEXT NOT NULL,
     needs_review INTEGER NOT NULL DEFAULT 0,
     review_issues_json TEXT NOT NULL DEFAULT '[]'
@@ -209,6 +209,7 @@ def init_db(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
     conn.commit()
+    _migreer_agent_runs_mode(conn)
     return conn
 
 
@@ -854,3 +855,61 @@ def list_due_predictions(conn: sqlite3.Connection, now: datetime) -> list[Predic
         (now.isoformat(),),
     ).fetchall()
     return [_row_to_prediction(r) for r in rows]
+
+
+def _migreer_agent_runs_mode(conn: sqlite3.Connection) -> bool:
+    """Voegt 'forecast' toe aan de toegestane modes van `agent_runs`.
+    Geeft True terug als er daadwerkelijk gemigreerd is.
+
+    WAAROM DIT BESTAAT. `CREATE TABLE IF NOT EXISTS` raakt een bestaande
+    tabel niet aan, dus een CHECK-constraint die later verandert blijft op
+    een draaiende database staan zoals hij was. Zonder deze migratie zou de
+    forecast-ronde (2.0) op een verse testdatabase slagen en op de VPS
+    falen met een IntegrityError -- het faalpatroon dat je pas in productie
+    ziet, en dat hier extra duur is omdat die database het track record IS.
+
+    SQLite kan een CHECK niet met ALTER TABLE wijzigen, dus de tabel wordt
+    herbouwd: nieuwe tabel, rijen kopiëren, oude weg, hernoemen. Dat gebeurt
+    in één transactie, en alleen als het nodig is -- de functie is
+    idempotent en doet bij een al-gemigreerde database niets.
+
+    De indexen worden bewust opnieuw aangemaakt: een DROP TABLE neemt ze
+    mee, en de partial unique index op event_id (1.7's idempotency) stil
+    kwijtraken zou dubbele verwerking weer mogelijk maken zonder dat iets
+    dat meldt."""
+    huidige_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_runs'"
+    ).fetchone()
+    if huidige_sql is None or "'forecast'" in huidige_sql[0]:
+        return False
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with conn:
+            conn.executescript(
+                """
+                CREATE TABLE agent_runs_nieuw (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain TEXT NOT NULL,
+                    mode TEXT NOT NULL CHECK (mode IN ('monitoring', 'deep_dive', 'forecast')),
+                    run_at TEXT NOT NULL,
+                    success INTEGER NOT NULL,
+                    domain_output_id INTEGER REFERENCES domain_outputs(id),
+                    trigger_count INTEGER NOT NULL DEFAULT 0,
+                    error TEXT,
+                    event_id TEXT
+                );
+                INSERT INTO agent_runs_nieuw
+                    SELECT id, domain, mode, run_at, success, domain_output_id,
+                           trigger_count, error, event_id
+                    FROM agent_runs;
+                DROP TABLE agent_runs;
+                ALTER TABLE agent_runs_nieuw RENAME TO agent_runs;
+                CREATE INDEX IF NOT EXISTS idx_agent_runs_domain ON agent_runs(domain, run_at);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_runs_event_id
+                    ON agent_runs(domain, mode, event_id) WHERE success = 1;
+                """
+            )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    return True
