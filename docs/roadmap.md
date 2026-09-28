@@ -158,7 +158,7 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | ~~Externe heartbeat / dead man's switch~~ | 1.11 | ✅ 27-09-2026: healthchecks.io (cron-schedule-check, UTC), ping in de crontab-regel, getest. Nog open: de daadwerkelijke "machine een dag uitzetten"-test, zie `docs/deployment.md` | DD (later: uitzet-test) |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
 | Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar | Claude Code |
-| Economic agent, lean — code + tests + `docs/agents.md`-sectie klaar; **checkpoint 1 uit `CLAUDE.md`: wacht op DD's review vóór koppeling aan `runtime/daily.py::default_agents()`** | 2.7 | monitoring + Sahm Rule + ICSA/UNRATE/PAYEMS, sectie in `docs/agents.md`, checkpoint 1 uit `CLAUDE.md` | DD (review) |
+| ~~Economic agent, lean~~ | 2.7 | ✅ 28-09-2026: checkpoint 1 uit `CLAUDE.md` doorlopen (DD's review, akkoord op UNRATE-dubbeltracking/drempels/patroon), gekoppeld aan `runtime/daily.py::default_agents()`, `tests/test_runtime_daily.py` pint de volledige agentlijst | — |
 | ~~Atomiciteit claims/dedup~~ | 1.11 | ✅ `_save_output_and_record_run()` in `agents/base.py`; `tests/test_agents_base.py` (2 regressietests, monitoring + deep_dive) | — |
 | ~~Ouderdomsgrens in `system_health()`~~ | 1.11 | ✅ `stale_after`-parameter (default 3 dagen) in `system_health()`; `tests/test_system_health.py` (2 tests) | — |
 

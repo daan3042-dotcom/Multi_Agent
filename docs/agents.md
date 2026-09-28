@@ -358,12 +358,10 @@ als de NFCI-interpretatie bij de financial agent. Kost precies ÉÉN extra
 FRED-call (14 maanden UNRATE-historie in één keer, `sort_order=asc`), geen
 14 losse calls.
 
-**Bijzonderheid — checkpoint 1 uit `CLAUDE.md` (nog niet gekoppeld aan de
-manager):** dit bestand bestaat en heeft tests, maar staat BEWUST nog niet
-in `runtime/daily.py::default_agents()` — de dagelijkse cyclus roept 'm
-dus nog niet aan. Dat wachten is opzettelijk (checkpoint 1: een nieuwe
-agent laat eerst zien wat hij monitort/triggert/aansluit vóór hij
-gekoppeld wordt), niet een gat.
+**Bijzonderheid — checkpoint 1 uit `CLAUDE.md`:** ✅ doorlopen op
+28-09-2026, DD heeft deze sectie gereviewd en akkoord gegeven. Sindsdien
+staat dit bestand in `runtime/daily.py::default_agents()` en draait 'ie
+mee in de dagelijkse cyclus, net als de andere zes agents.
 
 ## Belangrijk voorbehoud, voor alle zeven agents
 

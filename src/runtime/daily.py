@@ -158,15 +158,20 @@ def daily_event_id(moment: datetime | date | None = None) -> str:
 
 
 def default_agents() -> list[AgentSpec]:
-    """De vijf agents met een eigen live databron. `equity_agent` ontbreekt
+    """De zes agents met een eigen live databron. `equity_agent` ontbreekt
     bewust: dat is een adapter zonder eigen fetch (roadmap 2.3) -- hij wordt
     gevoed door een afgeronde `analyst_agent.ai`-run, niet door een
     dagelijkse poll, en heeft hier dus niets te doen.
 
+    `economic_agent` is toegevoegd op 28-09-2026, ná checkpoint 1 uit
+    CLAUDE.md (DD's review van docs/agents.md se "Economic agent"-sectie) --
+    zie roadmap 2.7. Vóór die datum stond dit bestand bewust nog niet in
+    de lijst, zie de git-historie/roadmap voor die tussenstap.
+
     De import staat IN de functie, niet bovenaan de module: zo kan een test
     `run_daily()` aanroepen met eigen agents zonder de echte agent-modules
     (en hun `requests`-imports en API-key-lookups) te laden."""
-    from agents import commodity_agent, currency_agent, financial_agent, monetary_policy_agent, sector_agent
+    from agents import commodity_agent, currency_agent, economic_agent, financial_agent, monetary_policy_agent, sector_agent
 
     return [
         AgentSpec("monetary_policy", monetary_policy_agent.monitor, monetary_policy_agent.deep_dive),
@@ -174,6 +179,7 @@ def default_agents() -> list[AgentSpec]:
         AgentSpec("financial", financial_agent.monitor, financial_agent.deep_dive),
         AgentSpec("sector", sector_agent.monitor, sector_agent.deep_dive),
         AgentSpec("commodity", commodity_agent.monitor, commodity_agent.deep_dive),
+        AgentSpec("economic", economic_agent.monitor, economic_agent.deep_dive),
     ]
 
 

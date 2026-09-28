@@ -46,15 +46,15 @@ kostenbewustzijn als commodity_agent.py's aanpak (historie komt uit
 dezelfde soort respons, geen call-per-observatie).
 
 Checkpoint 1 uit CLAUDE.md ("Na elke nieuwe domain/functionele agent, vóór
-hij aan de trigger-engine of manager wordt gekoppeld"): dit bestand roept
-agents.base.run_monitoring()/run_deep_dive() aan (dezelfde gedeelde
-scaffolding als elke andere agent, en daarmee ONVERMIJDELIJK ook
-triggers.trigger_engine -- run_monitoring() gebruikt dat intern voor elke
-agent, dat is precies het punt van de gedeelde scaffolding), maar wordt
-BEWUST NIET toegevoegd aan runtime/daily.py::default_agents() (de
-manager-dispatch-lijst) totdat DD dit bestand + docs/agents.md se nieuwe
-sectie heeft gezien. Zie docs/agents.md voor wat deze agent monitort, welke
-triggers hij kan geven, en hoe zijn output op het A.1-contract aansluit.
+hij aan de trigger-engine of manager wordt gekoppeld") is DOORLOPEN op
+28-09-2026: DD heeft deze sectie + docs/agents.md se "Economic agent"-
+sectie gereviewd en akkoord gegeven (drie punten expliciet afgetikt: het
+dubbel volgen van UNRATE is bewust, de illustratieve drempels wachten op
+2.7's finetuning, en het past bij het patroon van de andere zes agents).
+Sindsdien staat dit bestand in runtime/daily.py::default_agents() en
+draait 'ie mee in de dagelijkse cyclus. Zie docs/agents.md voor wat deze
+agent monitort, welke triggers hij kan geven, en hoe zijn output op het
+A.1-contract aansluit.
 """
 
 from __future__ import annotations

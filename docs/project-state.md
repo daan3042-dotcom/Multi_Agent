@@ -196,6 +196,27 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   (7 dagen op rij zonder handmatige actie) en de heartbeat's eigen
   "machine bewust een dag uitzetten"-test.
 
+- 28-09-2026: **dag 1 van de dry-run-week geslaagd** (checkpoint 3) — de
+  eerste automatische cron-run (07:15 UTC) leverde `monetary_policy=ok,
+  currency=ok, financial=ok, sector=ok, commodity=ok`, geen duplicaten in
+  `agent_runs`, heartbeat-ping bevestigd (`OK` in `daily.log` + groen in
+  healthchecks.io-dashboard), en DD kreeg terecht een kritieke ntfy-melding
+  over de dagen 21-26 sept zonder run (verwacht: de VPS bestond toen nog
+  niet, verdwijnt vanzelf uit het 7-dagen-lookback-venster) — bevestigt
+  dat de hele meldingsketen end-to-end werkt.
+
+  Daarna: **checkpoint 1 (economic agent) doorlopen.** DD heeft
+  `docs/agents.md` se "Economic agent"-sectie gereviewd en akkoord
+  gegeven op drie specifiek voorgelegde punten (UNRATE-dubbeltracking
+  bewust; drempels wachten bewust op de finetuning-ronde, sectie B.2;
+  past bij het patroon van de andere zes agents). `agents/economic_agent.py`
+  is toegevoegd aan `runtime/daily.py::default_agents()` — draait vanaf nu
+  mee in de dagelijkse cyclus. Nieuwe test
+  (`tests/test_runtime_daily.py::test_default_agents_includes_all_six_live_domains`)
+  pint de volledige agentlijst, zodat een toekomstige agent die er
+  per ongeluk niet bij komt (of uit valt) meteen opvalt. 315 tests groen
+  (was 314).
+
 - 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
   **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
   `save_domain_output()` en `record_agent_run()` committen nu als ÉÉN
