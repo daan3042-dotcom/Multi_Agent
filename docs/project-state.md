@@ -70,6 +70,38 @@ maandcadans naar dagcadans zouden tillen (en hem daarmee alsnog
 voorspellend in cohort 0 zouden maken) is hier niet te verifiëren — geen
 netwerktoegang in deze omgeving.
 
+### Vervolg dezelfde dag: drie van de vier goedkope graafgaten gedicht
+
+`monetary_policy_agent.py` haalt er vier FRED-reeksen bij (313 tests
+groen, was 309): `DGS2` → `policy_expectations`, `T5YIE`/`T10YIE` →
+`inflation_expectations`, `WALCL` → `liquidity`. Daarmee bezit die agent
+die knopen niet alleen op papier maar kan hij ze ook schatten. De
+deep-dive-prompt maakt nu expliciet onderscheid tussen wat de Fed dóét,
+wat de markt verwacht dát de Fed doet, en wat de markt aan inflatie
+verwacht — dat liep eerder door elkaar in één 10-jaars yield.
+
+Afgewogen en vastgelegd in de moduledocstring: `MAX_AGE` blijft 35 dagen
+hoewel drie nieuwe reeksen dagelijks zijn. Dat kan, omdat
+`run_monitoring()`'s `max_age` de **bron-polling** bewaakt (hoe lang
+geleden haalden we FRED voor dit domein succesvol op), niet de leeftijd
+van elke losse reeks. Blijvende bekende grens, niet nieuw: 35 dagen is
+ruim voor een agent die dagelijks draait.
+
+**Minst zekere deel, expliciet gevlagd (CLAUDE.md checkpoint 4):** de
+tolerance voor `WALCL` (100.000, verondersteld miljoenen USD ≈ $100 mrd).
+Niveau én eenheid zijn niet tegen de live API geverifieerd — geen
+netwerktoegang. Zwakker onderbouwd dan zelfs de commodity-tolerances.
+
+**Het vierde gat (`dollar` ← `DTWEXBGS`) is bewust NIET gedicht.** Dat
+hoort bij de currency agent, die op Alpha Vantage zit; het zou de eerste
+agent met twee providers maken. De Source Registry kan dat (één entry per
+provider+domain), maar `run_monitoring()` twee keer aanroepen voor
+hetzelfde domein kan twee TRIGGERED `qc_case`s opleveren waarvan er één
+voor altijd blijft hangen — de bekende grens uit 1.6 zou dan van
+theoretisch naar structureel gaan. Multi-provider-ondersteuning in
+`agents/base.py` is de echte voorwaarde en raakt alle zes agents. Ligt
+bij DD.
+
 **Nog niet gedaan, bewust:** de graaf is nergens in agent-code gewired.
 Geen enkele agent produceert of leest een `graph_node`, en `run_daily`
 raakt `graph.py` niet aan. Dat is een gedragswijziging over alle agents

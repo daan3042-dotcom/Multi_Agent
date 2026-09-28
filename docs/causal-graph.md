@@ -336,7 +336,7 @@ opnieuw schatten en er vijf verschillende getallen uit komen.
 | Agent | Bedient knopen | Status in cohort 0 | Gaten |
 |---|---|---|---|
 | economic | 1 `growth`, 2 `labor_tightness`, 3 `wage_growth`, 4 `inflation_persistence` | **nog te bouwen** (2.7 lean) | lean-versie dekt alleen ICSA/UNRATE/PAYEMS → knoop 3 en 4 blijven vóór T₀ onbediend |
-| monetary | 5 `inflation_expectations`, 6 `policy_stance`, 7 `policy_expectations`, 8 `liquidity`, 9 `term_premium` | voorspelt | haalt nu alleen FEDFUNDS/DGS10/CPI/UNRATE → knopen 5, 7, 8, 9 hebben nieuwe reeksen nodig |
+| monetary | 5 `inflation_expectations`, 6 `policy_stance`, 7 `policy_expectations`, 8 `liquidity`, 9 `term_premium` | voorspelt | **[28-09] vrijwel gedekt** — DGS2, T5YIE/T10YIE en WALCL toegevoegd; alleen 9 `term_premium` draait nog op T10Y2Y als ruwe proxy |
 | financial | 10 `financial_conditions`, 11 `credit_risk_premium`, 12 `risk_appetite` | voorspelt | **volledig gedekt** — enige agent zonder gat |
 | currency | 13 `dollar` | voorspelt (controlegroep) | DTWEXBGS ontbreekt; nu alleen drie losse paren |
 | commodity | 14 `energy_prices`, 15 `industrial_metals` | **alleen monitoring** | maandelijkse AV-bron niet resolvbaar op 5/21/63 hd |
@@ -365,12 +365,34 @@ zeventien knopen valt er het eerste half jaar niets te scoren.
 Deze reeksen zijn gratis, komen van een bron die al werkt, en dichten
 elk een knoop die nu leeg is:
 
-| Knoop | Ontbrekende reeks | Effect |
+| Knoop | Ontbrekende reeks | Status |
 |---|---|---|
-| 13 `dollar` | `DTWEXBGS` | brede dollarindex; lost meteen het DXY-gat op dat in `docs/agents.md` staat |
-| 5 `inflation_expectations` | `T5YIE`, `T10YIE` | knoop gaat van leeg naar bediend |
-| 7 `policy_expectations` | `DGS2` | idem, en scheidt beleidsverwachting van termijnpremie |
-| 8 `liquidity` | `WALCL` | idem |
+| 5 `inflation_expectations` | `T5YIE`, `T10YIE` | **gedicht 28-09-2026** — monetary agent |
+| 7 `policy_expectations` | `DGS2` | **gedicht 28-09-2026** — scheidt beleidsverwachting van termijnpremie |
+| 8 `liquidity` | `WALCL` | **gedicht 28-09-2026** — tolerance nog onzeker, zie `docs/agents.md` |
+| 13 `dollar` | `DTWEXBGS` | **nog open** — zie hieronder |
+
+**Waarom `dollar` niet in dezelfde ronde gedicht is.** De andere drie
+gingen naar de monetary agent, die al op FRED zit: reeks toevoegen, spec
+toevoegen, klaar. `DTWEXBGS` hoort bij de currency agent, en die haalt
+zijn data bij Alpha Vantage. Dat zou de eerste agent met **twee
+providers** maken, en daar is de infrastructuur nu niet op gebouwd:
+
+- De Source Registry (1.4) kent één entry per (provider, domain). Twee
+  providers in één agent betekent twee `source_key`s, dus twee
+  `data_health`-rijen — precies goed, want anders zou een werkende
+  Alpha Vantage een kapotte FRED verbergen (de bug die 1.4 oploste).
+- Maar `run_monitoring()` schrijft per aanroep één `data_health`-rij en
+  opent bij een trigger een `qc_case`. Twee keer aanroepen voor hetzelfde
+  domein in één cyclus betekent mogelijk twee TRIGGERED-cases, en
+  `run_deep_dive()` pakt dan de meest recente — de oudere blijft voor
+  altijd in TRIGGERED steken. Dat staat al als bekende grens in
+  `docs/project-state.md` en zou hiermee van theoretisch naar structureel
+  gaan.
+
+Multi-provider-ondersteuning in `agents/base.py` is dus de echte
+voorwaarde, en dat raakt gedeelde infrastructuur voor alle zes agents.
+Bewust niet in stilte gebouwd.
 
 **Te verifiëren, mogelijk waardevoller dan alle bovenstaande:** FRED
 publiceert dagelijkse olie- en gasprijzen (o.a. WTI spot). Als dat klopt,

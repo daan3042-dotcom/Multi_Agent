@@ -14,6 +14,31 @@ analyst_agent.ai, geen import ervan (zie CLAUDE.md).
 Tolerances in METRIC_SPECS zijn illustratieve plaatshouders -- zie
 agents/base.py's docstring en docs/roadmap.md sectie H.
 
+UITGEBREID OP 28-09-2026 MET VIER REEKSEN (DGS2, T5YIE, T10YIE, WALCL) om
+drie knopen van de causale graaf te bedienen die deze agent volgens
+contract/graph.py::NODE_OWNER bezit maar nergens uit kon schatten:
+policy_expectations, inflation_expectations en liquidity. Twee dingen die
+hierbij bewust zijn afgewogen:
+
+1. MAX_AGE blijft 35 dagen, ook al zijn drie van de vier nieuwe reeksen
+   dagelijks en is WALCL wekelijks. Dat kan, omdat run_monitoring()'s
+   max_age de BRON-polling bewaakt (hoe lang geleden haalden we FRED voor
+   dit domein voor het laatst succesvol op), niet de leeftijd van elke
+   losse reeks. Een dagelijkse reeks toevoegen verkleint dus geen
+   staleness-venster. Wat WEL blijft staan als bekende grens: 35 dagen is
+   ruim voor een agent die dagelijks draait -- een FRED-storing zou pas na
+   vijf weken een trigger geven. Dat is bestaand gedrag voor alle vier de
+   oorspronkelijke reeksen, en het verscherpen ervan is een
+   drempelwijziging die niet in deze ronde thuishoort.
+2. WALCL's tolerance is het minst zekere getal in dit bestand. De reeks
+   staat in MILJOENEN dollars (niveau in de orde van 6-7 miljoen, dus
+   $6-7 biljoen), en 100.000 zou dan ~$100 miljard aan
+   balansverandering zijn. Dat niveau en die eenheid zijn NIET tegen de
+   live API geverifieerd -- er is geen netwerktoegang naar FRED vanuit de
+   ontwikkelomgeving. Expliciet gevlagd als het zwakste deel van deze
+   uitbreiding (CLAUDE.md, checkpoint 4), niet stilzwijgend als "goed
+   genoeg" gepresenteerd.
+
 DEEP_DIVE_SYSTEM_PROMPT hieronder bevat ALLEEN vakinhoud -- de algemene
 schrijfregels (neutraliteit, alleen aangeleverde cijfers, onzekerheid
 expliciet) staan centraal in agents/base.py::SHARED_QUALITY_RULES en worden
@@ -64,6 +89,15 @@ FRED_SERIES = {
     "10y_treasury_yield": "DGS10",
     "cpi_inflation_index": "CPIAUCSL",
     "unemployment_rate": "UNRATE",
+    # Toegevoegd 28-09-2026 om drie lege knopen van de causale graaf (1.10)
+    # te bedienen -- zie contract/graph.py::NODE_OWNER, dat deze agent als
+    # primaire eigenaar van policy_expectations, inflation_expectations en
+    # liquidity aanwijst. Zonder deze reeksen had die agent die knopen op
+    # papier wel, maar geen enkele waarneming om ze uit te schatten.
+    "2y_treasury_yield": "DGS2",  # -> policy_expectations
+    "inflation_expectations_5y": "T5YIE",  # -> inflation_expectations
+    "inflation_expectations_10y": "T10YIE",  # -> inflation_expectations
+    "fed_balance_sheet": "WALCL",  # -> liquidity
 }
 
 # Extra reeksen, alleen voor de Taylor Rule (_fetch_taylor_rule_inputs) --
@@ -79,13 +113,27 @@ METRIC_SPECS = {
     "10y_treasury_yield": MetricSpec(label="10-jaars Treasury yield", tolerance=0.25, severity="medium"),
     "cpi_inflation_index": MetricSpec(label="CPI-index", tolerance=2.0, severity="medium"),
     "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.3, severity="high"),
+    # Zelfde status als de vier hierboven: illustratieve plaatshouders, geen
+    # door DD gevalideerde drempels (docs/roadmap.md sectie H). De eerste
+    # drie zijn percentagepunten en liggen in dezelfde orde van grootte als
+    # de bestaande rente-tolerances; fed_balance_sheet is de MINST ZEKERE
+    # van alle tolerances in dit project -- zie de moduledocstring.
+    "2y_treasury_yield": MetricSpec(label="2-jaars Treasury yield", tolerance=0.25, severity="medium"),
+    "inflation_expectations_5y": MetricSpec(label="5-jaars break-even inflatie", tolerance=0.10, severity="medium"),
+    "inflation_expectations_10y": MetricSpec(label="10-jaars break-even inflatie", tolerance=0.10, severity="medium"),
+    "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=100_000.0, severity="medium"),
 }
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaans \
-monetair beleid: Fed funds rate, 10-jaars Treasury yield, CPI-index, werkloosheid. Duid \
+monetair beleid: Fed funds rate, 2- en 10-jaars Treasury yield, CPI-index, werkloosheid, \
+break-even inflatieverwachtingen (5 en 10 jaar) en het Fed-balanstotaal. Duid \
 wat de aangeleverde cijfers betekenen in hun macro-context (bijv. verkrappend/verruimend \
 beleidssignaal, een mogelijk verband tussen de aangeleverde reeksen onderling) -- alleen \
-als de cijfers dat zelf rechtvaardigen. Krijg je een Taylor Rule-impliciete rente en een \
+als de cijfers dat zelf rechtvaardigen. Houd daarbij drie dingen uit elkaar die makkelijk \
+door elkaar lopen: wat de Fed DOET (de beleidsrente), wat de markt VERWACHT dat de Fed \
+gaat doen (de 2-jaars yield is daar de gangbaarste maatstaf voor), en wat de markt aan \
+INFLATIE verwacht (de break-evens). Een bewegende 10-jaars yield hoeft geen \
+verandering in Fed-verwachtingen te zijn -- het kan ook de termijnpremie zijn. Krijg je een Taylor Rule-impliciete rente en een \
 afwijkingsclaim aangeleverd, gebruik die dan LETTERLIJK als je kwantitatieve anker voor of \
 het beleid krap of ruim is t.o.v. wat dit gevestigde model impliceert -- schat dat niet \
 zelf in, dat is al voor je berekend. (De algemene schrijfregels -- neutraliteit, alleen \
@@ -146,7 +194,8 @@ def monitor(conn, now=None, event_id=None):
     om op elke cyclus te herhalen, declareert alleen de actuele config."""
     register_source(
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
-        frequency="maandelijks (meeste FRED-reeksen hier)", latency="~1s per call (REST)", cost="gratis (FRED API)",
+        frequency="gemengd: maandelijks (FEDFUNDS/CPI/UNRATE), dagelijks (DGS2/DGS10/break-evens), wekelijks (WALCL)",
+        latency="~1s per call (REST)", cost="gratis (FRED API)",
     )
     return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)
 
