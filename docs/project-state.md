@@ -657,13 +657,25 @@ behouden blijven.
 **Nog te doen:** de wekelijkse aanroep zit nog niet in `runtime/daily.py`,
 dus de ronde draait nog nergens vanzelf.
 
-**Open vraag — de sector agent heeft nog geen doelen.** Deel A vraagt 11
-doelen op relatieve sterkte t.o.v. SPY, juist om rotatie van
-marktrichting te scheiden. Maar die relatieve sterkte wordt pas op
-deep-dive-tijd berekend en nergens opgeslagen, dus er is niets om tegen te
-resolven. Ruwe ETF-prijzen voorspellen kan wel, maar meet vooral
-marktrichting. Keuze voor DD, niet stilzwijgend ingevuld — en het raakt de
-rijkste testbron die het cohort heeft.
+**De sector agent heeft doelen gekregen (DD, 28-09).** SPY wordt nu elke
+cyclus opgehaald en opgeslagen naast de elf ETF's, zodat het relatieve
+rendement over een horizon achteraf uit de claims-historie te berekenen
+is. 11 doelen op relatief rendement (5/21 hd) = 22 voorspellingen per
+ronde — meer breedte dan de andere vier agents samen, en dat telt omdat
+breedte statistische kracht oplevert en herhaling niet.
+
+De dagelijkse relatieve sterkte per ETF wordt nu óók opgeslagen
+(`<etf>_rel_spy`), berekend uit de `change_percent` die de quote toch al
+meelevert. Nul extra API-calls. Die waarden hebben bewust GEEN MetricSpec
+en triggeren dus niet: de escalatie blijft op de ruwe prijs lopen, want een
+delta-trigger hierop zou de dagverandering van vandaag met die van
+gisteren vergelijken — een tweede verschil, en dat is ruis.
+
+Kosten: één extra Alpha Vantage-call per cyclus, 24 → 25. Twee tests die
+ik eerder deze dag bouwde sloegen daarop meteen aan (het API-budget en de
+graafmapping), en dat is precies waarvoor ze er zijn.
+
+**Totaal: 57 voorspellingen per wekelijkse ronde over vijf agents.**
 
 ## Known problems
 

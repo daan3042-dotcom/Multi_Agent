@@ -778,12 +778,14 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       en 9 voorspellingen per ronde). Een test bewaakt dat elk doel naar
       een metric_key verwijst die de agent ook daadwerkelijk ophaalt —
       anders is de uitkomst nooit te resolven.
-      **OPEN: de sector agent.** Deel A vraagt daar 11 doelen op
-      *relatieve sterkte vs. SPY*, maar die wordt nu pas op deep-dive-tijd
-      berekend en nergens als claim opgeslagen — dus niet resolvbaar. Het
-      alternatief (ruwe ETF-prijzen) meet vooral marktrichting in plaats
-      van rotatie, en dat is precies wat relatieve sterkte moet uitsluiten.
-      Keuze voor DD; niet stilzwijgend ingevuld.
+      **[28-09] De sector agent erbij, na DD's beslissing:** SPY wordt nu
+      elke cyclus opgehaald en opgeslagen, zodat het relatieve rendement
+      achteraf uit de claims-historie te berekenen is. 11 doelen op
+      relatief rendement t.o.v. SPY (5/21 hd) = 22 voorspellingen per
+      ronde, meer breedte dan de andere vier agents samen. Kosten: één
+      extra Alpha Vantage-call per cyclus (24 → 25). De dagelijkse
+      relatieve sterkte wordt óók opgeslagen maar triggert bewust niet.
+      **Totaal over vijf agents: 57 voorspellingen per wekelijkse ronde.**
 - [ ] **[27-09]** Richtlijn vervangen: niet "~5 voorspellingen per week"
       maar **zoveel mogelijk onafhankelijke doelen** per agent, elk op
       cadans-bewuste horizonnen (handelsdagen 5/21/63 voor dagreeksen,

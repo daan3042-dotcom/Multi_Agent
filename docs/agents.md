@@ -68,7 +68,7 @@ rol van de synthesizer, die apart gescoord wordt.
 | financial | HY-spread, VIX, 10Y-2Y (5/21/63 hd), NFCI (1/4/12 weekprints) | 12 |
 | economic | ICSA (1/4 weekprints), UNRATE en PAYEMS (1/3 maandprints) | 6 |
 | currency | EUR/USD, USD/JPY, GBP/USD (5/21/63 hd) | 9 |
-| sector | **nog te beslissen** — zie hieronder | — |
+| sector | relatief rendement t.o.v. SPY per ETF (5/21 hd) | 22 |
 | commodity | geen — maandelijkse bron, niet resolvbaar op korte horizon | — |
 | equity | geen — buiten cohort 0 | — |
 
@@ -76,13 +76,23 @@ rol van de synthesizer, die apart gescoord wordt.
 een random walk niet verslaat. Blijkt dat zo, dan is het geen mislukking
 maar de bevestiging dat de meetopstelling werkt.
 
-**Open vraag bij de sector agent.** De roadmap vraagt 11 doelen op
-*relatieve sterkte t.o.v. SPY* — precies om sectorrotatie te scheiden van
-marktrichting. Maar die relatieve sterkte wordt nu pas op deep-dive-tijd
-berekend en nergens als claim opgeslagen, dus er is niets om tegen te
-resolven. Ruwe ETF-prijzen voorspellen kan wel, maar meet vooral
-marktrichting — precies wat relatieve sterkte moest uitsluiten. Dit is een
-keuze voor DD en staat daarom nog open.
+**De sector agent voorspelt relatief rendement, niet koersen.** Op DD's
+beslissing van 28-09 wordt SPY nu elke cyclus opgehaald en opgeslagen,
+naast de elf sector-ETF's. Daarmee is het relatieve rendement over een
+horizon achteraf uit de claims-historie te berekenen: de procentuele
+koersverandering van de ETF tussen twee observatiemomenten, minus die van
+SPY over precies dezelfde twee momenten.
+
+Waarom niet gewoon de koers voorspellen: dat meet vooral of de markt
+omhoog of omlaag ging, en dat is precies wat hier uitgesloten moet worden.
+Rotatie is de vraag.
+
+Daarnaast wordt de **dagelijkse** relatieve sterkte per ETF nu ook
+opgeslagen (`<etf>_rel_spy`), berekend uit de dagverandering die de quote
+toch al meelevert — dat kost geen extra API-call. Die waarden triggeren
+bewust NIET: de escalatie blijft op de ruwe prijs lopen, want een
+delta-trigger hierop zou de dagverandering van vandaag met die van
+gisteren vergelijken, en dat is ruis.
 
 ## Welke knoop van de causale graaf bedient welke agent (roadmap 1.10)
 
