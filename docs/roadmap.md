@@ -154,7 +154,7 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | ~~`run_daily.py` + cron, idempotent~~ | 1.11 | ✅ `tests/test_runtime_daily.py` | — |
 | ~~Fail-loud-notificatie~~ | 1.7/1.11 | ✅ | — |
 | VPS bestellen en inrichten: keys, `MI_DB_PATH`, `MI_WEBHOOK_URL`, cron met `flock` | 1.11 | eerste geslaagde `run_daily` op de VPS, melding ontvangen op je telefoon | DD |
-| API-quota meten | 1.11 | dagelijks callvolume (monitoring + deep-dives) < limiet van de gebruikte tier, gedocumenteerd in `docs/data-sources.md`; anders bron wisselen vóór T₀ᵃ | Claude Code |
+| ~~API-quota meten~~ **[28-09] gemeten — PROBLEEM** | 1.11 | ✅ geteld in `docs/data-sources.md` + `tests/test_api_budget.py`. FRED 15/dag (ruim). **Alpha Vantage 24/dag voor monitoring alleen, tot 46 op een volatiele dag** — de gratis tier ligt in de orde van 25/dag, dus dit past waarschijnlijk niet. Volume piekt precies op de dagen dat er veel triggert. DD moet het quotum van zijn key verifiëren; vier opties in `docs/data-sources.md` | DD beslist |
 | Geautomatiseerde offsite back-up | 1.11 | dagelijkse kopie buiten de VPS (Litestream of `.backup` + rclone) én één keer daadwerkelijk hersteld op een andere machine | DD |
 | Externe heartbeat / dead man's switch | 1.11 | alarm bij UITBLIJVEN van een run, getest door de machine bewust een dag uit te zetten | DD |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
@@ -252,6 +252,9 @@ Secties 4.5, 4.6.
   forecast-ronde en resolver, alleen loggen, DD controleert dagelijks de
   logs tegen een vaste lijst.
 - **Freeze:** contract v0, resolution rules, drempels, prompts, model_id.
+  **[28-09]** De reeksenlijst per agent hoort hier NIET thuis maar eerder
+  — zie het eerste punt van de T₀ᵇ-checklist hieronder. Bij de freeze is
+  het te laat: de drempelkalibratie draait dan al.
 
 ## T₀ᵇ — de predictieklok loopt
 
@@ -263,6 +266,17 @@ Secties 4.5, 4.6.
 - [ ] Offsite back-up loopt dagelijks én is één keer hersteld (1.11)
 - [ ] Externe heartbeat actief en getest door de machine uit te zetten (1.11)
 - [ ] API-quota gemeten tegen het dagelijkse callvolume incl. deep-dives (1.11)
+- [ ] **[28-09] Reeksenlijst per agent definitief**: welke reeksen elke
+      agent ophaalt staat vast, en elke graafknoop is bediend óf expliciet
+      als uitgesteld genoteerd (`unserved_owned_nodes()`, 1.10/2.x).
+      **Dit punt valt vóór de drempelkalibratie hieronder, niet bij de
+      freeze** — je kunt geen drempel kalibreren voor een reeks die nog
+      niet gekozen is, en een reeks die je later toevoegt heeft minder
+      maanden data dan de rest van het cohort. Een voorspelling die je
+      niet gedaan hebt is de enige fout die ook een covariaat niet
+      repareert. Reden dat dit punt er pas op 28-09 bij kwam: de freeze
+      bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
+      de monitoring-scope waaruit die doelen gekozen worden
 - [ ] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2)
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
 - [ ] `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `model_id`, `prompt_version` (1.2/4.1)

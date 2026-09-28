@@ -429,6 +429,49 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   (NFCI-interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-
   gemiddelde-afwijking).
 
+### Vervolg: API-budget gemeten — Alpha Vantage past waarschijnlijk niet (28-09)
+
+367 tests groen. Nieuw: `docs/data-sources.md` + `tests/test_api_budget.py`.
+Dit is het checklistpunt "API-quota meten" uit fase 0, dat vóór T₀ᵃ af moest
+met de clausule "anders bron wisselen".
+
+**De telling, rechtstreeks uit de code:**
+
+| Provider | Monitoring/dag | Worst case met deep-dives |
+|---|---|---|
+| FRED | 15 | 20 |
+| Alpha Vantage | **24** | **46** |
+
+FRED is ruim en gratis, geen zorg. **Alpha Vantage is het knelpunt:** de
+gratis tier ligt in de orde van 25 requests per dag, dus de monitoring
+alléén zit al tegen het plafond en elke deep-dive-dag gaat eroverheen.
+
+**Waarom dit erger is dan het lijkt:** het Alpha Vantage-volume piekt
+precies op de dagen dat er veel triggert. Vallen de calls daar stil, dan
+ontbreken systematisch de volatiele weken — en een gat dat samenhangt met
+marktbeweging maakt het track record beter dan het is. Dat is het ene
+faalpatroon dat de hele forward test ongeldig maakt, en je merkt het pas
+bij de evaluatie.
+
+**Niet geverifieerd (checkpoint 4):** het exacte quotum van de tier die bij
+DD's key hoort. Geen netwerktoegang vanuit de ontwikkelomgeving. Mogelijk
+heeft de key uit `analyst_agent.ai` een betaalde tier — dan verandert de
+conclusie. **DD moet dit op zijn accountpagina controleren.** De
+call-aantallen zelf staan wel vast; die komen uit de code.
+
+**Vier opties, uitgewerkt in `docs/data-sources.md`.** De interessantste is
+optie 1: commodity van Alpha Vantage naar FRED. Dat haalt 10 calls weg én
+tilt die agent van maand- naar dagcadans, waardoor hij in cohort 0 kan
+voorspellen in plaats van pas in cohort v1. Twee problemen in één keer.
+
+**Ook toegevoegd op DD's verzoek:** een nieuw checklistpunt bij T₀ᵇ —
+reeksenlijst per agent definitief, elke graafknoop bediend of expliciet
+uitgesteld. Met de notitie dat dat punt vóór de drempelkalibratie valt en
+niet bij de freeze: je kunt geen drempel kalibreren voor een reeks die nog
+niet gekozen is. De freeze bevroor wél de doelenlijst, de drempels en de
+prompts, maar nergens de monitoring-scope waaruit die doelen gekozen
+worden.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
