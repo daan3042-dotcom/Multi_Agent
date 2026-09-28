@@ -840,12 +840,16 @@ bediend worden. Zonder deze agent leert de forward test een half jaar
 lang niets over groei en arbeidsmarkt — daarom komt de kern vóór T₀,
 als enige uitzondering op "geen nieuwe agents". Lean betekent: één
 FRED-bron, drie reeksen, één model, checkpoint 1 uit `CLAUDE.md`.
-- [ ] **Pre-T₀ (lean):** monitoring mode + deep-dive mode op ICSA
+- [x] **[28-09] Pre-T₀ (lean):** monitoring mode + deep-dive mode op ICSA
       (initial claims, wekelijks — de snelst resolvende macroreeks die er
       is), UNRATE en PAYEMS (maandelijks); eigen registry-entry
-      `FRED:economic`; sectie in `docs/agents.md`
-- [ ] **Pre-T₀:** Sahm Rule (`src/analysis/sahm_rule.py`), gebouwd uit
-      UNRATE die al opgehaald wordt
+      `FRED:economic`; sectie in `docs/agents.md`. **Nog NIET gekoppeld aan
+      `runtime/daily.py`** — checkpoint 1 uit `CLAUDE.md`, wacht op DD's
+      review. Er staat een test op die die grens bewaakt
+- [x] **[28-09] Pre-T₀:** Sahm Rule (`src/analysis/sahm_rule.py`), gebouwd
+      uit UNRATE die al opgehaald wordt. Vijfde model in `analysis/`. De
+      drempel van 0,50 pp is expliciet GEEN plaatshouder: dat getal komt
+      uit het gepubliceerde model en mag niet gekalibreerd worden
 - [ ] **Pre-T₀:** doelen in de forecast-ronde: ICSA volgende 1/4
       weekprints, UNRATE en PAYEMS volgende 1/3 maandprints (kwantielen)
 - [ ] Output gap (HP-filter op bbp-reeks) — post-T₀

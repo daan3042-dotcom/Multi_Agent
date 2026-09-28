@@ -53,7 +53,7 @@ graaf moet voorkomen.
 
 | Agent | Bedient knopen | Nu al gedekt door zijn databron? |
 |---|---|---|
-| economic *(nog te bouwen)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | nee — de lean-versie (2.7) dekt straks alleen de eerste twee |
+| economic *(gebouwd 28-09, nog niet gekoppeld)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | deels — de lean-versie dekt de eerste twee; `wage_growth` en `inflation_persistence` blijven post-T₀ |
 | monetary_policy | `inflation_expectations`, `policy_stance`, `policy_expectations`, `liquidity`, `term_premium` | deels — alleen `policy_stance`; de andere vier vragen nieuwe FRED-reeksen |
 | financial | `financial_conditions`, `credit_risk_premium`, `risk_appetite` | **ja, volledig** — enige agent zonder gat |
 | currency | `dollar` | deels — drie losse paren, brede dollarindex ontbreekt |
@@ -365,6 +365,91 @@ i.p.v. rentes/koersen/bedrijfsfundamentals) — zie ook `docs/roadmap.md`
 C.4's eigen bewoording. Supply-chain-signalen (bijv. een mijnverstoring)
 horen bewust NIET hier — dat is kwalitatief/nieuws-vormig en hoort bij de
 nog te bouwen news monitor agent (sectie D).
+
+## Economic agent (`agents/economic_agent.py`) — **nieuw, 28-09-2026, nog niet gekoppeld**
+
+**Status:** gebouwd en getest, maar **bewust nog niet toegevoegd aan de
+dagelijkse runner** (`src/runtime/daily.py`). Dat is checkpoint 1 uit
+`CLAUDE.md`: een nieuwe agent wordt pas aan de onbeheerde cyclus gehangen
+nadat DD hem heeft gezien. Er staat een test op die die grens bewaakt.
+
+**Waarom hij er is, als enige uitzondering op "geen nieuwe agents vóór
+T₀".** De causale graaf (1.10) heeft vier knopen in de reële economie en
+géén van de zes bestaande agents bediende er ook maar één. Zonder deze
+agent leert de forward test een half jaar lang niets over groei en
+arbeidsmarkt — en dat is de bovenkant van de transmissieketen. Een graaf
+die daar blind is, ziet alleen gevolgen en nooit de oorzaak.
+
+**Wat het volgt:** drie FRED-reeksen, "vers" tot 10 dagen (strakker dan de
+monetary agent's 35 dagen, omdat hier een wekelijkse reeks tussen zit).
+Eigen databron-registratie `FRED:economic` — de derde FRED-agent, dus
+zonder eigen `source_key` zouden drie agents dezelfde data_health-rij
+delen.
+
+| Metric | FRED-reeks | Cadans | Bedient welke graafknoop |
+|---|---|---|---|
+| Wekelijkse WW-aanvragen | ICSA | wekelijks | `labor_tightness` |
+| Werkloosheidspercentage | UNRATE | maandelijks | `labor_tightness` |
+| Banen buiten de landbouw | PAYEMS | maandelijks | `growth` |
+
+ICSA is de snelst resolvende macroreeks die er is. Daarmee is dit de enige
+macro-agent met een voorspeldoel dat op korte horizon af te rekenen valt —
+zie `docs/roadmap.md` deel A, "De agents van cohort 0".
+
+**Wanneer het triggert:**
+
+| Metric | Afwijking die triggert | Severity |
+|---|---|---|
+| Wekelijkse WW-aanvragen | > 25.000 aanvragen | medium |
+| Werkloosheidspercentage | > 0,2 procentpunt | high |
+| Banen buiten de landbouw | > 250 (duizend) | high |
+
+PAYEMS is een **niveau** in duizenden personen, dus het verschil tussen
+twee waarnemingen ís de maandelijkse banengroei. Een normale maand is +100
+tot +200; de drempel van 250 vangt dus de uitzonderlijke maanden en de
+banenverliezen, niet de gewone.
+
+**Waar de deep-dive over gaat:** de staat van de arbeidsmarkt en het tempo
+van de economische activiteit. De prompt waarschuwt expliciet voor drie
+dingen die hier misgaan: PAYEMS is een niveau en geen groeicijfer,
+wekelijkse WW-aanvragen zijn rumoerig (één week is zelden een signaal), en
+de Sahm Rule moet letterlijk overgenomen worden inclusief zijn
+voorbehoud.
+
+**Onderbouwing — de Sahm Rule** (`src/analysis/sahm_rule.py`, vijfde model
+in die map): bij een werkloosheidsclaim haalt Python 15 maanden UNRATE op
+en berekent of het 3-maands gemiddelde 0,50 procentpunt of meer boven het
+laagste 3-maands gemiddelde van de voorgaande twaalf maanden ligt. De LLM
+krijgt de uitkomst én de duiding als kant-en-klare claim en mag niet zelf
+inschatten of de arbeidsmarkt verslechtert.
+
+Twee dingen die hier bewust zo zijn:
+- **De drempel van 0,50 is géén plaatshouder.** Anders dan de tolerances
+  hierboven komt dat getal uit het gepubliceerde model (Sahm, 2019) en mag
+  het niet "gekalibreerd" worden — dan meet je een eigen model onder de
+  naam van een gevestigd model.
+- **Minder dan 15 maanden data levert géén berekening op**, geen kortere
+  variant. Dezelfde weiger-in-plaats-van-gokken-regel als de Taylor Rule.
+
+De agent geeft altijd mee dat de Sahm Rule **beschrijvend** is: hij
+signaleert dat een recessie waarschijnlijk al begonnen is, niet dat er een
+aankomt.
+
+**Bewust NIET in de lean versie** (alles post-T₀, staat zo in roadmap
+2.7): output gap via HP-filter, Misery Index, ISM-diffusie, Phillips
+Curve-residual. Elk daarvan vraagt een nieuwe bron of een parameterkeuze,
+en dat is precies wat vóór T₀ niet moet gebeuren. Gevolg: de graafknopen
+`wage_growth` en `inflation_persistence` blijven voorlopig onbediend —
+een vastgelegde grens, geen vergeten reeks.
+
+**Bewuste overlap met de monetary agent.** Die monitort UNRATE ook. Geen
+kopieerfout: de monetary agent leest werkloosheid als input voor de
+beleidsreactie (dual mandate), deze agent schat er de toestand
+`labor_tightness` uit. Gevolg dat je moet kennen: bij een
+werkloosheidscijfer dat beide drempels haalt vuren er **twee** triggers en
+kunnen er twee deep-dives volgen over dezelfde publicatie, elk met een
+andere invalshoek. Of dat wenselijk is, staat als open vraag in
+`docs/project-state.md`.
 
 ## Belangrijk voorbehoud, voor alle zes agents
 
