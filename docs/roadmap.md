@@ -164,9 +164,20 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 
 ## Fase 1 — De causale graaf (parallel, 6 – 26 okt, niet blokkerend)
 
-Handwerk voor DD en partner. Sjabloon: `docs/causal-graph.md`.
-Deliverables: 15–25 knopen, pijlen met vertraging, dekking per agent,
-`src/contract/graph.py` (enum). Sectie 1.10.
+**[28-09] v0 staat, twee weken vóór schema.** 17 knopen, 41 pijlen,
+`src/contract/graph.py` + 18 tests, dekking per agent in
+`docs/agents.md`. Wat rest binnen 1.10 is de back-fill-toets, en die
+wacht op de back-fill zelf (fase 0).
+
+Oorspronkelijk gepland als handwerk voor DD en partner. Op 28-09 anders
+gelopen: er is nog geen partner, en DD koos voor een door LLM's
+opgestelde v0 als vertrekpunt ("eerst een werkende basis, daarna
+optimaliseren"). **Wat dat kost staat expliciet in
+`docs/causal-graph.md`, "Herkomst":** een goed kalibratieresultaat in
+mei 2027 bewijst dan niet dat DD een edge heeft, maar hooguit dat een
+conventioneel transmissiemodel plus LLM-oordeel gekalibreerd is. Elke
+pijl die DD zelf toevoegt of wijzigt wordt met `[DD]` gemarkeerd, zodat
+achteraf te scheiden is wat van wie kwam.
 
 **Nieuw:** elke pijl wordt deterministisch getoetst op de back-fill
 (lead-lag-correlatie op de gekozen vertraging, volledige historie).
@@ -580,18 +591,23 @@ losse analisten: de causale structuur is expliciet en handgeschreven, de
 inferentie deterministisch, en het taalmodel voedt hem alleen met
 waarnemingen.
 
-- [ ] 15–25 knopen vastleggen in `docs/causal-graph.md` (handwerk, DD +
-      partner). Voorbeelden van knooptypen: groei, inflatie,
-      kredietimpuls, liquiditeit, beleidsstance, financiële condities,
-      risicopremie, dollar, termijnpremie
-- [ ] Per pijl: richting, verwachte vertraging, en de waarneembare metric
-      die hem het beste meet
-- [ ] `src/contract/graph.py` — de knopen als enum, zodat een claim of
-      prediction er machine-checkbaar naar kan verwijzen
-- [ ] Per domain agent vastleggen welke knopen hij bedient (in
-      `docs/agents.md`)
-- [ ] Graaf-versionering: elke wijziging na T₀ krijgt een versienummer en
-      start een nieuw cohort
+- [x] **[28-09]** 17 knopen vastgelegd in `docs/causal-graph.md`, met de
+      driedeling observaties → toestanden → outputs. **Niet het
+      oorspronkelijke handwerk DD + partner:** er is nog geen partner, en
+      DD heeft op 28-09 gekozen voor een door LLM's opgestelde v0 als
+      basis. Consequentie voor wat de forward test bewijst: expliciet
+      vastgelegd in `docs/causal-graph.md`, "Herkomst"
+- [x] **[28-09]** 41 pijlen met richting, vertragingsvenster (in dagen,
+      zodat de lead-lag-toets er direct op kan rekenen), sterkte,
+      zekerheid en de waarneembare metric
+- [x] **[28-09]** `src/contract/graph.py` — knopen als enum, pijlen als
+      bevroren dataclass, eigenaarschap per agent, cykeldetectie en
+      `validate_graph()`. 18 tests in `tests/test_graph.py`
+- [x] **[28-09]** Per domain agent vastgelegd welke knopen hij bedient
+      (`docs/agents.md`). De sector agent bedient er bewust géén:
+      sectorrotatie is een output, geen oorzaak
+- [x] **[28-09]** Graaf-versionering: `GRAPH_VERSION = "v0"` +
+      versietabel onderaan `docs/causal-graph.md`
 - [ ] **[27-09]** Elke pijl deterministisch toetsen op de back-fill:
       lead-lag-correlatie op de opgegeven vertraging over de volledige
       historie, plus een kolom "houdt stand / niet / onbeslist" in
@@ -599,6 +615,16 @@ waarnemingen.
       dit is de enige toets van jullie eigen model die vóór mei 2027
       iets kan bewijzen. Een pijl die niet standhoudt gaat naar "Open
       punten", niet naar de enum.
+      **[28-09] Voorwerk gedaan, de toets zelf niet (wacht op de
+      back-fill):** elke pijl draagt nu een `Verifiability`-klasse, omdat
+      de toets anders nepresultaten oplevert die als bevestiging gelezen
+      worden. Van de 41 pijlen zijn er 14 volwaardig toetsbaar, 17 zwak
+      (uitslag alleen informatief bij het verkeerde teken) en 10 niet.
+      Drie structurele oorzaken, uitgewerkt in `docs/causal-graph.md`:
+      definitie-overlap (de NFCI bevat kredietspreads, VIX én
+      aandelenkoersen als componenten, dus correleert hij deels met
+      zichzelf), feedbackrichting (in een lus correleren A en B op elke
+      lag) en gelijktijdigheid (binnen uren, geen lead-lag op dagdata).
 - [ ] **[27-09]** `graph_node` optioneel in cohort 0, verplicht vanaf
       cohort v1 (zie deel A, correctie 6). De graaf is daarmee van het
       kritieke pad naar T₀ᵇ gehaald.

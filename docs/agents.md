@@ -41,6 +41,36 @@ tekst zelf verder brandschoon is. Onbetrouwbare onderliggende data kan
 geen goed geschreven tekst "redden". Een verouderde (maar niet
 onbereikbare) bron dwingt dit niet automatisch af.
 
+## Welke knoop van de causale graaf bedient welke agent (roadmap 1.10)
+
+Sinds 28-09-2026 ligt er één gedeeld model van de economische machine vast:
+17 toestandsknopen met 41 pijlen ertussen, in `docs/causal-graph.md` (en
+machine-leesbaar in `src/contract/graph.py`). Elke knoop heeft **precies
+één primaire eigenaar**; andere agents mogen hem lezen. Zonder die regel
+zouden vijf agents dezelfde toestand onafhankelijk schatten en er vijf
+verschillende getallen uit komen — precies de vrijzwevende analyse die de
+graaf moet voorkomen.
+
+| Agent | Bedient knopen | Nu al gedekt door zijn databron? |
+|---|---|---|
+| economic *(nog te bouwen)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | nee — de lean-versie (2.7) dekt straks alleen de eerste twee |
+| monetary_policy | `inflation_expectations`, `policy_stance`, `policy_expectations`, `liquidity`, `term_premium` | deels — alleen `policy_stance`; de andere vier vragen nieuwe FRED-reeksen |
+| financial | `financial_conditions`, `credit_risk_premium`, `risk_appetite` | **ja, volledig** — enige agent zonder gat |
+| currency | `dollar` | deels — drie losse paren, brede dollarindex ontbreekt |
+| commodity | `energy_prices`, `industrial_metals` | ja, maar op maandcadans |
+| equity (adapter) | `earnings_growth`, `equity_valuation` | nee — per ticker, geen index-brede cijfers |
+| sector | **geen** | n.v.t. — zie hieronder |
+
+**De sector agent bedient bewust geen knoop.** Sectorrotatie is een
+*output*, geen oorzaak: rotatie is wat je zíét wanneer `risk_appetite` of
+`growth` beweegt. De sector agent is daarmee een cross-sectionele
+interpreet van de toestand, niet de eigenaar van een eigen toestand.
+
+Dit verandert vandaag niets aan wat een agent monitort of triggert — de
+graaf is nog nergens in de agent-code gewired. Het legt alleen vast wélke
+toestand welke agent straks schat, zodat `graph_node` op een prediction
+(roadmap 4.1) naar iets verwijst dat één eigenaar heeft.
+
 ## Monetary policy agent (`agents/monetary_policy_agent.py`)
 
 **Wat het volgt:** vier kernreeksen van FRED (Federal Reserve Economic
