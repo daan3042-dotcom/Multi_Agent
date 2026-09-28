@@ -101,11 +101,59 @@ def _database_status(conn) -> ComponentHealth:
         return ComponentHealth(component="database", status=HealthStatus.UNREACHABLE, detail=str(e))
 
 
-def _latest_run_status(conn, domain: str, mode: str) -> tuple[HealthStatus, str | None]:
+MONITORING_MAX_AGE = timedelta(days=2)
+"""Hoe oud de laatste monitoring-run mag zijn voordat het zelf een probleem
+is. `run_daily.py` draait elke dag, dus twee dagen geeft ruimte voor één
+gemiste cyclus zonder meteen alarm."""
+
+DEEP_DIVE_STATUS_MAX_AGE = timedelta(days=7)
+"""Hoe lang de uitkomst van de laatste deep-dive nog iets zegt over de
+huidige toestand. Langer dan dit en hij is geen status meer maar
+geschiedenis."""
+
+
+def _latest_run_status(
+    conn, domain: str, mode: str, now: datetime, max_age: timedelta, stale_when_old: bool
+) -> tuple[HealthStatus, str | None]:
+    """Status van de laatste run in deze modus, MET een ouderdomsgrens.
+
+    ROADMAP 1.11, "ouderdomsgrens in system_health()". Zonder die grens
+    blijft een mislukte deep-dive voor altijd de status bepalen: deep-dives
+    draaien alleen na een trigger, dus na één mislukking in oktober kan het
+    tot december duren voor er een nieuwe run overheen komt. Tot die tijd
+    geeft `system_health()` elke dag opnieuw een kritieke melding over
+    hetzelfde oude voorval. Dat is niet alleen ruis -- het is de manier
+    waarop een monitoringsysteem zichzelf nutteloos maakt, omdat DD leert
+    de dagelijkse melding weg te klikken en daarmee ook de echte mist.
+
+    `stale_when_old` maakt het verschil tussen de twee modi, en dat verschil
+    is wezenlijk:
+
+    - **monitoring** (`stale_when_old=True`): deze hoort elke dag te
+      draaien. Geen recente run betekent dat de cyclus stilstaat, en dat is
+      juist wél een probleem -> STALE, met de ouderdom in de detail-tekst.
+    - **deep_dive** (`stale_when_old=False`): deze draait alleen na een
+      trigger. Weken niets is volstrekt normaal en zegt niets over de
+      gezondheid van het systeem -> UNKNOWN, geen alarm.
+
+    Een geslaagde oude run wordt op dezelfde manier behandeld als een
+    mislukte: hij is even oud, dus even weinig informatief. Anders zou een
+    succes uit oktober het systeem in december nog "OK" laten lijken."""
     runs = list_agent_runs(conn, domain, mode=mode, limit=1)
     if not runs:
         return HealthStatus.UNKNOWN, None
+
     latest = runs[0]
+    age = now - latest["run_at"]
+    if age > max_age:
+        dagen = age.days
+        if stale_when_old:
+            return HealthStatus.STALE, f"laatste {mode}-run is {dagen} dagen oud"
+        return (
+            HealthStatus.UNKNOWN,
+            f"laatste {mode}-run is {dagen} dagen oud, status niet meer actueel",
+        )
+
     if latest["success"]:
         return HealthStatus.OK, None
     return HealthStatus.UNREACHABLE, latest["error"]
@@ -131,6 +179,8 @@ def system_health(
     sources: dict[str, timedelta],
     domains: list[str],
     now: datetime | None = None,
+    monitoring_max_age: timedelta = MONITORING_MAX_AGE,
+    deep_dive_status_max_age: timedelta = DEEP_DIVE_STATUS_MAX_AGE,
 ) -> SystemHealthReport:
     """Roadmap 1.7: de ene centrale query/functie voor de actuele status
     per component. `sources` en `domains` worden door de aanroeper
@@ -157,8 +207,12 @@ def system_health(
     ingestion_results: list[tuple[HealthStatus, str | None]] = []
     deep_dive_results: list[tuple[HealthStatus, str | None]] = []
     for domain in domains:
-        ingestion = _latest_run_status(conn, domain, "monitoring")
-        deep_dive = _latest_run_status(conn, domain, "deep_dive")
+        ingestion = _latest_run_status(
+            conn, domain, "monitoring", now, monitoring_max_age, stale_when_old=True
+        )
+        deep_dive = _latest_run_status(
+            conn, domain, "deep_dive", now, deep_dive_status_max_age, stale_when_old=False
+        )
         ingestion_results.append(ingestion)
         deep_dive_results.append(deep_dive)
 

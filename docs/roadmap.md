@@ -160,8 +160,8 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
 | Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar | Claude Code |
 | Economic agent, lean | 2.7 | monitoring + Sahm Rule + ICSA/UNRATE/PAYEMS, sectie in `docs/agents.md`, checkpoint 1 uit `CLAUDE.md` | Claude Code |
-| Atomiciteit claims/dedup | 1.11 | crash tussen `save_domain_output` en `record_agent_run` laat geen wezen achter | Claude Code |
-| Ouderdomsgrens in `system_health()` | 1.11 | één mislukte deep-dive geeft niet elke dag een kritieke melding | Claude Code |
+| ~~Atomiciteit claims/dedup~~ **[28-09] ✅** | 1.11 | `storage/schema.py::save_output_with_run()` zet beide inserts in één transactie; `agents/base.py` gebruikt 'm op alle drie de opslagpaden. Vóór de fix leverde een dubbele `event_id` juist dúbbele claims op: de IntegrityError sloeg toe ná de commit die hij moest voorkomen | — |
+| ~~Ouderdomsgrens in `system_health()`~~ **[28-09] ✅** | 1.11 | run ouder dan de grens telt niet meer als actuele status. Asymmetrisch: oude monitoring-run → STALE (de cyclus staat stil, dat is wél erg), oude deep-dive → UNKNOWN (event-gedreven, weken niets is normaal). Grenzen instelbaar per aanroeper | — |
 
 ## Fase 1 — De causale graaf (parallel, 6 – 26 okt, niet blokkerend)
 

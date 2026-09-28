@@ -173,7 +173,19 @@ def open_db(path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
 def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
     """Slaat een volledige DomainOutput (en al zijn claims) op in één
     transactie -- een DomainOutput zonder zijn claims, of andersom, zou de
-    database in een staat achterlaten die het contract uit A.1 schendt."""
+    database in een staat achterlaten die het contract uit A.1 schendt.
+
+    LET OP: commit zelf. Wie dit in dezelfde transactie wil als de
+    bijbehorende `agent_runs`-regel, gebruikt `save_output_with_run()`
+    hieronder -- zie daar voor waarom dat uitmaakt."""
+    domain_output_id = _insert_domain_output(conn, output)
+    conn.commit()
+    return domain_output_id
+
+
+def _insert_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
+    """De inserts zonder commit, zodat save_output_with_run() ze met de
+    agent_run in één transactie kan zetten."""
     cur = conn.execute(
         "INSERT INTO domain_outputs (domain, mode, generated_at, needs_review, review_issues_json) "
         "VALUES (?, ?, ?, ?, ?)",
@@ -206,7 +218,6 @@ def save_domain_output(conn: sqlite3.Connection, output: DomainOutput) -> int:
                 c.note,
             ),
         )
-    conn.commit()
     return domain_output_id
 
 
@@ -376,13 +387,85 @@ def record_agent_run(
     event_id wordt door het schema zelf geweigerd (sqlite3.IntegrityError,
     zie idx_agent_runs_event_id) -- een mislukte poging blokkeert een
     retry met hetzelfde event_id NIET."""
+    run_id = _insert_agent_run(
+        conn, domain, mode, run_at, success,
+        domain_output_id=domain_output_id, trigger_count=trigger_count,
+        error=error, event_id=event_id,
+    )
+    conn.commit()
+    return run_id
+
+
+def _insert_agent_run(
+    conn: sqlite3.Connection,
+    domain: str,
+    mode: str,
+    run_at: datetime,
+    success: bool,
+    domain_output_id: int | None = None,
+    trigger_count: int = 0,
+    error: str | None = None,
+    event_id: str | None = None,
+) -> int:
+    """De insert zonder commit -- zie _insert_domain_output()."""
     cur = conn.execute(
         "INSERT INTO agent_runs (domain, mode, run_at, success, domain_output_id, trigger_count, error, event_id) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (domain, mode, run_at.isoformat(), int(success), domain_output_id, trigger_count, error, event_id),
     )
-    conn.commit()
     return cur.lastrowid
+
+
+def save_output_with_run(
+    conn: sqlite3.Connection,
+    output: DomainOutput,
+    mode: str,
+    run_at: datetime,
+    success: bool = True,
+    trigger_count: int = 0,
+    error: str | None = None,
+    event_id: str | None = None,
+) -> tuple[int, int]:
+    """Slaat een DomainOutput én zijn `agent_runs`-regel op in ÉÉN
+    transactie. Geeft (domain_output_id, agent_run_id) terug.
+
+    ROADMAP 1.11, "atomiciteit claims/dedup". Het probleem dat dit oplost:
+    `save_domain_output()` en `record_agent_run()` committen allebei apart.
+    Daartussen zit een venster, en dat venster heeft twee uitgangen die
+    allebei slecht zijn:
+
+    1. **Crash ertussen.** De claims staan in de database, de audit-regel
+       niet. Dat levert een wees op: data zonder spoor van de run die 'm
+       maakte. Erger nog, `has_successful_run()` kijkt naar `agent_runs`,
+       dus 1.7's idempotency ziet de cyclus als NIET gedaan -- een
+       herstart haalt alles opnieuw op en schrijft de claims er nog een
+       keer bij.
+    2. **Dubbele `event_id`.** De partial unique index weigert een tweede
+       succesvolle run met hetzelfde domain+mode+event_id, dus
+       `record_agent_run()` gooit sqlite3.IntegrityError. Maar de claims
+       zijn dan al gecommit. Precies het scenario waar idempotency voor
+       bedoeld is, leverde dus dubbele claims op -- de bescherming sloeg
+       toe NA de schrijfactie die hij moest voorkomen.
+
+    Met één transactie rolt bij beide gevallen alles terug: geen claims,
+    geen run, en een retry doet gewoon opnieuw wat er moest gebeuren.
+
+    De IntegrityError wordt hier niet gevangen maar doorgegeven -- de
+    aanroeper (`runtime/daily.py::_run_one_agent`) behandelt 'm al als
+    "deze cyclus was al verwerkt". Wel wordt er eerst teruggerold, zodat de
+    verbinding niet in een halve transactie achterblijft."""
+    try:
+        domain_output_id = _insert_domain_output(conn, output)
+        agent_run_id = _insert_agent_run(
+            conn, output.domain, mode, run_at, success,
+            domain_output_id=domain_output_id, trigger_count=trigger_count,
+            error=error, event_id=event_id,
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
+    return domain_output_id, agent_run_id
 
 
 def has_successful_run(conn: sqlite3.Connection, domain: str, mode: str, event_id: str) -> bool:

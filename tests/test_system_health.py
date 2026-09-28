@@ -187,3 +187,73 @@ def test_system_health_with_registry_sources_keeps_two_fred_consumers_independen
     report = system_health(conn, sources=sources_from_registry(conn), domains=[], now=now)
     assert report.status_for("source:FRED:monetary_policy") == HealthStatus.OK
     assert report.status_for("source:FRED:financial") == HealthStatus.STALE
+
+
+# --- Ouderdomsgrens (roadmap 1.11) ---
+
+
+def test_recente_mislukte_deep_dive_meldt_nog_steeds(tmp_path):
+    """Het correcte geval: een verse mislukking moet wél alarmeren. De
+    ouderdomsgrens mag geen echte storing wegpoetsen."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "deep_dive", now, success=False, error="LLM-call mislukt")
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now)
+    assert report.status_for("llm") == HealthStatus.UNREACHABLE
+
+
+def test_oude_mislukte_deep_dive_alarmeert_niet_eeuwig(tmp_path):
+    """REGRESSIE, en de reden dat deze grens bestaat.
+
+    Deep-dives draaien alleen na een trigger. Mislukt er één in oktober en
+    triggert er daarna weken niets, dan blijft die ene mislukking de status
+    bepalen -- elke dag opnieuw een kritieke melding over hetzelfde oude
+    voorval. Zo maakt een monitoringsysteem zichzelf nutteloos: DD leert de
+    dagelijkse melding weg te klikken en mist daarmee ook de echte."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    lang_geleden = now - timedelta(days=30)
+    record_agent_run(conn, "monetary_policy", "deep_dive", lang_geleden, success=False, error="LLM-call mislukt")
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now)
+    assert report.status_for("llm") == HealthStatus.UNKNOWN
+
+
+def test_oude_monitoring_run_is_juist_wel_een_probleem(tmp_path):
+    """De asymmetrie tussen de twee modi, en die is wezenlijk. Monitoring
+    hoort elke dag te draaien, dus 'al dagen niets' betekent dat de cyclus
+    stilstaat -- dat moet juist wél zichtbaar worden. Bij deep-dives is
+    weken niets volstrekt normaal."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "monitoring", now - timedelta(days=5), success=True)
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now)
+    assert report.status_for("ingestion:monetary_policy") == HealthStatus.STALE
+
+
+def test_oude_geslaagde_deep_dive_blijft_niet_ok_melden(tmp_path):
+    """REGRESSIE op de andere kant: een succes uit vorige maand mag het
+    systeem vandaag niet 'OK' laten lijken. Even oud is even weinig
+    informatief, ongeacht de uitkomst."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "deep_dive", now - timedelta(days=30), success=True)
+
+    report = system_health(conn, sources={}, domains=["monetary_policy"], now=now)
+    assert report.status_for("llm") == HealthStatus.UNKNOWN
+
+
+def test_grens_is_instelbaar_door_de_aanroeper(tmp_path):
+    """Zelfde dependency-injection-gedachte als de rest van deze module:
+    de aanroeper mag de grens kiezen, de default is niet heilig."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    record_agent_run(conn, "monetary_policy", "deep_dive", now - timedelta(days=10), success=False, error="stuk")
+
+    ruim = system_health(
+        conn, sources={}, domains=["monetary_policy"], now=now,
+        deep_dive_status_max_age=timedelta(days=60),
+    )
+    assert ruim.status_for("llm") == HealthStatus.UNREACHABLE

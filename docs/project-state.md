@@ -472,6 +472,56 @@ niet gekozen is. De freeze bevroor wél de doelenlijst, de drempels en de
 prompts, maar nergens de monitoring-scope waaruit die doelen gekozen
 worden.
 
+### Vervolg: de laatste twee fase-0-codeitems (28-09, 375 tests groen)
+
+Hiermee zijn alle fase-0-items die niet op de VPS wachten afgerond. Wat
+rest in fase 0 is de back-fill (geblokkeerd tot er live data is) en vier
+punten op DD's naam.
+
+**1. Atomiciteit claims/agent_runs.** `storage/schema.py::
+save_output_with_run()` zet de DomainOutput, zijn claims én de
+`agent_runs`-regel in één transactie; `agents/base.py` gebruikt 'm op alle
+drie de opslagpaden (monitoring, geslaagde deep-dive, mislukte deep-dive).
+`save_domain_output()` en `record_agent_run()` blijven bestaan voor
+losse aanroepers.
+
+Het venster tussen de twee oude commits had twee uitgangen, en de tweede
+was erger dan waar het item voor bedoeld was:
+- **Crash ertussen** → claims zonder audit-regel. En omdat
+  `has_successful_run()` naar `agent_runs` kijkt, zag 1.7's idempotency de
+  cyclus als niet-gedaan: een herstart haalde alles opnieuw op en schreef
+  de claims er nóg een keer bij.
+- **Dubbele `event_id`** → de partial unique index weigerde de tweede
+  agent_run, maar de claims waren al gecommit. De bescherming tegen
+  dubbele verwerking leverde dus zelf dubbele claims op. Dat staat nu als
+  regressietest vast (`test_dubbele_event_id_laat_geen_dubbele_claims_achter`).
+
+Eén volgordewijziging in `run_monitoring()`: `evaluate_deltas()` draait nu
+vóór het opslaan in plaats van erna, omdat `trigger_count` in dezelfde
+transactie mee moet. Het leest alleen `previous_by_metric`, dat al
+opgehaald was, dus de uitkomst verandert niet.
+
+**2. Ouderdomsgrens in `system_health()`.** Een run ouder dan de grens
+telt niet meer als actuele status. Bewust asymmetrisch tussen de twee
+modi:
+- **monitoring** ouder dan 2 dagen → `STALE`. Deze hoort elke dag te
+  draaien, dus 'al dagen niets' betekent dat de cyclus stilstaat en dat
+  moet juist wél alarmeren.
+- **deep_dive** ouder dan 7 dagen → `UNKNOWN`. Deze draait alleen na een
+  trigger; weken niets is normaal en zegt niets over de gezondheid.
+
+Het probleem dat dit oplost: deep-dives zijn event-gedreven, dus na één
+mislukking kon het weken duren voor er een nieuwe run overheen kwam. Tot
+die tijd gaf `system_health()` elke dag opnieuw een kritieke melding over
+hetzelfde oude voorval — de manier waarop een monitoringsysteem zichzelf
+nutteloos maakt, omdat je leert de dagelijkse melding weg te klikken en
+daarmee ook de echte mist. Een oude *geslaagde* run wordt hetzelfde
+behandeld: even oud is even weinig informatief.
+
+Beide grenzen zijn parameters met een default, instelbaar door de
+aanroeper — zelfde dependency-injection-gedachte als de rest van die
+module.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

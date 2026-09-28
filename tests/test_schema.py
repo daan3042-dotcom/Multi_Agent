@@ -442,3 +442,73 @@ def test_list_qc_cases_filters_by_status(tmp_path):
 
     all_cases = list_qc_cases(conn, "monetary_policy")
     assert {c.id for c in all_cases} == {c1, c2}
+
+
+# --- Atomiciteit claims/agent_runs (roadmap 1.11) ---
+
+
+def test_save_output_with_run_schrijft_beide(tmp_path):
+    """Het correcte geval: DomainOutput, claims en de agent_run-regel staan
+    er na één aanroep, aan elkaar gekoppeld via domain_output_id."""
+    from storage.schema import list_agent_runs, save_output_with_run
+
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    output_id, run_id = save_output_with_run(
+        conn, _output(), "monitoring", now, success=True, trigger_count=2, event_id="2026-09-28"
+    )
+
+    assert output_id > 0 and run_id > 0
+    runs = list_agent_runs(conn, "monetary_policy", mode="monitoring")
+    assert len(runs) == 1
+    assert runs[0]["domain_output_id"] == output_id
+    assert runs[0]["trigger_count"] == 2
+    assert len(load_latest_claims(conn, "monetary_policy")) == 1
+
+
+def test_dubbele_event_id_laat_geen_dubbele_claims_achter(tmp_path):
+    """REGRESSIE, en de belangrijkste van dit bestand.
+
+    Vóór 1.11's atomiciteitsfix committeerde save_domain_output() eerst en
+    liep record_agent_run() daarna pas tegen de unique index op event_id
+    aan. De IntegrityError kwam dus NA de schrijfactie die hij moest
+    voorkomen: de claims stonden er dubbel in, met maar één agent_run.
+    Precies het tegenovergestelde van wat idempotency moet doen.
+
+    Nu rolt de hele transactie terug: de tweede poging laat niets achter."""
+    import sqlite3
+
+    from storage.schema import list_agent_runs, save_output_with_run
+
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    save_output_with_run(conn, _output(), "monitoring", now, success=True, event_id="2026-09-28")
+    with pytest.raises(sqlite3.IntegrityError):
+        save_output_with_run(conn, _output(), "monitoring", now, success=True, event_id="2026-09-28")
+
+    assert len(list_agent_runs(conn, "monetary_policy", mode="monitoring")) == 1
+    assert len(load_latest_claims(conn, "monetary_policy")) == 1
+
+
+def test_crash_tussen_de_twee_inserts_laat_geen_wees_achter(tmp_path, monkeypatch):
+    """REGRESSIE op het crash-venster zelf. Een proces dat omvalt tussen de
+    claims en de audit-regel liet data achter zonder spoor van de run die
+    'm maakte -- en omdat has_successful_run() naar agent_runs kijkt, zag
+    1.7's idempotency die cyclus als niet-gedaan en haalde een herstart
+    alles nog een keer op."""
+    import storage.schema as schema
+
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    def boem(*args, **kwargs):
+        raise RuntimeError("proces valt om tussen de twee inserts")
+
+    monkeypatch.setattr(schema, "_insert_agent_run", boem)
+    with pytest.raises(RuntimeError):
+        schema.save_output_with_run(conn, _output(), "monitoring", now, success=True)
+
+    assert load_latest_claims(conn, "monetary_policy") == []
+    assert schema.list_agent_runs(conn, "monetary_policy") == []
