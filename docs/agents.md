@@ -81,12 +81,25 @@ hieronder — die gebruikt óók FRED, maar met een andere ververssnelheid
 (10 dagen). Vóór 1.4 deelden ze onbedoeld dezelfde status, waardoor de
 ene agent's verse pulls de andere's veroudering kon verbergen.
 
-| Metric | FRED-reeks |
-|---|---|
-| Fed funds rate | FEDFUNDS |
-| 10-jaars Treasury yield | DGS10 |
-| CPI-index | CPIAUCSL |
-| Werkloosheidspercentage | UNRATE |
+| Metric | FRED-reeks | Bedient welke graafknoop |
+|---|---|---|
+| Fed funds rate | FEDFUNDS | `policy_stance` |
+| 10-jaars Treasury yield | DGS10 | `term_premium` |
+| CPI-index | CPIAUCSL | (input voor `inflation_persistence`) |
+| Werkloosheidspercentage | UNRATE | (input voor `labor_tightness`) |
+| 2-jaars Treasury yield | DGS2 | `policy_expectations` |
+| 5-jaars break-even inflatie | T5YIE | `inflation_expectations` |
+| 10-jaars break-even inflatie | T10YIE | `inflation_expectations` |
+| Fed-balanstotaal | WALCL | `liquidity` |
+
+De onderste vier zijn toegevoegd op 28-09-2026. Reden: de causale graaf
+(1.10) wees deze agent aan als eigenaar van `policy_expectations`,
+`inflation_expectations` en `liquidity`, maar hij had geen enkele
+waarneming om die knopen uit te schatten. Het onderscheid dat hiermee
+mogelijk wordt: **wat de Fed doet** (FEDFUNDS) is iets anders dan **wat de
+markt denkt dat de Fed gaat doen** (DGS2) en dan **wat de markt aan
+inflatie verwacht** (de break-evens). Zonder die drie apart bewoog er van
+alles in de 10-jaars yield dat de agent niet kon duiden.
 
 **Wanneer het triggert:** bij elke nieuwe waarde vergelijkt het agent met
 de vorige observatie (geen vaste absolute drempel, zie hieronder bij
@@ -98,6 +111,17 @@ de vorige observatie (geen vaste absolute drempel, zie hieronder bij
 | 10-jaars Treasury yield | > 0,25 procentpunt | medium |
 | CPI-index | > 2,0 punten | medium |
 | Werkloosheidspercentage | > 0,3 procentpunt | high |
+| 2-jaars Treasury yield | > 0,25 procentpunt | medium |
+| 5-jaars break-even inflatie | > 0,10 procentpunt | medium |
+| 10-jaars break-even inflatie | > 0,10 procentpunt | medium |
+| Fed-balanstotaal | > 100.000 (miljoen USD, ≈ $100 mrd) | medium |
+
+De break-even-drempels staan bewust lager (0,10) dan de rente-drempels:
+inflatieverwachtingen bewegen in honderdsten van procentpunten, dus 0,25
+zou daar vrijwel nooit vuren. **Het Fed-balanstotaal is de minst zekere
+drempel in dit hele project** — niveau én eenheid van WALCL zijn niet
+tegen de live API geverifieerd (geen netwerktoegang in de
+ontwikkelomgeving). Behandel die als een eerste gok, niet als een keuze.
 
 **Waar de deep-dive over gaat:** duidt wat de cijfers betekenen in hun
 macro-context — bijv. een verkrappend of verruimend beleidssignaal, of een
