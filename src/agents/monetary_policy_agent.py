@@ -30,14 +30,14 @@ hierbij bewust zijn afgewogen:
    vijf weken een trigger geven. Dat is bestaand gedrag voor alle vier de
    oorspronkelijke reeksen, en het verscherpen ervan is een
    drempelwijziging die niet in deze ronde thuishoort.
-2. WALCL's tolerance is het minst zekere getal in dit bestand. De reeks
-   staat in MILJOENEN dollars (niveau in de orde van 6-7 miljoen, dus
-   $6-7 biljoen), en 100.000 zou dan ~$100 miljard aan
-   balansverandering zijn. Dat niveau en die eenheid zijn NIET tegen de
-   live API geverifieerd -- er is geen netwerktoegang naar FRED vanuit de
-   ontwikkelomgeving. Expliciet gevlagd als het zwakste deel van deze
-   uitbreiding (CLAUDE.md, checkpoint 4), niet stilzwijgend als "goed
-   genoeg" gepresenteerd.
+2. WALCL's eenheid is op 28-09-2026 GEVERIFIEERD tegen de live API: de
+   eerste run op de VPS leverde 6.747.704, wat de aanname bevestigt dat de
+   reeks in MILJOENEN dollars staat (~$6,75 biljoen). De tolerance is bij
+   diezelfde meting verlaagd van 100.000 naar 25.000 -- $100 miljard
+   balansverandering in een week komt alleen bij crisis-QE voor, dus de
+   oude drempel zou nooit gevuurd hebben en liet de knoop `liquidity`
+   blind voor het tempo van de afbouw. Hiermee is de checkpoint-4-vlag op
+   dit bestand vervallen.
 
 DEEP_DIVE_SYSTEM_PROMPT hieronder bevat ALLEEN vakinhoud -- de algemene
 schrijfregels (neutraliteit, alleen aangeleverde cijfers, onzekerheid
@@ -122,7 +122,13 @@ METRIC_SPECS = {
     "2y_treasury_yield": MetricSpec(label="2-jaars Treasury yield", tolerance=0.25, severity="medium"),
     "inflation_expectations_5y": MetricSpec(label="5-jaars break-even inflatie", tolerance=0.10, severity="medium"),
     "inflation_expectations_10y": MetricSpec(label="10-jaars break-even inflatie", tolerance=0.10, severity="medium"),
-    "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=100_000.0, severity="medium"),
+    # 25.000 = ~$25 miljard balansverandering. Verlaagd van 100.000 op
+    # 28-09-2026, nadat de eerste live run het niveau bevestigde op
+    # 6.747.704 (miljoenen USD, dus ~$6,75 biljoen). Een normale week is
+    # $5-30 miljard; $100 miljard zie je alleen bij crisis-QE, dus de oude
+    # drempel zou in de praktijk nooit gevuurd hebben en liet de knoop
+    # `liquidity` blind voor het tempo van de balansafbouw.
+    "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=25_000.0, severity="medium"),
 }
 
 GRAPH_MAPPING: dict[str, Node | None] = {
