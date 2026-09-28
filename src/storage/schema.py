@@ -27,6 +27,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterator
 
+from contract.graph import Node
+from contract.prediction import HorizonKind, Prediction, PredictionKind
 from contract.output_contract import Claim, DomainOutput, Mode
 from health.data_health import QualityStatus
 from qc.qc import QCCase, QCCaseStatus, validate_qc_transition
@@ -146,6 +148,55 @@ CREATE TABLE IF NOT EXISTS qc_cases (
     qc_issues_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_qc_cases_domain_status ON qc_cases(domain, status);
+
+-- Roadmap 4.1 (fase 2). ONVERANDERLIJK: er is bewust geen update-pad in
+-- dit bestand. Een voorspelling achteraf bijstellen is precies de fout die
+-- het hele forward-testopzet probeert te vermijden, dus die mogelijkheid
+-- hoort niet te bestaan -- niet "hoort niet gebruikt te worden".
+CREATE TABLE IF NOT EXISTS predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    target_metric_key TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('quantile', 'binary')),
+    horizon_kind TEXT NOT NULL CHECK (horizon_kind IN ('trading_days', 'releases')),
+    horizon_n INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    resolves_at TEXT NOT NULL,
+    resolution_rule TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    q10 REAL,
+    q50 REAL,
+    q90 REAL,
+    probability REAL,
+    event_rule TEXT,
+    cohort TEXT NOT NULL,
+    contract_version TEXT NOT NULL,
+    graph_version TEXT NOT NULL,
+    graph_node TEXT,
+    causal_chain_json TEXT NOT NULL,
+    evidence_claim_ids_json TEXT NOT NULL,
+    trigger_version TEXT,
+    trigger_conditioned INTEGER NOT NULL DEFAULT 0,
+    regime_at_creation TEXT,
+    market_implied_ref REAL,
+    note TEXT,
+    -- Dezelfde vormeisen als contract/prediction.py, maar dan in het
+    -- schema: een prediction die langs het contract komt maar niet langs
+    -- deze checks zou een bug in het contract blootleggen, en andersom.
+    CHECK (horizon_n > 0),
+    CHECK (
+        (kind = 'quantile' AND q10 IS NOT NULL AND q50 IS NOT NULL AND q90 IS NOT NULL
+             AND probability IS NULL AND event_rule IS NULL AND q10 <= q50 AND q50 <= q90)
+        OR
+        (kind = 'binary' AND probability IS NOT NULL AND event_rule IS NOT NULL
+             AND probability BETWEEN 0 AND 1 AND q10 IS NULL AND q50 IS NULL AND q90 IS NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_predictions_resolves_at ON predictions(resolves_at);
+CREATE INDEX IF NOT EXISTS idx_predictions_agent_cohort ON predictions(agent, cohort);
+CREATE INDEX IF NOT EXISTS idx_predictions_target ON predictions(domain, target_metric_key);
 """
 
 
@@ -698,3 +749,108 @@ def archive_qc_case(conn: sqlite3.Connection, case_id: int, now: datetime) -> No
     handmatig (bijv. later door een reviewer of scheduler). Alleen
     toegestaan vanuit QC_PASSED of NEEDS_REVIEW (zie QC_TRANSITIONS)."""
     advance_qc_case(conn, case_id, QCCaseStatus.ARCHIVED, now)
+
+
+# --- Predictions (roadmap 4.1, fase 2) -------------------------------------
+#
+# BEWUST GEEN update_prediction() of delete_prediction(). Een voorspelling
+# achteraf bijstellen is de fout die het hele forward-testopzet probeert te
+# vermijden; die mogelijkheid hoort niet te bestaan, niet "hoort niet
+# gebruikt te worden". Scores komen straks in een APARTE evaluations-tabel
+# (4.5), zodat het resolveren de voorspelling zelf nooit aanraakt.
+
+
+def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
+    """Slaat één voorspelling op en geeft zijn id terug. De vormcheck is al
+    gebeurd bij constructie (contract/prediction.py::Prediction.__post_init__);
+    het schema herhaalt dezelfde eisen als CHECK-constraints, zodat een bug
+    in het contract niet stilzwijgend ongeldige data oplevert."""
+    cur = conn.execute(
+        """INSERT INTO predictions (
+            agent, domain, target_metric_key, kind, horizon_kind, horizon_n,
+            created_at, resolves_at, resolution_rule, model_id, prompt_version,
+            q10, q50, q90, probability, event_rule,
+            cohort, contract_version, graph_version, graph_node,
+            causal_chain_json, evidence_claim_ids_json,
+            trigger_version, trigger_conditioned, regime_at_creation,
+            market_implied_ref, note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            prediction.agent, prediction.domain, prediction.target_metric_key,
+            prediction.kind.value, prediction.horizon_kind.value, prediction.horizon_n,
+            prediction.created_at.isoformat(), prediction.resolves_at.isoformat(),
+            prediction.resolution_rule, prediction.model_id, prediction.prompt_version,
+            prediction.q10, prediction.q50, prediction.q90,
+            prediction.probability, prediction.event_rule,
+            prediction.cohort, prediction.contract_version, prediction.graph_version,
+            prediction.graph_node.value if prediction.graph_node else None,
+            json.dumps(list(prediction.causal_chain), ensure_ascii=False),
+            json.dumps(list(prediction.evidence_claim_ids)),
+            prediction.trigger_version, int(prediction.trigger_conditioned),
+            prediction.regime_at_creation, prediction.market_implied_ref, prediction.note,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def _row_to_prediction(row: tuple) -> Prediction:
+    (
+        _id, agent, domain, target_metric_key, kind, horizon_kind, horizon_n,
+        created_at, resolves_at, resolution_rule, model_id, prompt_version,
+        q10, q50, q90, probability, event_rule, cohort, contract_version,
+        graph_version, graph_node, causal_chain_json, evidence_claim_ids_json,
+        trigger_version, trigger_conditioned, regime_at_creation,
+        market_implied_ref, note,
+    ) = row
+    return Prediction(
+        agent=agent, domain=domain, target_metric_key=target_metric_key,
+        kind=PredictionKind(kind), horizon_kind=HorizonKind(horizon_kind),
+        horizon_n=horizon_n,
+        created_at=datetime.fromisoformat(created_at),
+        resolves_at=datetime.fromisoformat(resolves_at),
+        resolution_rule=resolution_rule, model_id=model_id, prompt_version=prompt_version,
+        q10=q10, q50=q50, q90=q90, probability=probability, event_rule=event_rule,
+        cohort=cohort, contract_version=contract_version, graph_version=graph_version,
+        graph_node=Node(graph_node) if graph_node else None,
+        causal_chain=tuple(json.loads(causal_chain_json)),
+        evidence_claim_ids=tuple(json.loads(evidence_claim_ids_json)),
+        trigger_version=trigger_version, trigger_conditioned=bool(trigger_conditioned),
+        regime_at_creation=regime_at_creation, market_implied_ref=market_implied_ref,
+        note=note,
+    )
+
+
+def list_predictions(
+    conn: sqlite3.Connection,
+    agent: str | None = None,
+    domain: str | None = None,
+    cohort: str | None = None,
+    limit: int = 100,
+) -> list[Prediction]:
+    """Voorspellingen, nieuwste eerst. Filters zijn optioneel en stapelbaar."""
+    query = "SELECT * FROM predictions WHERE 1=1"
+    params: list = []
+    for kolom, waarde in (("agent", agent), ("domain", domain), ("cohort", cohort)):
+        if waarde is not None:
+            query += f" AND {kolom} = ?"
+            params.append(waarde)
+    query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+    params.append(limit)
+    return [_row_to_prediction(r) for r in conn.execute(query, params).fetchall()]
+
+
+def list_due_predictions(conn: sqlite3.Connection, now: datetime) -> list[Prediction]:
+    """Voorspellingen waarvan `resolves_at` is verstreken -- de invoer voor
+    de resolver (4.5, nog te bouwen). Oudste eerst, zodat resolveren in
+    chronologische volgorde gebeurt.
+
+    LET OP: dit filtert NIET op al-geresolveerde voorspellingen, want die
+    administratie hoort in de evaluations-tabel en niet hier. De resolver
+    bepaalt zelf wat hij al gezien heeft; deze functie blijft een zuivere
+    vraag aan de predictions-tabel."""
+    rows = conn.execute(
+        "SELECT * FROM predictions WHERE resolves_at <= ? ORDER BY resolves_at ASC, id ASC",
+        (now.isoformat(),),
+    ).fetchall()
+    return [_row_to_prediction(r) for r in rows]
