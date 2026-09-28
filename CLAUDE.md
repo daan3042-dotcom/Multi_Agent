@@ -73,6 +73,35 @@ en `docs/project-state.md`.
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | Tests | `tests/` |
 
+## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)
+
+**Op 28-09-2026 hebben twee sessies dezelfde vier roadmap-items
+onafhankelijk gebouwd** — atomiciteit, ouderdomsgrens, API-quota en de
+economic agent. Beide branches stonden gewoon op GitHub; er keek alleen
+niemand. Dat kostte een halve dag en leverde twee versies op die met de
+hand samengevoegd moesten worden.
+
+Daarom, vóór je aan een roadmap-item begint:
+
+1. **Lees de banner van de SessionStart-hook** (`.claude/hooks/session-start.sh`).
+   Die draait automatisch en somt elke branch op met commits die nog niet
+   in de default branch zitten. Staat daar iets tussen, kijk dan met
+   `git log --oneline <default>..<branch>` of jouw item er al op staat.
+2. **Staat het er al op? Bouw het niet.** Meld het, en vraag of je verder
+   moet op die branch in plaats van een nieuwe.
+3. **Push je eigen branch na de EERSTE commit, niet pas aan het eind.**
+   Een branch die alleen lokaal bestaat, is voor elke andere sessie
+   onzichtbaar. Dit is de hele reden dat de hook iets kan vinden.
+
+En het belangrijkste tegengif tegen dit hele probleem: **merge per
+afgerond item naar de default branch, niet per sessie.** Zolang werk op
+een branch blijft staan, lopen `docs/roadmap.md` en
+`docs/project-state.md` op de default branch achter — en dat zijn precies
+de bestanden waaruit een volgende sessie (en de project knowledge in de
+Claude-webversie) afleidt wat er nog te doen is. Een achterlopende
+default branch is niet "netjes opruimen later", het is de directe oorzaak
+van dubbel werk.
+
 ## Voordat je iets verandert
 
 - Lees `docs/roadmap.md` — deel A bepaalt de volgorde (kritiek pad naar
