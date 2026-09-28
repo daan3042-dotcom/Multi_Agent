@@ -52,7 +52,12 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     output, triggers = mpa.monitor(conn, now=now)
     assert output is not None
     assert output.domain == "monetary_policy"
-    assert triggers == []
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []
 
 
 def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
@@ -245,7 +250,12 @@ def test_monitoring_maakt_claims_voor_de_nieuwe_reeksen(tmp_path, monkeypatch):
     output, triggers = mpa.monitor(conn, now=now)
 
     assert output is not None
-    assert triggers == []  # eerste observatie: geen vorige waarde om tegen af te zetten
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []  # eerste observatie: geen vorige waarde
     metrics = {c.metric_key for c in load_latest_claims(conn, "monetary_policy")}
     assert {"2y_treasury_yield", "inflation_expectations_5y", "fed_balance_sheet"} <= metrics
 

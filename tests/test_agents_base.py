@@ -512,3 +512,45 @@ def test_shared_quality_rules_bans_directional_advice_language():
     assert "VERBODEN patronen" in SHARED_QUALITY_RULES
     assert "ALLEEN DE AANGELEVERDE CLAIMS" in SHARED_QUALITY_RULES
     assert "ONZEKERHEID EXPLICIET" in SHARED_QUALITY_RULES
+
+
+def test_run_monitoring_vlagt_een_gedeeltelijke_pull(tmp_path):
+    """REGRESSIE op de live meting van 28-09-2026 (roadmap 1.3, gewired).
+
+    SPECS verwacht meerdere reeksen; de fetch levert er een. Vóór de wiring
+    kwam dat er als een gezonde cyclus doorheen -- success=True, geen
+    trigger, niets in de logs. Nu is het zichtbaar."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    drie_specs = {
+        "fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.25, severity="high"),
+        "10y_treasury_yield": MetricSpec(label="10-jaars yield", tolerance=0.25),
+        "unemployment_rate": MetricSpec(label="Werkloosheid", tolerance=0.3),
+    }
+
+    _, triggers = run_monitoring(
+        conn, "monetary_policy", "FRED",
+        lambda: {"fed_funds_rate": {"value": "5.50", "date": "x"}},
+        drie_specs, timedelta(days=35), now=now,
+    )
+
+    completeness = [t for t in triggers if t.metric_key is None and "completeness" in t.reason]
+    assert len(completeness) == 1
+    assert completeness[0].observed_value == 1
+    assert completeness[0].threshold == 3
+    assert completeness[0].severity == "high"  # 2 van de 3 weg
+
+
+def test_run_monitoring_vlagt_niets_bij_een_volledige_pull(tmp_path):
+    """De tegenhanger: alles binnen, geen completeness-trigger. Zonder deze
+    test zou een te strenge check ongemerkt elke cyclus kunnen vlaggen."""
+    conn = _db(tmp_path)
+    now = datetime.now(timezone.utc)
+    volledig = {key: {"value": "1.0", "date": "x"} for key in SPECS}
+
+    _, triggers = run_monitoring(
+        conn, "monetary_policy", "FRED", lambda: volledig,
+        SPECS, timedelta(days=35), now=now,
+    )
+
+    assert [t for t in triggers if "completeness" in t.reason] == []

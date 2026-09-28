@@ -52,7 +52,12 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     output, triggers = sa.monitor(conn, now=now)
     assert output is not None
     assert output.domain == "sector"
-    assert triggers == []
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []
 
 
 def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
@@ -80,8 +85,13 @@ def test_monitor_triggers_on_significant_price_move(tmp_path, monkeypatch):
     monkeypatch.setattr(sa, "fetch_snapshot", lambda: {"xlb_materials": {"value": "82.00", "date": "y"}})
     output, triggers = sa.monitor(conn, now=t2)
 
-    assert len(triggers) == 1
-    assert triggers[0].metric_key == "xlb_materials"
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert len(metric_triggers) == 1
+    assert metric_triggers[0].metric_key == "xlb_materials"
 
 
 def test_deep_dive_wires_into_run_deep_dive(tmp_path, monkeypatch):

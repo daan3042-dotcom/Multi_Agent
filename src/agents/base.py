@@ -94,7 +94,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from health.data_health import HealthStatus, QualityStatus, check_source, detect_revision, rollup_quality_status
+from health.data_health import (
+    HealthStatus,
+    QualityStatus,
+    check_source,
+    detect_revision,
+    evaluate_completeness,
+    rollup_quality_status,
+)
 from qc.qc import DEFAULT_LLM_REVIEW_MODEL, QCCaseStatus, apply_qc, decide_qc_outcome, default_llm_review
 from storage.schema import (
     advance_qc_case,
@@ -106,7 +113,14 @@ from storage.schema import (
     record_data_health,
     save_output_with_run,
 )
-from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_revision, evaluate_surprise
+from triggers.trigger_engine import (
+    Severity,
+    TriggerEvent,
+    evaluate_completeness_result,
+    evaluate_data_health,
+    evaluate_revision,
+    evaluate_surprise,
+)
 
 DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
 
@@ -242,6 +256,19 @@ def run_monitoring(
         record_agent_run(conn, domain, "monitoring", now, success=False, trigger_count=len(triggers), error=snapshot.get("error"), event_id=event_id)
         _maybe_open_qc_case(conn, domain, triggers, now)
         return None, triggers
+
+    # Roadmap 1.3, gewired op 28-09-2026: is elke VERWACHTE reeks ook
+    # daadwerkelijk binnengekomen? fetch_snapshot() geeft alleen een fout
+    # terug als GEEN ENKELE reeks lukte, dus zonder deze check is een bron
+    # die voor 80% wegvalt niet te onderscheiden van een gezonde dag -- zie
+    # evaluate_completeness_result() voor de live meting die dit afdwong.
+    completeness_trigger = evaluate_completeness_result(
+        domain,
+        evaluate_completeness(source_name, metric_specs.keys(), snapshot.keys(), now=now),
+        now=now,
+    )
+    if completeness_trigger is not None:
+        triggers.append(completeness_trigger)
 
     # Vorige observatie per metric OPHALEN VOORDAT de nieuwe claims worden
     # opgeslagen -- anders zou "de vorige observatie" straks de claim zijn

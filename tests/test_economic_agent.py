@@ -64,7 +64,12 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
 
     assert output is not None
     assert output.domain == "economic"
-    assert triggers == []  # eerste observatie, geen vorige waarde
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []  # eerste observatie, geen vorige waarde
     metrics = {c.metric_key for c in load_latest_claims(conn, "economic")}
     assert {"initial_claims", "nonfarm_payrolls"} <= metrics
 
