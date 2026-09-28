@@ -738,6 +738,79 @@ dat de regel geschreven wordt.
 zonder die vlag is dus een dry-run zonder voorspellingen. Vóór T₀ᵇ is dat
 prima; daarna is elke zo'n week een gat in het cohort.
 
+### Resolver, evaluations en scores (4.5) — 529 tests groen
+
+Het systeem kon voorspellen maar niets afwikkelen. Blokkade 4 is daarmee
+voor de helft weg; de drie baselines (4.6) staan nog open.
+
+**De regeltekst is niet uitvoerbaar, en dat was het hele probleem.** Elke
+prediction draagt een `resolution_rule` in vrije taal. Python kan die niet
+uitvoeren, en een LLM hem laten interpreteren zou betekenen dat het model
+dat de voorspelling deed ook bepaalt of hij uitkwam. Daarom draagt elke
+prediction nu ook een `resolution_method`: een enum met vier waarden die
+verwijst naar een functie in `src/contract/resolution.py`. De tekst is de
+autoriteit voor mensen, de methode doet het rekenwerk. Dat ze hetzelfde
+zeggen is een menselijk oordeel — `tests/test_resolution_mapping.py` pint
+de afgesproken combinatie per doel vast, zodat een wijziging aan één van
+beide opvalt.
+
+De vier methoden: `level_at_or_after` (dagreeksen op een
+handelsdagen-horizon), `nth_release` (week- en maandreeksen),
+`relative_return` (de sector agent) en `direction_after_fomc` (de twee
+binaire monetary-doelen).
+
+**De vintage-regel kwam gratis.** Bijna elke regel zegt "eerste print,
+latere revisies wijzigen de uitkomst nooit". Dat is hier geen extra werk:
+we slaan elke cyclus op wat de bron op dat moment zei, dus de
+claims-historie ís een vintage-archief. De eerste print van een periode is
+de claim met die `source_time` die wij als eerste zagen.
+
+**Drie toestanden, niet twee.** Afgewikkeld, nog-niet-afwikkelbaar en
+onafwikkelbaar. De middelste krijgt bewust GEEN rij: dan blijft de
+voorspelling vanzelf in beeld bij de volgende run. Pas na 30 dagen wachten
+wordt hij als `unresolvable` weggeschreven, met reden. Zonder die grens
+zou een reeks die stil gestopt is met publiceren een groeiende stapel
+opleveren die elke dag opnieuw geprobeerd wordt en nooit opvalt; zonder
+het wachten zou een normale publicatievertraging een geldige meting uit
+het cohort gooien. De 30 dagen zijn een keuze, geen berekening — ruim
+boven de grootste vertraging die we kennen (PAYEMS, ~14 dagen), ruim onder
+een kwartaal. **Hoort bij de freeze bevestigd te worden.**
+
+**Scores.** Pinball loss per kwantiel, CRPS, Brier, log loss, en
+`within_interval` als directe kalibratiecheck. Allemaal proper scoring
+rules: wie zijn echte verdeling opschrijft scoort gemiddeld beter dan wie
+iets anders opschrijft. Dat is de eigenschap waar de hele meetopstelling
+op rust, dus er staat een test die het bewíjst op een steekproef van
+20.000 trekkingen in plaats van het aan te nemen — overmoed én lafheid
+verliezen allebei.
+
+CRPS is **benaderd** uit drie kwantielniveaus (2 × de gemiddelde pinball
+loss). De echte CRPS integreert over alle niveaus; wij hebben er drie. Dat
+mag omdat agents en baselines exact dezelfde behandeling krijgen en de
+vertekening dus wegvalt in het verschil. Wat er niet mee mag: dit getal
+vergelijken met een CRPS uit de literatuur.
+
+**Twee bugs die de tests vonden, allebei van het stille soort:**
+
+1. `resolves_at` erft het tijdstip van `created_at` (maandag 07:15 UTC),
+   terwijl `source_time` van een dagreeks een kale datum is. Op tijdstip
+   vergelijken sloeg de observatie van de afwikkeldag zelf over: elke
+   handelsdagen-horizon zou één waarneming te ver gemeten hebben. De
+   scores zouden gewoon binnenkomen — alleen van de verkeerde dag.
+2. De FOMC-kalender stond als default-argument, en die wordt in Python één
+   keer geëvalueerd bij het definiëren van de functie. Het invullen van de
+   kalender zou dan pas na een herstart effect hebben gehad.
+
+**Openstaand, en bewust: `FOMC_MEETING_DATES` is leeg.** De Fed publiceert
+de vergaderdata jaren vooruit, maar ze zijn vanuit deze ontwikkelomgeving
+niet te verifiëren en een verkeerde datum wikkelt een voorspelling
+stilzwijgend op het verkeerde moment af. Benaderen met "de n-de
+FEDFUNDS-print" mag niet: FEDFUNDS publiceert twaalf keer per jaar, de
+FOMC vergadert acht keer, dus dat zou een andere gebeurtenis scoren dan de
+voorspelling beschrijft. Zolang de tuple leeg is, blijven de twee
+FEDFUNDS-doelen onafwikkelbaar en zegt de resolver per stuk waarom.
+**Checkpoint 4 — DD vult de kalender vóór T₀ᵇ.**
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

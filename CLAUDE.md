@@ -71,6 +71,8 @@ en `docs/project-state.md`.
 | API-quota/callvolume per bron | `docs/data-sources.md` |
 | VPS-inrichting + dry-run-plan (checkpoint 3) | `docs/deployment.md` |
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
+| **De resolver + scoringsregels (4.5)** | `src/scoring/` |
+| Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)

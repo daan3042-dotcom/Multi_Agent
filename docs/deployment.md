@@ -224,7 +224,21 @@ op een te laag aantal, kijk dan in het log naar regels die beginnen met
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
 gat.
 
-De ronde probeert het de rest van de week elke ochtend opnieuw, maar
+**De resolver draait elke dag mee** en kost niets (geen API-calls, geen
+LLM). Vanaf het moment dat de eerste voorspellingen aflopen — vijf
+handelsdagen na de eerste ronde — hoort dit te groeien:
+
+```bash
+sqlite3 market_intelligence.db \
+  "SELECT status, COUNT(*) FROM evaluations GROUP BY status;"
+```
+
+Alleen `resolved` is goed. Verschijnt er `unresolvable`, kijk dan naar de
+reden (`SELECT reason FROM evaluations WHERE status = 'unresolvable'`):
+dat is een voorspelling die nooit meer gescoord wordt en dus definitief uit
+het cohort is. De melding zegt het ook, maar het patroon zie je hier.
+
+De forecast-ronde probeert het de rest van de week elke ochtend opnieuw, maar
 **alleen op de dagen dat de cron draait**. Met `15 7 * * 1-5` zijn dat
 maandag t/m vrijdag: vier inhaalkansen na een mislukte maandag, en daarna
 is die week definitief leeg. Zie je op vrijdagochtend nog steeds nul
