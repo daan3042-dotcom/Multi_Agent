@@ -1,3 +1,5 @@
+import pytest
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -181,3 +183,80 @@ def test_deep_dive_fetches_benchmark_only_once_for_multiple_sectors(tmp_path, mo
 
     sa.deep_dive(conn, client, output.claims, triggers, now=now)
     assert calls.count("SPY") == 1
+
+
+# --- Relatieve sterkte tijdens monitoring (28-09-2026) ---
+
+
+def _quote(prijs, change_pct, datum="2026-09-28"):
+    return {"value": str(prijs), "date": datum, "change_percent": change_pct}
+
+
+def test_spy_wordt_elke_cyclus_opgehaald_en_opgeslagen(tmp_path, monkeypatch):
+    """Zonder SPY in de claims-historie is relatieve sterkte achteraf niet
+    te berekenen, en kan de rijkste testbron van het cohort geen
+    voorspellingen doen. Dat was tot 28-09 het geval."""
+    from storage.schema import load_latest_claims
+
+    conn = init_db(str(tmp_path / "t.db"))
+    monkeypatch.setattr(sa, "fetch_snapshot", lambda: {
+        "xlk_technology": _quote(200.0, 1.5),
+        "spy_benchmark": _quote(500.0, 0.5),
+    })
+    sa.monitor(conn, now=datetime.now(timezone.utc))
+
+    metrics = {c.metric_key for c in load_latest_claims(conn, "sector")}
+    assert "spy_benchmark" in metrics
+
+
+def test_relatieve_sterkte_wordt_berekend_en_opgeslagen(tmp_path, monkeypatch):
+    """XLK +1,5% tegen SPY +0,5% is een relatieve sterkte van +1,0
+    procentpunt. Kost geen extra API-call: change_percent zat al in de
+    quote die toch al opgehaald werd."""
+    from storage.schema import load_latest_claims
+
+    conn = init_db(str(tmp_path / "t.db"))
+    snapshot = {
+        "xlk_technology": _quote(200.0, 1.5),
+        "spy_benchmark": _quote(500.0, 0.5),
+    }
+    snapshot.update(sa._relative_strength_entries(snapshot))
+    monkeypatch.setattr(sa, "fetch_snapshot", lambda: snapshot)
+    sa.monitor(conn, now=datetime.now(timezone.utc))
+
+    claims = {c.metric_key: c.value for c in load_latest_claims(conn, "sector")}
+    assert claims["xlk_technology_rel_spy"] == pytest.approx(1.0)
+
+
+def test_zonder_spy_geen_relatieve_sterkte(tmp_path):
+    """REGRESSIE: geen gok. Valt SPY weg, dan is er niets om tegen te
+    vergelijken en komt er niets terug -- in plaats van een getal dat
+    stilzwijgend iets anders betekent."""
+    zonder_spy = {"xlk_technology": _quote(200.0, 1.5)}
+    assert sa._relative_strength_entries(zonder_spy) == {}
+
+
+def test_etf_zonder_change_percent_wordt_overgeslagen():
+    snapshot = {
+        "xlk_technology": {"value": "200", "date": "x", "change_percent": None},
+        "spy_benchmark": _quote(500.0, 0.5),
+    }
+    assert sa._relative_strength_entries(snapshot) == {}
+
+
+def test_relatieve_sterkte_triggert_bewust_niet(tmp_path, monkeypatch):
+    """REGRESSIE op een bewuste keuze. De escalatie blijft op de ruwe prijs
+    lopen. Een delta-trigger op relatieve sterkte zou de dagverandering van
+    vandaag met die van gisteren vergelijken -- een tweede verschil, en dat
+    is ruis."""
+    assert not any(k.endswith("_rel_spy") for k in sa.METRIC_SPECS)
+
+
+def test_elf_forecast_doelen_op_relatief_rendement():
+    """Deel A vraagt 11 doelen, en dat is meer breedte dan de andere vier
+    agents samen leveren."""
+    assert len(sa.FORECAST_TARGETS) == 11
+    assert not any(t.metric_key == "spy_benchmark" for t in sa.FORECAST_TARGETS)
+    for t in sa.FORECAST_TARGETS:
+        assert "RELATIEVE rendement" in t.resolution_rule
+        assert "spy_benchmark" in t.resolution_rule

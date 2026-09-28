@@ -621,6 +621,62 @@ maakt (2.0), de resolver en de `evaluations`-tabel (4.5), de menselijke
 invoer (4.8), en de instrument-doelen van de synthesizer met hun
 roll-regel (4.1, laatste bullet — wacht op de instrument-mapping in 1.1).
 
+### Forecast-ronde gebouwd (2.0) — 449 tests groen
+
+De derde modus naast monitoring en deep-dive, en daarmee wat de
+predictions-tabel gaat vullen.
+
+- `src/contract/horizons.py` — horizon naar `resolves_at`. Het onderscheid
+  dat deze module draagt: `resolution_rule` is de AUTORITEIT over wat er
+  gescoord wordt, `resolves_at` zegt alleen wanneer de resolver gaat
+  kijken. De eerste moet exact zijn, de tweede niet — anders zou je de
+  publicatiekalender van FRED moeten voorspellen om een voorspelling te
+  mogen doen.
+- `agents/base.py` — `ForecastTarget`, `ForecastRoundResult` en
+  `run_forecast_round()`.
+- `FORECAST_TARGETS` in monetary, financial, economic en currency: 8, 12,
+  6 en 9 voorspellingen per ronde.
+- `tests/test_horizons.py` (13) + `tests/test_forecast_round.py` (15).
+
+**Een ronde die deels mislukt wordt niet weggegooid.** Levert het model 9
+van de 11 doelen, dan worden die 9 opgeslagen en komen de ontbrekende in
+`issues`. Negen goede voorspellingen weggooien omdat de tiende niet klopte
+kost meetbare data die niet in te halen is — dezelfde les als de
+completeness-check van vanmiddag.
+
+**Databasemigratie, en waarom die nodig was.** `agent_runs.mode` had een
+CHECK die alleen `monitoring` en `deep_dive` toestond. `CREATE TABLE IF
+NOT EXISTS` raakt een bestaande tabel niet aan, dus de VPS-database had die
+oude constraint nog: de forecast-ronde zou op een verse testdatabase
+slagen en daar falen. `_migreer_agent_runs_mode()` herbouwt de tabel als
+het nodig is, idempotent, en maakt de indexen opnieuw aan — de partial
+unique index op `event_id` stil kwijtraken zou 1.7's idempotency ongemerkt
+uitschakelen. Vier tests, waaronder een die bewijst dat bestaande rijen
+behouden blijven.
+
+**Nog te doen:** de wekelijkse aanroep zit nog niet in `runtime/daily.py`,
+dus de ronde draait nog nergens vanzelf.
+
+**De sector agent heeft doelen gekregen (DD, 28-09).** SPY wordt nu elke
+cyclus opgehaald en opgeslagen naast de elf ETF's, zodat het relatieve
+rendement over een horizon achteraf uit de claims-historie te berekenen
+is. 11 doelen op relatief rendement (5/21 hd) = 22 voorspellingen per
+ronde — meer breedte dan de andere vier agents samen, en dat telt omdat
+breedte statistische kracht oplevert en herhaling niet.
+
+De dagelijkse relatieve sterkte per ETF wordt nu óók opgeslagen
+(`<etf>_rel_spy`), berekend uit de `change_percent` die de quote toch al
+meelevert. Nul extra API-calls. Die waarden hebben bewust GEEN MetricSpec
+en triggeren dus niet: de escalatie blijft op de ruwe prijs lopen, want een
+delta-trigger hierop zou de dagverandering van vandaag met die van
+gisteren vergelijken — een tweede verschil, en dat is ruis.
+
+Kosten: één extra Alpha Vantage-call per cyclus, 24 → 25. Twee tests die
+ik eerder deze dag bouwde sloegen daarop meteen aan (het API-budget en de
+graafmapping), en dat is precies waarvoor ze er zijn.
+
+**Totaal: 57 voorspellingen per wekelijkse ronde over vijf agents.**
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

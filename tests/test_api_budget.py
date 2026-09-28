@@ -51,7 +51,10 @@ def test_fred_monitoring_volume():
 
 
 def test_alpha_vantage_monitoring_volume():
-    """24 calls per dag -- HET KNELPUNT. De gratis Alpha Vantage-tier ligt
+    """25 calls per dag -- HET KNELPUNT. Sinds 28-09 een call hoger, omdat
+    SPY nu elke cyclus wordt opgehaald: zonder die benchmark in de
+    claims-historie is relatieve sterkte achteraf niet te resolven, en dan
+    kan de rijkste testbron van het cohort geen voorspellingen doen. De gratis Alpha Vantage-tier ligt
     in de orde van 25 requests per dag (niet vanuit de ontwikkelomgeving te
     verifiëren, zie docs/data-sources.md), dus de monitoring alléén zit al
     tegen het plafond en elke deep-dive-dag gaat eroverheen.
@@ -64,9 +67,9 @@ def test_alpha_vantage_monitoring_volume():
         + len(sector_agent.SECTOR_ETFS)
         + len(commodity_agent.COMMODITIES)
     )
-    assert alpha_vantage == 24, (
+    assert alpha_vantage == 25, (
         f"Alpha Vantage-monitoringvolume is {alpha_vantage}, "
-        f"docs/data-sources.md zegt 24. Werk dat document in dezelfde ronde bij."
+        f"docs/data-sources.md zegt 25. Werk dat document in dezelfde ronde bij."
     )
 
 
@@ -85,13 +88,15 @@ def test_worst_case_volume_op_een_volatiele_dag():
         len(currency_agent.FX_PAIRS)
         + len(sector_agent.SECTOR_ETFS)
         + len(commodity_agent.COMMODITIES)
-        + len(sector_agent.SECTOR_ETFS)  # relatieve sterkte per getriggerde sector
+        # Relatieve sterkte per getriggerde sector: de benchmark zelf telt
+        # hier niet mee, die wordt apart opgehaald (SPY_REFERENTIE_CALLS).
+        + len([k for k in sector_agent.SECTOR_ETFS if k != "spy_benchmark"])
         + SPY_REFERENTIE_CALLS
         + len(commodity_agent.COMMODITIES)  # voortschrijdend gemiddelde per grondstof
     )
 
     assert fred == 20
-    assert alpha_vantage == 46
+    assert alpha_vantage == 47
 
 
 def test_sector_agent_is_de_grootverbruiker():
@@ -99,7 +104,7 @@ def test_sector_agent_is_de_grootverbruiker():
     blijkt: 11 van de 24 monitoring-calls komen van één agent, en die haalt
     alleen dagelijkse slotkoersen op -- iets waar meerdere gratis bronnen
     met ruimere limieten voor bestaan (optie 2 in docs/data-sources.md)."""
-    assert len(sector_agent.SECTOR_ETFS) == 11
+    assert len(sector_agent.SECTOR_ETFS) == 12  # 11 sectoren + de SPY-benchmark
 
 
 def test_commodity_agent_haalt_maandelijkse_data_dagelijks_op():

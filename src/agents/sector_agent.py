@@ -47,7 +47,8 @@ from datetime import timedelta
 
 import requests
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
+from contract.prediction import HorizonKind, PredictionKind
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -72,6 +73,7 @@ SECTOR_ETFS = {
     "xlu_utilities": "XLU",
     "xlre_real_estate": "XLRE",
     "xlc_communication_services": "XLC",
+    "spy_benchmark": BENCHMARK_SYMBOL,
 }
 
 METRIC_SPECS = {
@@ -86,6 +88,13 @@ METRIC_SPECS = {
     "xlu_utilities": MetricSpec(label="XLU (Utilities)", tolerance=2.0, severity="medium"),
     "xlre_real_estate": MetricSpec(label="XLRE (Real Estate)", tolerance=1.5, severity="medium"),
     "xlc_communication_services": MetricSpec(label="XLC (Communication Services)", tolerance=3.0, severity="medium"),
+    # Toegevoegd 28-09-2026. SPY werd tot dan alleen op deep-dive-tijd
+    # opgehaald, waardoor relatieve sterkte nergens in de database stond en
+    # dus niet te resolven was -- en daarmee kon de rijkste testbron van het
+    # cohort (11 onafhankelijke doelen) geen voorspellingen doen. Nu elke
+    # cyclus opgeslagen, zodat de relatieve rendementen achteraf uit de
+    # claims-historie te berekenen zijn.
+    "spy_benchmark": MetricSpec(label="SPY (S&P 500-benchmark)", tolerance=15.0, severity="medium"),
 }
 
 
@@ -96,6 +105,10 @@ GRAPH_MAPPING: dict[str, Node | None] = {
         "xly_consumer_discretionary", "xlp_consumer_staples", "xli_industrials",
         "xlb_materials", "xlu_utilities", "xlre_real_estate",
         "xlc_communication_services",
+        # De benchmark zelf is ook geen knoop: SPY is het REFERENTIEPUNT
+        # waartegen rotatie gemeten wordt, niet een toestand van de
+        # economie.
+        "spy_benchmark",
     )
 }
 """ALLE ELF BEWUST OP None, en dat is geen omissie maar het ontwerp.
@@ -109,6 +122,39 @@ Zou je de elf ETF's wel als knopen opnemen, dan krijg je een graaf waarin
 alle pijlen binnenkomen en geen enkele vertrekt: een dashboard met pijlen
 in plaats van een model.
 """
+
+FORECAST_TARGETS = tuple(
+    ForecastTarget(
+        metric_key=key,
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS,
+        horizons=(5, 21),
+        resolution_rule=(
+            "Het RELATIEVE rendement van " + key + " t.o.v. SPY over {horizon_n} "
+            "handelsdagen: de procentuele koersverandering van " + key + " tussen "
+            "created_at en de eerste observatie op of na resolves_at, MINUS de "
+            "procentuele koersverandering van spy_benchmark over precies dezelfde "
+            "twee observatiemomenten. Beide koersen komen uit de opgeslagen claims. "
+            "Positief = de sector deed het beter dan de brede markt. Slotkoersen "
+            "worden niet gereviseerd, dus vintage speelt hier niet."
+        ),
+    )
+    for key in SECTOR_ETFS
+    if key != "spy_benchmark"
+)
+# Roadmap deel A: 11 doelen, en daarmee de RIJKSTE TESTBRON van het cohort --
+# meer onafhankelijke doelen dan de andere vier agents samen. Dat telt, want
+# breedte levert statistische kracht op en herhaling niet (correctie 2 van
+# 27-09).
+#
+# Bewust op RELATIEF rendement en niet op de ruwe koers: een voorspelling van
+# de ruwe ETF-koers meet vooral of de markt omhoog of omlaag ging, en dat is
+# precies wat hier uitgesloten moet worden. Rotatie is de vraag.
+#
+# De metric_key verwijst naar de ETF-reeks; de resolution_rule legt de
+# bewerking vast. Dat is dezelfde scheiding die het contract overal hanteert:
+# de sleutel zegt WELKE reeks, de regel zegt WAT ermee gebeurt.
+
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in sector-rotatie binnen \
 Amerikaanse aandelenmarkten (de 11 SPDR Select Sector-ETF's). Duid wat een significante \
@@ -162,7 +208,42 @@ def fetch_snapshot() -> dict:
             snapshot[metric_key] = result
     if not snapshot:
         return {"error": "geen enkele sector-ETF kon worden opgehaald"}
+
+    # Dagelijkse relatieve sterkte, berekend uit de change_percent die
+    # _fetch_quote toch al meekreeg -- dit kost GEEN extra API-call.
+    # Opgeslagen sinds 28-09-2026 op DD's verzoek: tot dan bestond dit cijfer
+    # alleen tijdens een deep-dive en verdween het daarna, waardoor het
+    # nergens terug te vinden was.
+    snapshot.update(_relative_strength_entries(snapshot))
     return snapshot
+
+
+def _relative_strength_entries(snapshot: dict) -> dict:
+    """Per sector-ETF het verschil tussen zijn dagverandering en die van SPY,
+    in procentpunten. Zonder SPY valt er niets te vergelijken en komt er
+    niets terug -- geen gok, zelfde patroon als de rest van dit bestand.
+
+    BEWUST GEEN MetricSpec voor deze sleutels, en dus geen trigger. De
+    escalatie blijft op de ruwe prijs lopen (de bestaande, vastgelegde
+    keuze). Een delta-trigger hierop zou de dagverandering van vandaag met
+    die van gisteren vergelijken -- een tweede verschil, en dat is ruis.
+    Deze waarden staan er om achteraf te kunnen kijken en om de deep-dive te
+    voeden, niet om alarm te slaan."""
+    spy = snapshot.get("spy_benchmark", {}).get("change_percent")
+    if spy is None:
+        return {}
+    entries = {}
+    for metric_key, entry in snapshot.items():
+        if metric_key == "spy_benchmark":
+            continue
+        eigen = entry.get("change_percent")
+        if eigen is None:
+            continue
+        entries[f"{metric_key}_rel_spy"] = {
+            "value": compute_relative_strength_pct(eigen, spy),
+            "date": entry.get("date", ""),
+        }
+    return entries
 
 
 def monitor(conn, now=None, event_id=None):

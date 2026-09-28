@@ -88,12 +88,17 @@ bevoegdheid bij G.3, geen aanpassing van deze regels.
 
 from __future__ import annotations
 
+import json
+
 import functools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from contract.horizons import ReleaseCadence, resolves_at_for
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
+from contract.prediction import HorizonKind, Prediction, PredictionKind
 from health.data_health import (
     HealthStatus,
     QualityStatus,
@@ -112,6 +117,7 @@ from storage.schema import (
     record_agent_run,
     record_data_health,
     save_output_with_run,
+    save_prediction,
 )
 from triggers.trigger_engine import (
     Severity,
@@ -553,3 +559,234 @@ def run_deep_dive(
             advance_qc_case(conn, qc_case.id, QCCaseStatus.NEEDS_REVIEW, now)
 
     return output
+
+
+# --- Forecast-ronde (roadmap 2.0) ------------------------------------------
+
+
+FORECAST_SYSTEM_RULES = """Je doet kwantitatieve voorspellingen die later automatisch \
+gescoord worden. Dit is de enige plek in dit systeem waar je een kans of een verdeling \
+mag uitspreken -- overal elders is dat verboden.
+
+Regels waar je je aan moet houden:
+
+1. GEEF VOOR ELK GEVRAAGD DOEL EEN VOORSPELLING. Sla er geen over. Weet je het niet, geef \
+dan een brede verdeling -- dat is informatie, geen zwakte. Een ontbrekende voorspelling is \
+een gat in de meting dat niet achteraf te vullen is.
+2. KWANTIELEN MOETEN OPLOPEN: q10 <= q50 <= q90. q10 betekent: 10% kans dat de \
+werkelijke waarde LAGER uitkomt. q90: 10% kans dat hij HOGER uitkomt.
+3. WEES EERLIJK BREED. Een te smalle verdeling wordt hard afgestraft zodra de uitkomst \
+erbuiten valt. Overmoed is duurder dan twijfel.
+4. GEBRUIK ALLEEN DE AANGELEVERDE CIJFERS als vertrekpunt. Je mag erover redeneren, maar \
+verzin geen data die er niet staat.
+5. ANTWOORD UITSLUITEND MET JSON, zonder tekst eromheen en zonder code-fences."""
+
+
+@dataclass(frozen=True)
+class ForecastTarget:
+    """Eén voorspeldoel van een agent: welke metric, welke vorm, welke
+    horizonnen, en de regel waarmee het straks gescoord wordt.
+
+    `resolution_rule` is een sjabloon waarin `{horizon_n}` ingevuld wordt.
+    Dat veld is de AUTORITEIT over wat er gemeten wordt -- `resolves_at`
+    (berekend via contract/horizons.py) zegt alleen wanneer de resolver
+    moet gaan kijken. Zie die module voor waarom dat onderscheid nodig is.
+
+    `horizons` is meervoud omdat breedte de enige manier is om aan
+    statistische kracht te komen: herhaling op één doel levert niets op,
+    onafhankelijke doelen wel (roadmap deel A, correctie 2)."""
+
+    metric_key: str
+    kind: PredictionKind
+    horizon_kind: HorizonKind
+    horizons: tuple[int, ...]
+    resolution_rule: str
+    cadence: ReleaseCadence | None = None
+    graph_node: Node | None = None
+    event_rule: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.horizons:
+            raise ValueError(f"ForecastTarget {self.metric_key!r} zonder horizonnen")
+        if self.kind is PredictionKind.BINARY and not self.event_rule:
+            raise ValueError(f"binair doel {self.metric_key!r} vereist een event_rule")
+
+
+@dataclass(frozen=True)
+class ForecastRoundResult:
+    """Wat een forecast-ronde opleverde. `issues` is bewust geen exception:
+    een ronde die 9 van de 11 doelen oplevert is geen mislukking maar wel
+    iets dat zichtbaar moet blijven -- dezelfde les als de completeness-
+    check op de monitoring-kant."""
+
+    domain: str
+    predictions: tuple[Prediction, ...]
+    issues: tuple[str, ...]
+
+    @property
+    def is_complete(self) -> bool:
+        return not self.issues
+
+
+def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim]) -> str:
+    claims_summary = (
+        "\n".join(f"- {c.claim}: {c.value} (metric_key: {c.metric_key}, bron: {c.source})" for c in claims)
+        or "(geen recente claims beschikbaar)"
+    )
+    regels = []
+    for t in targets:
+        for n in t.horizons:
+            eenheid = "handelsdagen" if t.horizon_kind is HorizonKind.TRADING_DAYS else "publicaties"
+            if t.kind is PredictionKind.QUANTILE:
+                vorm = '"q10": <getal>, "q50": <getal>, "q90": <getal>'
+            else:
+                vorm = '"probability": <0-1>'
+            regels.append(
+                f'  {{"metric_key": "{t.metric_key}", "horizon_n": {n}, {vorm}}}'
+                f"   <- over {n} {eenheid}"
+                + (f'; gebeurtenis: "{t.event_rule}"' if t.event_rule else "")
+            )
+
+    return (
+        f"Huidige, al berekende cijfers voor jouw domein:\n{claims_summary}\n\n"
+        f"Geef voor ELK van de onderstaande doelen een voorspelling. "
+        f"Antwoord met exact deze structuur:\n\n"
+        '{"forecasts": [\n' + ",\n".join(regels) + "\n]}"
+    )
+
+
+def _parse_forecast_response(
+    tekst: str,
+    domain: str,
+    targets: list[ForecastTarget],
+    now: datetime,
+    model_id: str,
+    prompt_version: str,
+    trigger_conditioned: bool,
+) -> ForecastRoundResult:
+    """Zet de JSON-respons om in Prediction-objecten. Elk doel dat ontbreekt
+    of ongeldig is komt in `issues` terecht in plaats van de hele ronde te
+    laten mislukken -- negen goede voorspellingen weggooien omdat de tiende
+    niet klopte, kost meetbare data die niet in te halen is."""
+    verwacht = {(t.metric_key, n): t for t in targets for n in t.horizons}
+    predictions: list[Prediction] = []
+    issues: list[str] = []
+
+    try:
+        payload = json.loads(tekst)
+        entries = payload["forecasts"]
+    except Exception as e:
+        return ForecastRoundResult(domain, (), (f"respons niet te parsen als JSON: {e}",))
+
+    gezien: set[tuple[str, int]] = set()
+    for entry in entries:
+        sleutel = (entry.get("metric_key"), entry.get("horizon_n"))
+        target = verwacht.get(sleutel)
+        if target is None:
+            issues.append(f"onbekend doel in respons: {sleutel}")
+            continue
+        if sleutel in gezien:
+            issues.append(f"dubbele voorspelling voor {sleutel}")
+            continue
+        gezien.add(sleutel)
+
+        horizon_n = sleutel[1]
+        try:
+            predictions.append(
+                Prediction(
+                    agent=domain,
+                    domain=domain,
+                    target_metric_key=target.metric_key,
+                    kind=target.kind,
+                    horizon_kind=target.horizon_kind,
+                    horizon_n=horizon_n,
+                    created_at=now,
+                    resolves_at=resolves_at_for(now, target.horizon_kind, horizon_n, target.cadence),
+                    resolution_rule=target.resolution_rule.format(horizon_n=horizon_n),
+                    model_id=model_id,
+                    prompt_version=prompt_version,
+                    q10=entry.get("q10"),
+                    q50=entry.get("q50"),
+                    q90=entry.get("q90"),
+                    probability=entry.get("probability"),
+                    event_rule=target.event_rule,
+                    graph_node=target.graph_node,
+                    trigger_conditioned=trigger_conditioned,
+                )
+            )
+        except (ValueError, TypeError) as e:
+            issues.append(f"ongeldige voorspelling voor {sleutel}: {e}")
+
+    for sleutel in verwacht:
+        if sleutel not in gezien:
+            issues.append(f"geen voorspelling voor {sleutel}")
+
+    return ForecastRoundResult(domain, tuple(predictions), tuple(issues))
+
+
+def run_forecast_round(
+    conn,
+    client,
+    domain: str,
+    system_prompt: str,
+    targets: list[ForecastTarget],
+    claims: list[Claim],
+    prompt_version: str,
+    model: str = DEFAULT_DEEP_DIVE_MODEL,
+    now=None,
+    event_id: str | None = None,
+    trigger_conditioned: bool = False,
+) -> ForecastRoundResult:
+    """De derde modus naast monitoring en deep-dive (roadmap 2.0).
+
+    WEKELIJKS EN LOS VAN DE TRIGGER-KETEN. Voorspellingen die alleen bij
+    triggers ontstaan geven selectiebias -- dan voorspel je uitsluitend in
+    volatiele weken, en is de score niet te vergelijken met een baseline die
+    elke week draait. Een trigger mag wél extra voorspellingen opleveren;
+    die worden dan gevlagd met `trigger_conditioned=True`.
+
+    ÉÉN LLM-CALL PER AGENT, alle doelen in één JSON. Niet per doel een call:
+    dat is duurder en het maakt de voorspellingen onderling inconsistent,
+    terwijl een agent zijn eigen doelen juist samenhangend hoort te zien.
+
+    WAT DE AGENT ZIET: zijn eigen domein-claims, meer niet. Bewust niet alle
+    domeinen -- dat maakt agents sterker maar volledig gecorreleerd, en dan
+    meet de scoring straks zeven keer dezelfde synthesizer (roadmap 2.0).
+    Cross-domein is de rol van de synthesizer, die apart gescoord wordt."""
+    now = now or now_utc()
+    if event_id is not None and has_successful_run(conn, domain, "forecast", event_id):
+        raise AlreadyProcessedError(domain, "forecast", event_id)
+
+    full_system_prompt = f"{FORECAST_SYSTEM_RULES}\n\n{system_prompt}"
+
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            system=full_system_prompt,
+            messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims)}],
+        )
+        tekst = "".join(b.text for b in response.content if b.type == "text").strip()
+        if not tekst:
+            raise ValueError("lege respons van het model")
+    except Exception as e:
+        record_agent_run(
+            conn, domain, "forecast", now, success=False,
+            error=f"forecast-ronde mislukt: {e}", event_id=event_id,
+        )
+        return ForecastRoundResult(domain, (), (f"LLM-call mislukt: {e}",))
+
+    resultaat = _parse_forecast_response(
+        tekst, domain, targets, now, model, prompt_version, trigger_conditioned
+    )
+    for p in resultaat.predictions:
+        save_prediction(conn, p)
+
+    record_agent_run(
+        conn, domain, "forecast", now,
+        success=bool(resultaat.predictions),
+        trigger_count=len(resultaat.predictions),
+        error="; ".join(resultaat.issues) or None,
+        event_id=event_id,
+    )
+    return resultaat

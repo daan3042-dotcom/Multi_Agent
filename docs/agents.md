@@ -41,6 +41,59 @@ tekst zelf verder brandschoon is. Onbetrouwbare onderliggende data kan
 geen goed geschreven tekst "redden". Een verouderde (maar niet
 onbereikbare) bron dwingt dit niet automatisch af.
 
+## De forecast-ronde: waar agents voorspellingen doen (roadmap 2.0)
+
+Sinds 28-09-2026 kent elke agent een **derde modus** naast monitoring en
+deep-dive. Dit is de enige plek in het hele systeem waar een taalmodel een
+kans of een verdeling mag uitspreken — overal elders is dat verboden.
+
+**Wekelijks, en bewust los van de trigger-keten.** Voorspellingen die
+alleen bij triggers ontstaan geven selectiebias: dan voorspel je
+uitsluitend in volatiele weken, en is de score niet te vergelijken met een
+baseline die elke week draait. Een trigger mág extra voorspellingen
+opleveren; die worden gevlagd met `trigger_conditioned`.
+
+**Eén LLM-call per agent**, alle doelen in één JSON. Niet per doel een
+call: dat is duurder en maakt de voorspellingen onderling inconsistent,
+terwijl een agent zijn eigen doelen juist samenhangend hoort te zien.
+
+**De agent ziet alleen zijn eigen domein-claims.** Bewust niet alle
+domeinen — dat maakt agents sterker maar volledig gecorreleerd, en dan
+meet de scoring straks zeven keer dezelfde synthesizer. Cross-domein is de
+rol van de synthesizer, die apart gescoord wordt.
+
+| Agent | Doelen | Voorspellingen per ronde |
+|---|---|---|
+| monetary_policy | DGS10, DGS2 (5/21/63 hd), FEDFUNDS-richting (1/2 FOMC) | 8 |
+| financial | HY-spread, VIX, 10Y-2Y (5/21/63 hd), NFCI (1/4/12 weekprints) | 12 |
+| economic | ICSA (1/4 weekprints), UNRATE en PAYEMS (1/3 maandprints) | 6 |
+| currency | EUR/USD, USD/JPY, GBP/USD (5/21/63 hd) | 9 |
+| sector | relatief rendement t.o.v. SPY per ETF (5/21 hd) | 22 |
+| commodity | geen — maandelijkse bron, niet resolvbaar op korte horizon | — |
+| equity | geen — buiten cohort 0 | — |
+
+**Waarom currency de controlegroep is:** de verwachting is dat die agent
+een random walk niet verslaat. Blijkt dat zo, dan is het geen mislukking
+maar de bevestiging dat de meetopstelling werkt.
+
+**De sector agent voorspelt relatief rendement, niet koersen.** Op DD's
+beslissing van 28-09 wordt SPY nu elke cyclus opgehaald en opgeslagen,
+naast de elf sector-ETF's. Daarmee is het relatieve rendement over een
+horizon achteraf uit de claims-historie te berekenen: de procentuele
+koersverandering van de ETF tussen twee observatiemomenten, minus die van
+SPY over precies dezelfde twee momenten.
+
+Waarom niet gewoon de koers voorspellen: dat meet vooral of de markt
+omhoog of omlaag ging, en dat is precies wat hier uitgesloten moet worden.
+Rotatie is de vraag.
+
+Daarnaast wordt de **dagelijkse** relatieve sterkte per ETF nu ook
+opgeslagen (`<etf>_rel_spy`), berekend uit de dagverandering die de quote
+toch al meelevert — dat kost geen extra API-call. Die waarden triggeren
+bewust NIET: de escalatie blijft op de ruwe prijs lopen, want een
+delta-trigger hierop zou de dagverandering van vandaag met die van
+gisteren vergelijken, en dat is ruis.
+
 ## Welke knoop van de causale graaf bedient welke agent (roadmap 1.10)
 
 Sinds 28-09-2026 ligt er één gedeeld model van de economische machine vast:

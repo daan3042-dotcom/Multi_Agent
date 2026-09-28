@@ -27,7 +27,9 @@ from datetime import timedelta
 
 import requests
 
-from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
+from contract.horizons import ReleaseCadence
+from contract.prediction import HorizonKind, PredictionKind
 from contract.graph import Node
 from storage.schema import register_source
 
@@ -64,6 +66,27 @@ METRIC_SPECS = {
     "usd_jpy": MetricSpec(label="USD/JPY", tolerance=1.0, severity="medium"),
     "gbp_usd": MetricSpec(label="GBP/USD", tolerance=0.01, severity="medium"),
 }
+
+FORECAST_TARGETS = tuple(
+    ForecastTarget(
+        metric_key=key,
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS,
+        horizons=(5, 21, 63),
+        graph_node=Node.DOLLAR,
+        resolution_rule=(
+            label + " zoals opgehaald bij de reguliere monitoring, eerste observatie "
+            "op of na resolves_at ({horizon_n} handelsdagen na created_at). "
+            "Wisselkoersen worden niet gereviseerd, dus vintage speelt hier niet."
+        ),
+    )
+    for key, label in (("eur_usd", "EUR/USD"), ("usd_jpy", "USD/JPY"), ("gbp_usd", "GBP/USD"))
+)
+# Roadmap deel A: de currency agent is de CONTROLEGROEP. De verwachting is
+# dat hij een random walk niet verslaat. Blijkt dat zo, dan is dat geen
+# mislukking maar de bevestiging dat de meetopstelling werkt -- en verslaat
+# hij hem wel, dan is dat pas interessant omdat de lat vooraf laag lag.
+
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een valuta-analist gespecialiseerd in majeure \
 wisselkoersen: EUR/USD, USD/JPY, GBP/USD. Duid wat de aangeleverde beweging betekent, en \
