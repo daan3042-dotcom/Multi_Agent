@@ -242,13 +242,15 @@ def test_economic_domain_is_classificeerbaar():
     assert classify_domain("economic") == [DomainCategory.MACRO]
 
 
-def test_agent_staat_nog_niet_in_de_dagelijkse_runner():
-    """CHECKPOINT 1 uit CLAUDE.md: een nieuwe agent wordt pas aan de
-    onbeheerde cyclus gekoppeld nadat DD hem heeft gezien. Deze test legt
-    die grens vast -- valt hij om, dan is de koppeling gemaakt en hoort
-    deze test in dezelfde ronde geschrapt te worden, bewust en zichtbaar."""
-    import inspect
+def test_agent_draait_mee_in_de_dagelijkse_runner():
+    """Checkpoint 1 uit CLAUDE.md is op 28-09-2026 gepasseerd: DD heeft de
+    agent beoordeeld en akkoord gegeven op de koppeling. Deze test verving
+    in diezelfde ronde de tegenovergestelde test (die vastlegde dat hij nog
+    NIET gekoppeld was) -- bewust en zichtbaar, zoals daar afgesproken.
 
-    from runtime import daily
+    Wat hij nu bewaakt: dat de agent niet stilletjes weer uit de dagelijkse
+    cyclus verdwijnt. Een agent die niet draait, levert geen data, en een
+    gat in de reeks maakt de kalibratie ongeldig (roadmap deel A, fase 0)."""
+    from runtime.daily import default_agents
 
-    assert "economic_agent" not in inspect.getsource(daily)
+    assert "economic" in {spec.domain for spec in default_agents()}

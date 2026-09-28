@@ -843,9 +843,9 @@ FRED-bron, drie reeksen, één model, checkpoint 1 uit `CLAUDE.md`.
 - [x] **[28-09] Pre-T₀ (lean):** monitoring mode + deep-dive mode op ICSA
       (initial claims, wekelijks — de snelst resolvende macroreeks die er
       is), UNRATE en PAYEMS (maandelijks); eigen registry-entry
-      `FRED:economic`; sectie in `docs/agents.md`. **Nog NIET gekoppeld aan
-      `runtime/daily.py`** — checkpoint 1 uit `CLAUDE.md`, wacht op DD's
-      review. Er staat een test op die die grens bewaakt
+      `FRED:economic`; sectie in `docs/agents.md`. **Gekoppeld aan
+      `runtime/daily.py` op 28-09** na DD's review — checkpoint 1 uit
+      `CLAUDE.md` gepasseerd. Er draaien nu zes agents dagelijks
 - [x] **[28-09] Pre-T₀:** Sahm Rule (`src/analysis/sahm_rule.py`), gebouwd
       uit UNRATE die al opgehaald wordt. Vijfde model in `analysis/`. De
       drempel van 0,50 pp is expliciet GEEN plaatshouder: dat getal komt

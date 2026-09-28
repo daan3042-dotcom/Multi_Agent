@@ -102,7 +102,7 @@ theoretisch naar structureel gaan. Multi-provider-ondersteuning in
 `agents/base.py` is de echte voorwaarde en raakt alle zes agents. Ligt
 bij DD.
 
-### Vervolg: economic agent (2.7 lean) gebouwd — WACHT OP CHECKPOINT 1
+### Vervolg: economic agent (2.7 lean) gebouwd en GEKOPPELD
 
 339 tests groen (was 313). De enige nieuwe agent die vóór T₀ mag, en
 daarmee de grootste resterende gatenvuller van de graaf: hij bedient
@@ -121,12 +121,20 @@ daarmee de grootste resterende gatenvuller van de graaf: hij bedient
   Zonder dat faalt `classify_domain()` hard op het nieuwe domein.
 - 26 tests, sectie in `docs/agents.md`.
 
-**NIET GEKOPPELD AAN `runtime/daily.py`.** Checkpoint 1 uit `CLAUDE.md`:
-een nieuwe agent gaat pas aan de onbeheerde cyclus nadat DD hem gezien
-heeft. `tests/test_economic_agent.py::test_agent_staat_nog_niet_in_de_
-dagelijkse_runner` bewaakt die grens — valt die test om, dan is de
-koppeling gemaakt en hoort de test in diezelfde ronde geschrapt te worden,
-bewust en zichtbaar.
+**Checkpoint 1 gepasseerd op 28-09-2026.** DD heeft de agent beoordeeld
+en akkoord gegeven; hij staat nu in `runtime/daily.py::default_agents()`.
+Daarmee draaien er zes agents dagelijks in plaats van vijf. De test die
+vastlegde dat hij nog NIET gekoppeld was, is in diezelfde ronde vervangen
+door `test_agent_draait_mee_in_de_dagelijkse_runner` — die bewaakt nu het
+omgekeerde, want een agent die stilletjes uit de cyclus verdwijnt levert
+een gat in de reeks en dat maakt de kalibratie ongeldig.
+
+**Besloten op 28-09: UNRATE blijft bij beide agents.** De dubbele
+monitoring (monetary als beleidsinput, economic als eigenaar van
+`labor_tightness`) is een bewuste keuze, geen gat. Gevolg dat blijft
+staan: één werkloosheidscijfer dat beide drempels haalt geeft twee
+triggers en mogelijk twee deep-dives over dezelfde publicatie, met een
+andere invalshoek per agent.
 
 **Minst zekere deel (CLAUDE.md checkpoint 4):** de tolerances voor ICSA
 (25.000 aanvragen) en PAYEMS (250 duizend banen) veronderstellen dat ICSA
@@ -613,15 +621,6 @@ concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
 
-- **[28-09] Dubbele UNRATE-monitoring: monetary én economic.** De monetary
-  agent leest werkloosheid als beleidsinput (dual mandate), de economic
-  agent bezit er de graafknoop `labor_tightness` mee. Gevolg: één
-  werkloosheidscijfer dat beide drempels haalt (0,3 resp. 0,2 pp) geeft
-  twee triggers en mogelijk twee deep-dives over dezelfde publicatie. Dat
-  kán de bedoeling zijn (twee invalshoeken is het hele punt van meerdere
-  agents), maar het botst met de regel "elke knoop heeft precies één
-  eigenaar" uit de graaf. Bewust niet in stilte opgelost door UNRATE uit
-  een van de twee te halen.
 - **[28-09] `DTWEXBGS` → knoop `dollar`: uitgesteld tot na T₀ᵃ** (optie 3,
   besloten 28-09). Vraagt multi-provider-ondersteuning in
   `agents/base.py`; currency is in cohort 0 toch de controlegroep, dus

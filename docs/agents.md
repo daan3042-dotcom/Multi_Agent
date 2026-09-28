@@ -53,7 +53,7 @@ graaf moet voorkomen.
 
 | Agent | Bedient knopen | Nu al gedekt door zijn databron? |
 |---|---|---|
-| economic *(gebouwd 28-09, nog niet gekoppeld)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | deels — de lean-versie dekt de eerste twee; `wage_growth` en `inflation_persistence` blijven post-T₀ |
+| economic *(nieuw, 28-09)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | deels — de lean-versie dekt de eerste twee; `wage_growth` en `inflation_persistence` blijven post-T₀ |
 | monetary_policy | `inflation_expectations`, `policy_stance`, `policy_expectations`, `liquidity`, `term_premium` | deels — alleen `policy_stance`; de andere vier vragen nieuwe FRED-reeksen |
 | financial | `financial_conditions`, `credit_risk_premium`, `risk_appetite` | **ja, volledig** — enige agent zonder gat |
 | currency | `dollar` | deels — drie losse paren, brede dollarindex ontbreekt |
@@ -366,12 +366,14 @@ C.4's eigen bewoording. Supply-chain-signalen (bijv. een mijnverstoring)
 horen bewust NIET hier — dat is kwalitatief/nieuws-vormig en hoort bij de
 nog te bouwen news monitor agent (sectie D).
 
-## Economic agent (`agents/economic_agent.py`) — **nieuw, 28-09-2026, nog niet gekoppeld**
+## Economic agent (`agents/economic_agent.py`) — **nieuw, 28-09-2026**
 
-**Status:** gebouwd en getest, maar **bewust nog niet toegevoegd aan de
-dagelijkse runner** (`src/runtime/daily.py`). Dat is checkpoint 1 uit
-`CLAUDE.md`: een nieuwe agent wordt pas aan de onbeheerde cyclus gehangen
-nadat DD hem heeft gezien. Er staat een test op die die grens bewaakt.
+**Status:** draait mee in de dagelijkse cyclus (`src/runtime/daily.py`).
+Checkpoint 1 uit `CLAUDE.md` is op 28-09-2026 gepasseerd — DD heeft de
+agent beoordeeld en akkoord gegeven; de test die vastlegde dat hij nog
+niet gekoppeld was, is in diezelfde ronde vervangen door een die bewaakt
+dat hij niet stilletjes weer uit de cyclus verdwijnt. Hiermee draaien er
+zes agents dagelijks.
 
 **Waarom hij er is, als enige uitzondering op "geen nieuwe agents vóór
 T₀".** De causale graaf (1.10) heeft vier knopen in de reële economie en
