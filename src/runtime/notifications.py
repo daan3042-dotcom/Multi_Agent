@@ -132,6 +132,22 @@ def build_notification(result, health: SystemHealthReport | None) -> Notificatio
         lines.append("Deep-dives die mislukten (de monitoring-data is wel binnen):")
         lines.extend(f"  - {o.domain}: {o.deep_dive_error}" for o in deep_dive_failures)
 
+    forecast_issues = list(getattr(result, "forecast_issues", []) or [])
+    if forecast_issues:
+        # De wekelijkse forecast-ronde is de meting zelf (roadmap 2.0): een
+        # week zonder voorspellingen is een week die nooit gescoord wordt,
+        # en die is achteraf niet te repareren -- voorspellen met de kennis
+        # van nu is geen voorspelling meer.
+        #
+        # Waarom "warning" en niet "critical", anders dan bij missed_days:
+        # de ronde haalt zichzelf in zolang de ISO-week loopt, dus een
+        # mislukte maandag is nog geen verloren week. De melding herhaalt
+        # dagelijks tot het gerepareerd is, en dat is precies de druk die
+        # hier hoort.
+        escalate("warning")
+        lines.append("Forecast-ronde met problemen (de week is pas verloren na zondag):")
+        lines.extend(f"  - {i}" for i in forecast_issues)
+
     unhealthy = [c for c in (health.components if health is not None else []) if _STATUS_SEVERITY.get(c.status) is not None]
     if unhealthy:
         for component in unhealthy:

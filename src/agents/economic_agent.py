@@ -165,6 +165,20 @@ FORECAST_TARGETS = (
 # daarmee het enige macro-doel dat binnen een maand al iets zegt.
 
 
+FORECAST_PROMPT_VERSION = "v1"
+"""Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
+prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
+`agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.
+
+VERHOOG DIT ZODRA EEN VAN DIE TWEE VERANDERT. Binnen een cohort is een
+promptwijziging een covariaat en geen nieuw cohort (CLAUDE.md), maar dan
+moet je achteraf wel kunnen zien wélke voorspellingen onder welke prompt
+zijn gedaan. Vergeet je het, dan zijn twee verschillende prompts achteraf
+niet meer te scheiden en is dat deel van het cohort onbruikbaar.
+`tests/test_forecast_prompt_version.py` faalt als de prompt verandert
+zonder dat dit getal meebeweegt."""
+
+
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in de reële \
 Amerikaanse economie: arbeidsmarkt en groei. Je volgt wekelijkse WW-aanvragen (ICSA), \
 het werkloosheidspercentage en de banengroei buiten de landbouw (PAYEMS). Duid wat de \

@@ -280,7 +280,7 @@ Secties 4.5, 4.6.
 - [ ] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2)
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
 - [ ] `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `model_id`, `prompt_version` (1.2/4.1)
-- [ ] Forecast-ronde draait wekelijks voor vijf agents + synthesizer; menselijke invoer werkt (2.0/4.8)
+- [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
 - [ ] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5)
 - [ ] Drie baselines draaien mee (4.6)
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
@@ -767,8 +767,7 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       completeness-check. `agent_runs.mode` kreeg `'forecast'` erbij, met
       een migratie voor bestaande databases (de VPS-database had de oude
       CHECK nog).
-      **De wekelijkse cron-aanroep zelf moet nog**, die zit nog niet in
-      `runtime/daily.py`. **[27-09]** Los van de trigger-keten: predictions die
+      **[27-09]** Los van de trigger-keten: predictions die
       alleen bij triggers ontstaan geven selectiebias (alleen voorspellen
       in volatiele weken) en onregelmatige aantallen. Een trigger mag
       wél extra predictions opleveren, gevlagd `trigger_conditioned=1`.
@@ -786,6 +785,24 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       extra Alpha Vantage-call per cyclus (24 → 25). De dagelijkse
       relatieve sterkte wordt óók opgeslagen maar triggert bewust niet.
       **Totaal over vijf agents: 57 voorspellingen per wekelijkse ronde.**
+- [x] **[28-09]** **De wekelijkse aanroep draait**, in `runtime/daily.py`,
+      op maandagochtend (DD's keuze): verse week, en de slotkoersen van
+      vrijdag staan erin zonder dat er een nieuwe handelsdag overheen is
+      gegaan. Het `event_id` is de ISO-week (`2026-W40`), niet de dag —
+      daarmee is de eenheid van herhaling de week, en levert een cron die
+      elke ochtend vuurt níét zeven sets voorspellingen op. **Met
+      inhaalslag:** mislukt de maandag (VPS uit, API plat, onparseerbare
+      respons), dan draait de ronde op de eerstvolgende dag die wél lukt,
+      zolang het dezelfde ISO-week is. Een verschoven dag is achteraf te
+      analyseren via `created_at`; een ontbrekende week niet — die is
+      permanent leeg, want voorspellen met de kennis van later is geen
+      voorspelling meer. Forecast-problemen komen in de notificatie
+      terecht (warning, dagelijks herhaald tot het gerepareerd is) en in
+      de exit-code van `run_daily.py`. Elke agent kreeg een
+      `FORECAST_PROMPT_VERSION`, bewaakt door een hash-test: verandert de
+      prompt zonder dat het versienummer meebeweegt, dan faalt de test —
+      anders staan er achteraf twee verschillende prompts onder hetzelfde
+      label in het cohort.
 - [ ] **[27-09]** Richtlijn vervangen: niet "~5 voorspellingen per week"
       maar **zoveel mogelijk onafhankelijke doelen** per agent, elk op
       cadans-bewuste horizonnen (handelsdagen 5/21/63 voor dagreeksen,

@@ -639,3 +639,240 @@ def test_orchestration_failure_does_not_kill_the_run(tmp_path, monkeypatch):
 
     assert result.outcomes[0].status == "ok"
     assert result.health is None
+
+
+# --------------------------------------------------------------------------
+# De wekelijkse forecast-ronde (roadmap 2.0) -- maandagochtend
+# --------------------------------------------------------------------------
+
+MAANDAG = datetime(2026, 10, 5, 7, 15, tzinfo=timezone.utc)
+DINSDAG = datetime(2026, 10, 6, 7, 15, tzinfo=timezone.utc)
+VOLGENDE_MAANDAG = datetime(2026, 10, 12, 7, 15, tzinfo=timezone.utc)
+
+
+def _forecast_client(tekst='{"forecasts": [{"metric_key": "testmetric", "horizon_n": 5, "q10": 0.9, "q50": 1.0, "q90": 1.1}]}'):
+    """Minimale Anthropic-client-dubbel; zelfde vorm als in
+    test_forecast_round.py."""
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    blok = MagicMock()
+    blok.type = "text"
+    blok.text = tekst
+    client.messages.create.return_value = MagicMock(content=[blok])
+    return client
+
+
+def _forecast_agent(domain="testdomain"):
+    from agents.base import ForecastTarget
+    from contract.prediction import HorizonKind, PredictionKind
+
+    spec = AgentSpec(
+        domain,
+        _ok_agent(domain).monitor,
+        forecast_targets=(
+            ForecastTarget(
+                metric_key="testmetric",
+                kind=PredictionKind.QUANTILE,
+                horizon_kind=HorizonKind.TRADING_DAYS,
+                horizons=(5,),
+                resolution_rule="testmetric eerste print op of na resolves_at",
+            ),
+        ),
+        forecast_system_prompt="systeemprompt",
+        prompt_version="test-v1",
+    )
+    return spec
+
+
+def test_weekly_event_id_is_stable_across_the_whole_iso_week():
+    """De eenheid van herhaling is de WEEK, niet de dag. Zonder dit zou een
+    dagelijkse cron zeven sets voorspellingen per week opleveren en de
+    scoring vervuilen."""
+    from runtime.daily import weekly_event_id
+
+    zondag = datetime(2026, 10, 11, 23, 0, tzinfo=timezone.utc)
+    assert weekly_event_id(MAANDAG) == weekly_event_id(DINSDAG) == weekly_event_id(zondag)
+    assert weekly_event_id(MAANDAG) != weekly_event_id(VOLGENDE_MAANDAG)
+
+
+def test_de_ronde_valt_op_maandag():
+    """Legt DD's keuze (28-09-2026) vast: de week begint op maandag, dus de
+    eerste dag waarop de ronde kan draaien is maandag."""
+    from runtime.daily import FORECAST_WEEKDAY, weekly_event_id
+
+    assert MAANDAG.weekday() == FORECAST_WEEKDAY
+    # De ISO-week van maandag is dezelfde als die van de zondag erna, en
+    # een andere dan die van de zondag ervoor -- de weekgrens ligt dus
+    # inderdaad op maandagochtend.
+    zondag_ervoor = MAANDAG - timedelta(days=1)
+    assert weekly_event_id(zondag_ervoor) != weekly_event_id(MAANDAG)
+
+
+def test_forecast_round_runs_on_monday(tmp_path):
+    conn = _db(tmp_path)
+    result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=_forecast_client())
+
+    assert len(result.forecast_results) == 1
+    assert len(result.forecast_results[0].predictions) == 1
+    assert result.forecast_issues == []
+    from storage.schema import list_predictions
+
+    assert len(list_predictions(conn)) == 1
+
+
+def test_forecast_round_runs_only_once_per_week(tmp_path):
+    """Het regressiegeval: cron draait elke ochtend. Dinsdag mag er niets
+    bij komen, want maandag is al gelukt."""
+    conn = _db(tmp_path)
+    client = _forecast_client()
+
+    run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=client)
+    tweede = run_daily(conn, agents=[_forecast_agent()], now=DINSDAG, client=client)
+
+    from storage.schema import list_predictions
+
+    assert tweede.forecast_results == []
+    assert len(list_predictions(conn)) == 1
+    assert client.messages.create.call_count == 1
+
+
+def test_forecast_round_catches_up_when_monday_failed(tmp_path):
+    """Waarom de inhaalslag bestaat: een week zonder voorspellingen is
+    achteraf niet te vullen -- voorspellen met de kennis van dinsdag is
+    geen voorspelling meer over dezelfde week."""
+    conn = _db(tmp_path)
+    kapot = _forecast_client()
+    kapot.messages.create.side_effect = RuntimeError("API plat")
+
+    maandag = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=kapot)
+    assert maandag.forecast_issues  # zichtbaar, niet stil
+
+    dinsdag = run_daily(conn, agents=[_forecast_agent()], now=DINSDAG, client=_forecast_client())
+    from storage.schema import list_predictions
+
+    assert len(list_predictions(conn)) == 1
+    assert dinsdag.forecast_issues == []
+
+
+def test_new_week_gets_a_new_round(tmp_path):
+    conn = _db(tmp_path)
+    client = _forecast_client()
+    run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=client)
+    run_daily(conn, agents=[_forecast_agent()], now=VOLGENDE_MAANDAG, client=client)
+
+    from storage.schema import list_predictions
+
+    assert len(list_predictions(conn)) == 2
+
+
+def test_no_client_means_no_forecast_round(tmp_path):
+    """Monitoring moet ook zonder API-key kunnen draaien (zie de
+    moduledocstring van daily.py over kosten)."""
+    conn = _db(tmp_path)
+    result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG)
+    assert result.forecast_results == []
+
+
+def test_agent_without_targets_never_forecasts(tmp_path):
+    """Commodity en equity voorspellen niet in cohort 0. Dat mag geen
+    aparte lijst zijn die uit de pas kan lopen: geen doelen = geen ronde."""
+    conn = _db(tmp_path)
+    client = _forecast_client()
+    result = run_daily(conn, agents=[_ok_agent("commodity")], now=MAANDAG, client=client)
+
+    assert result.forecast_results == []
+    assert client.messages.create.call_count == 0
+
+
+def test_one_failing_agent_does_not_cost_the_others_their_week(tmp_path):
+    """Zelfde regel als bij monitoring: isolatie per agent."""
+    conn = _db(tmp_path)
+
+    def kapotte_monitor(conn_, now=None, event_id=None):
+        return _output("kapot", now), []
+
+    kapot = AgentSpec(
+        "kapot",
+        kapotte_monitor,
+        forecast_targets=_forecast_agent().forecast_targets,
+        forecast_system_prompt="x",
+        prompt_version="kapot-v1",
+    )
+
+    client = _forecast_client()
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("alleen de eerste valt om")
+        return _forecast_client().messages.create.return_value
+
+    client.messages.create.side_effect = create
+
+    result = run_daily(conn, agents=[kapot, _forecast_agent("goed")], now=MAANDAG, client=client)
+
+    domeinen = {r.domain for r in result.forecast_results}
+    assert domeinen == {"kapot", "goed"}
+    geslaagd = [r for r in result.forecast_results if r.is_complete]
+    assert [r.domain for r in geslaagd] == ["goed"]
+
+
+def test_forecast_issues_reach_has_problems_and_the_notification(tmp_path):
+    """Regressiegeval voor het terugkerende bugpatroon uit CLAUDE.md: een
+    check die wel iets vaststelt maar nergens uitkomt. Een mislukte ronde
+    moet in de melding belanden, anders valt een week stil weg terwijl cron
+    exit 0 teruggeeft."""
+    conn = _db(tmp_path)
+    kapot = _forecast_client()
+    kapot.messages.create.side_effect = RuntimeError("API plat")
+
+    meldingen = []
+    result = run_daily(
+        conn, agents=[_forecast_agent()], now=MAANDAG, client=kapot,
+        notifier=meldingen.append,
+    )
+
+    assert result.has_problems
+    assert len(meldingen) == 1
+    assert "Forecast-ronde" in meldingen[0].body
+
+
+def test_default_agents_carry_their_forecast_configuration():
+    """De vijf voorspellende agents van cohort 0. Commodity heeft bewust
+    geen doelen (maandelijkse bron, niet resolvbaar op 5/21/63
+    handelsdagen) -- staat hier zodat dat een BESLISSING blijft en geen
+    vergeten regel wordt."""
+    per_domein = {spec.domain: spec for spec in default_agents()}
+    voorspellers = {d for d, s in per_domein.items() if s.forecasts}
+
+    assert voorspellers == {"monetary_policy", "currency", "financial", "sector", "economic"}
+    assert not per_domein["commodity"].forecasts
+
+    for domein in voorspellers:
+        spec = per_domein[domein]
+        assert spec.forecast_system_prompt, f"{domein} voorspelt zonder vakinhoudelijke prompt"
+        assert spec.prompt_version.startswith(f"{domein}-v"), spec.prompt_version
+
+
+def test_total_predictions_per_week_is_pinned():
+    """57 voorspellingen per week over vijf agents. Staat hier omdat het
+    getal de LLM-kosten én de omvang van het cohort bepaalt: bij 57 per
+    week zijn dat er ~1500 in het eerste halfjaar, en dát is wat de
+    kalibratie straks meet. Verandert het getal, dan verandert de
+    steekproefomvang -- bewust, niet per ongeluk."""
+    per_domein = {spec.domain: spec for spec in default_agents()}
+    totaal = {
+        d: sum(len(t.horizons) for t in s.forecast_targets)
+        for d, s in per_domein.items()
+        if s.forecasts
+    }
+    assert totaal == {
+        "sector": 22,
+        "financial": 12,
+        "currency": 9,
+        "monetary_policy": 8,
+        "economic": 6,
+    }
+    assert sum(totaal.values()) == 57

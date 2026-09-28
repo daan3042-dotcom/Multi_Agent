@@ -156,6 +156,20 @@ FORECAST_TARGETS = tuple(
 # de sleutel zegt WELKE reeks, de regel zegt WAT ermee gebeurt.
 
 
+FORECAST_PROMPT_VERSION = "v1"
+"""Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
+prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
+`agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.
+
+VERHOOG DIT ZODRA EEN VAN DIE TWEE VERANDERT. Binnen een cohort is een
+promptwijziging een covariaat en geen nieuw cohort (CLAUDE.md), maar dan
+moet je achteraf wel kunnen zien wélke voorspellingen onder welke prompt
+zijn gedaan. Vergeet je het, dan zijn twee verschillende prompts achteraf
+niet meer te scheiden en is dat deel van het cohort onbruikbaar.
+`tests/test_forecast_prompt_version.py` faalt als de prompt verandert
+zonder dat dit getal meebeweegt."""
+
+
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in sector-rotatie binnen \
 Amerikaanse aandelenmarkten (de 11 SPDR Select Sector-ETF's). Duid wat een significante \
 prijsbeweging in een sector betekent -- alleen als de aangeleverde cijfers dat \

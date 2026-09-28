@@ -72,7 +72,12 @@ def build_notifier():
 
 def build_client():
     """Alleen geladen als --deep-dives meegegeven is, zodat de dagelijkse
-    monitoring-cyclus geen Anthropic-import of API-key nodig heeft."""
+    monitoring-cyclus geen Anthropic-import of API-key nodig heeft.
+
+    LET OP: zonder deze client draait óók de wekelijkse forecast-ronde niet
+    (roadmap 2.0). Een dry-run zonder --deep-dives is dus een dry-run
+    zonder voorspellingen -- dat is prima vóór T₀ᵇ, maar na T₀ᵇ is elke
+    zo'n week een gat in het cohort."""
     from anthropic import Anthropic
 
     return Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -84,7 +89,11 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--deep-dives",
         action="store_true",
-        help="draai ook LLM-deep-dives voor geëscaleerde domeinen (kost geld per aanroep)",
+        help=(
+            "draai ook de LLM-fasen: deep-dives voor geëscaleerde domeinen én "
+            "de wekelijkse forecast-ronde op maandag (kost geld per aanroep). "
+            "Vanaf T₀ᵇ is dit geen optie meer maar de meting zelf."
+        ),
     )
     parser.add_argument(
         "--event-id",
@@ -133,6 +142,13 @@ def main(argv=None) -> int:
         log.info("System health: %s", result.health.overall_status.value)
     if result.missed_days:
         log.warning("Dagen zonder succesvolle run: %s", ", ".join(result.missed_days))
+    if result.forecast_results:
+        aantal = sum(len(r.predictions) for r in result.forecast_results)
+        log.info("Forecast-ronde: %d voorspellingen opgeslagen", aantal)
+    for probleem in result.forecast_issues:
+        # Niet stil: een onvolledige ronde is een gat in de meting, en de
+        # ronde haalt zichzelf alleen in binnen dezelfde ISO-week.
+        log.warning("Forecast-probleem: %s", probleem)
 
     return 1 if result.has_problems else 0
 

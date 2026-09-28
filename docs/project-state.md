@@ -654,9 +654,6 @@ unique index op `event_id` stil kwijtraken zou 1.7's idempotency ongemerkt
 uitschakelen. Vier tests, waaronder een die bewijst dat bestaande rijen
 behouden blijven.
 
-**Nog te doen:** de wekelijkse aanroep zit nog niet in `runtime/daily.py`,
-dus de ronde draait nog nergens vanzelf.
-
 **De sector agent heeft doelen gekregen (DD, 28-09).** SPY wordt nu elke
 cyclus opgehaald en opgeslagen naast de elf ETF's, zodat het relatieve
 rendement over een horizon achteraf uit de claims-historie te berekenen
@@ -676,6 +673,65 @@ ik eerder deze dag bouwde sloegen daarop meteen aan (het API-budget en de
 graafmapping), en dat is precies waarvoor ze er zijn.
 
 **Totaal: 57 voorspellingen per wekelijkse ronde over vijf agents.**
+
+### De wekelijkse aanroep draait (2.0) — 474 tests groen
+
+De ronde zat in `agents/base.py` maar werd nergens aangeroepen. Nu wel, in
+`runtime/daily.py`, en daarmee is 2.0 als geheel af.
+
+**Maandagochtend, DD's keuze.** Verse week, en de slotkoersen van vrijdag
+staan er al in zonder dat er een nieuwe handelsdag overheen is gegaan.
+
+**Het `event_id` is de ISO-week, niet de dag** (`2026-W40`). Daarmee is de
+eenheid van herhaling de week. Cron vuurt elke ochtend; zonder dit zouden
+dat zeven sets voorspellingen per week zijn, en dan meet de scoring straks
+iets anders dan bedoeld. Een test pint dat maandag, dinsdag en de zondag
+erna hetzelfde `event_id` opleveren.
+
+**Met inhaalslag, en dat is een afweging.** Mislukt de maandag (VPS uit,
+API plat, onparseerbare respons), dan draait de ronde op de eerstvolgende
+dag die wél lukt, zolang het dezelfde ISO-week is. De prijs: een
+voorspelling van woensdag is niet volledig vergelijkbaar met één van
+maandag. De opbrengst: geen lege week. Die keuze is asymmetrisch — een
+verschoven dag is achteraf te analyseren (`created_at` legt de werkelijke
+dag vast), een ontbrekende week niet. Voorspellen met de kennis van later
+is geen voorspelling meer.
+
+In de code staat daarom géén expliciete maandag-check. Die zou overbodig
+zijn: de ISO-week begint op maandag, dus "eens per ISO-week, zodra de
+cyclus draait" ÍS maandag zolang de maandag lukt. Eén regel met één
+betekenis, in plaats van twee die elkaar overlappen.
+
+**Forecast-problemen komen ergens uit.** `DailyRunResult.forecast_issues`
+→ `has_problems` → exit-code van `run_daily.py` én de notificatie
+(warning, niet critical: de ronde haalt zichzelf in binnen de week, dus
+een mislukte maandag is nog geen verloren week; de melding herhaalt
+dagelijks tot het gerepareerd is). Zonder die koppeling zou een ronde
+kunnen mislukken terwijl cron exit 0 teruggeeft — het terugkerende
+bugpatroon uit CLAUDE.md, een check die wel iets vaststelt maar nergens
+uitkomt.
+
+**Welke agents voorspellen, wordt afgeleid en niet opgeschreven.**
+`_spec()` leest `FORECAST_TARGETS` uit de agent-module; geen doelen = geen
+ronde. Zo is er geen tweede lijst die uit de pas kan lopen met de agents
+zelf. Commodity heeft bewust geen doelen (maandelijkse bron, niet
+resolvbaar op 5/21/63 handelsdagen) en een test legt dát als beslissing
+vast, zodat het geen vergeten regel wordt.
+
+**`FORECAST_PROMPT_VERSION` per agent, bewaakt met een hash.** Elke
+prediction draagt `prompt_version`. Verandert iemand een prompt zonder het
+versienummer op te hogen, dan staan er achteraf twee verschillende prompts
+onder hetzelfde label en is dat deel van het cohort niet meer te
+analyseren — en dat merk je pas bij de evaluatie, maanden later.
+`tests/test_forecast_prompt_version.py` hasht de daadwerkelijk verstuurde
+system prompt (FORECAST_SYSTEM_RULES + de vakinhoudelijke prompt) en faalt
+met de nieuwe hash in de foutmelding. Zelfde patroon als
+`test_api_budget.py`: een onzichtbaar effect zichtbaar maken op het moment
+dat de regel geschreven wordt.
+
+**De `--deep-dives`-vlag schakelt nu twee LLM-fasen in.** Een dry-run
+zonder die vlag is dus een dry-run zonder voorspellingen. Vóór T₀ᵇ is dat
+prima; daarna is elke zo'n week een gat in het cohort.
 
 ## Known problems
 

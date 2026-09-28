@@ -53,6 +53,23 @@ uitsluitend in volatiele weken, en is de score niet te vergelijken met een
 baseline die elke week draait. Een trigger mág extra voorspellingen
 opleveren; die worden gevlagd met `trigger_conditioned`.
 
+**Wanneer precies: maandagochtend**, meeliftend op de dagelijkse cyclus
+(`run_daily.py --deep-dives`). Verse week, en de slotkoersen van vrijdag
+staan er al in zonder dat er een nieuwe handelsdag overheen is gegaan.
+
+De ronde draait één keer per ISO-week, niet één keer per dag: het
+`event_id` is de week (`2026-W40`). Lukt de maandag niet — VPS uit, API
+plat, onparseerbare respons — dan draait hij op de eerstvolgende dag die
+wél lukt, zolang het dezelfde week is. Dat is een bewuste asymmetrie: een
+voorspelling van woensdag is minder goed vergelijkbaar met één van
+maandag, maar dat is achteraf te zien aan `created_at`. Een week zonder
+voorspellingen is niet te repareren — voorspellen met de kennis van later
+is geen voorspelling meer.
+
+Zonder API-key (dus zonder `--deep-dives`) draait de ronde niet. Dat is
+prima tijdens een dry-run, maar na T₀ᵇ is elke zo'n week een gat in de
+meting.
+
 **Eén LLM-call per agent**, alle doelen in één JSON. Niet per doel een
 call: dat is duurder en maakt de voorspellingen onderling inconsistent,
 terwijl een agent zijn eigen doelen juist samenhangend hoort te zien.
