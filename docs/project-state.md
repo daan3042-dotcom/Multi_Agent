@@ -217,6 +217,24 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   per ongeluk niet bij komt (of uit valt) meteen opvalt. 315 tests groen
   (was 314).
 
+  Daarna: **back-fill gebouwd** (roadmap 1.11, 0b-1) — `backfill.py`
+  (CLI-entrypoint, zelfde stijl als `run_daily.py`) + `src/runtime/
+  backfill.py` (kernlogica) + `tests/test_backfill.py` (11 tests). Twee
+  ontwerpkeuzes expliciet vastgelegd in die module se docstring: (1)
+  Alpha Vantage heeft voor back-fill ANDERE endpoints nodig dan de
+  dagelijkse cyclus (`TIME_SERIES_DAILY`/`FX_DAILY` i.p.v. `GLOBAL_QUOTE`/
+  `CURRENCY_EXCHANGE_RATE`, die geven geen historie) — kost ~24 AV-calls,
+  exact tegen de dagelijkse quota-limiet aan, dus niet zomaar samen met de
+  reguliere cron; (2) de back-fill-`DomainOutput` krijgt `generated_at` op
+  de OUDSTE datum in de batch i.p.v. "nu" — anders zou
+  `load_monitoring_claims()` een latere, ECHTE deep-dive de hele historie
+  aanbieden i.p.v. de laatste cijfers (regressietest dekt dit expliciet).
+  FRED-helft (monetary_policy/financial/economic) is goedkoop en kan
+  los; Alpha Vantage-helft (currency/sector/commodity) wacht op DD's
+  beslissing over de AV-tier (prijzen aan het checken). 326 tests groen
+  (was 315). **Nog niet op de VPS gedraaid** — code is klaar, uitvoering
+  wacht op die tierbeslissing.
+
 - 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
   **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
   `save_domain_output()` en `record_agent_run()` committen nu als ÉÉN

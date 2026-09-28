@@ -70,6 +70,7 @@ en `docs/project-state.md`.
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
 | API-quota/callvolume per bron | `docs/data-sources.md` |
 | VPS-inrichting + dry-run-plan (checkpoint 3) | `docs/deployment.md` |
+| Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | Tests | `tests/` |
 
 ## Voordat je iets verandert
