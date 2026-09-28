@@ -574,6 +574,53 @@ terugkrijgt. Wat het NIET oplost: het commodity-endpoint blijft
 maandelijks, dus die agent blijft in cohort 0 monitoring-only — zoals al
 gepland. De completeness-check is meteen de controle op de upgrade.
 
+### Fase 2 begonnen: het voorspellingscontract (4.1) — 417 tests groen
+
+Blokkade 3 van de vier uit deel A: "`predictions` bestaat niet — er is
+niets te scoren." De tabel en het contract staan nu; het PRODUCEREN van
+voorspellingen is de forecast-ronde (2.0) en komt hierna.
+
+- `src/contract/prediction.py` — `Prediction` als bevroren dataclass met
+  alle velden uit 4.1. Twee vormen: `QUANTILE` (q10/q50/q90) voor
+  numerieke doelen en `BINARY` (kans + `event_rule`) alleen waar geen
+  continue waarde bestaat. Horizonnen cadans-bewust: `TRADING_DAYS`
+  (5/21/63) voor dagreeksen, `RELEASES` (1/2/3 prints) voor week- en
+  maandreeksen — een 5-daagse voorspelling op CPI bestaat niet.
+- `src/storage/schema.py` — `predictions`-tabel, bewust **zonder update-
+  of delete-pad**. Achteraf bijstellen is de fout die het hele
+  forward-testopzet probeert te vermijden, dus die mogelijkheid hoort niet
+  te bestaan. Plus `save_prediction()`, `list_predictions()` en
+  `list_due_predictions()` (de invoer voor de resolver uit 4.5).
+- `tests/test_prediction.py` — 19 tests.
+
+**Waar de mechanische QC zit, en waarom daar.** Roadmap 4.1 vraagt dat een
+prediction zonder kwantielen/kans, regel, horizon of `model_id` geweigerd
+wordt. Dat is in het CONTRACT geïmplementeerd en niet in `src/qc/`:
+`src/qc/` is de veiligheidsgordel voor TEKST (klopt de deep-dive met de
+cijfers), dit is een vormcheck op data. Zelfde fail-loud-precedent als
+`Claim`. Daarmee blijft `src/qc/` onaangeroerd en was checkpoint 2 niet
+aan de orde.
+
+Het schema herhaalt dezelfde eisen als CHECK-constraints. Dubbelop met
+opzet: een bug in het contract kan dan geen ongeldige rij opleveren, en er
+staat een test die dat met ruwe SQL bewijst.
+
+**Contract- en cohortversies liggen vast.** `CONTRACT_VERSION = "v0"`,
+`COHORT_0`, en `graph_version` wordt overgenomen uit `contract/graph.py`.
+Een wijziging aan het contract start een nieuw cohort; een modelwissel of
+promptwijziging is een covariaat binnen hetzelfde cohort (`model_id`,
+`prompt_version`) — anders zijn er in mei acht cohorten van drie weken.
+
+**Mensen en baselines gebruiken hetzelfde contract.** `agent` accepteert
+`human:dd`, `human:partner`, `baseline:*` en `synthesizer`. Zonder dat
+zijn mens en model niet op dezelfde meetlat te leggen, en dat is precies
+wat 4.8 wil.
+
+**Nog niet gedaan, bewust:** de forecast-ronde die de voorspellingen
+maakt (2.0), de resolver en de `evaluations`-tabel (4.5), de menselijke
+invoer (4.8), en de instrument-doelen van de synthesizer met hun
+roll-regel (4.1, laatste bullet — wacht op de instrument-mapping in 1.1).
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

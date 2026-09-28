@@ -1007,8 +1007,9 @@ Elke uitspraak van het systeem wordt een falsifieerbare claim:
 onveranderlijk, met tijdstempel, en met de regel waarmee hij later
 gescoord wordt er al in.
 
-- [ ] `Prediction`-contract met minimaal deze velden (**[27-09]**
-      herzien):
+- [x] **[28-09]** `Prediction`-contract met minimaal deze velden
+      (**[27-09]** herzien) — `src/contract/prediction.py`, bevroren
+      dataclass, 19 tests:
 
   | Veld | Waarom |
   |---|---|
@@ -1028,13 +1029,21 @@ gescoord wordt er al in.
   | `resolves_at`, `resolution_rule` | **de machine-uitvoerbare regel, inclusief vintage** — eerste print zoals opgeslagen in de eigen claims-historie op `resolves_at + 3 dagen`; latere revisies wijzigen een uitkomst nooit |
   | `market_implied_ref` | **[27-09]** waar gratis beschikbaar (futures/forwards) op het moment van voorspellen; niet reconstrueerbaar achteraf |
 
-- [ ] `resolution_rule` verplicht en machine-uitvoerbaar. Zonder dit veld
+- [x] **[28-09]** `resolution_rule` verplicht en machine-uitvoerbaar.
+      Afgedwongen bij CONSTRUCTIE, niet pas bij opslaan. Zonder dit veld
       volgt over zes maanden een discussie over wat de agent "eigenlijk
       bedoelde" en is het track record waardeloos
-- [ ] Predictions als first-class data naast claims, onveranderlijk;
-      scores in de aparte `evaluations`-tabel (1.2)
-- [ ] Mechanische QC weigert een prediction zonder kwantielen/kans, regel,
-      horizon of model_id (zie 1.6)
+- [x] **[28-09]** Predictions als first-class data naast claims,
+      onveranderlijk: `predictions`-tabel in `storage/schema.py`, bewust
+      ZONDER update- of delete-pad. Scores komen in de aparte
+      `evaluations`-tabel (4.5, nog te bouwen), zodat het resolveren de
+      voorspelling zelf nooit aanraakt
+- [x] **[28-09]** Mechanische QC weigert een prediction zonder
+      kwantielen/kans, regel, horizon of model_id. Bewust in het CONTRACT
+      en niet in `src/qc/`: dat is de veiligheidsgordel voor tekst, dit is
+      een vormcheck op data — zelfde fail-loud-precedent als `Claim`. Het
+      schema herhaalt dezelfde eisen als CHECK-constraints, zodat een bug
+      in het contract geen ongeldige rij kan opleveren
 - [ ] **[28-09]** Prijsdoelen (instrument-doelen van de synthesizer,
       zie 1.1) hebben een `resolution_rule` die expliciet vastlegt:
       welke prijs (settlement van de dag van `created_at`), welke
