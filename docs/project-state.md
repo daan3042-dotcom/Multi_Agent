@@ -1,6 +1,81 @@
 # Current Project State
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-28
+
+## 28-09-2026 — Causale graaf v0 vastgelegd (1.10, fase 1)
+
+Fase 1 is af op de back-fill-toets na, twee weken vóór schema. 309 tests
+groen (was 291).
+
+- `docs/causal-graph.md` — volledig herschreven van leeg sjabloon naar
+  v0: **17 toestandsknopen, 41 pijlen**, plus de driedeling
+  **observaties → toestanden → outputs**. Die driedeling is de
+  belangrijkste ontwerpkeuze: zonder haar wordt de graaf een verzameling
+  indicatoren. `CPILFESL` is geen knoop maar een observatie waaruit
+  `inflation_persistence` geschat wordt; sectorrotatie is geen knoop maar
+  een output.
+- `src/contract/graph.py` — dezelfde graaf machine-leesbaar: `Node`-enum,
+  `Edge` als bevroren dataclass met vertragingsvenster in dagen,
+  `NODE_OWNER`, `find_cycles()`, `validate_graph()`.
+- `tests/test_graph.py` — 18 tests.
+- `docs/agents.md` — nieuwe gedeelde sectie: welke agent welke knoop
+  bedient.
+
+**Procesafwijking, expliciet vastgelegd.** 1.10 stond als handwerk voor
+DD + partner, zonder LLM. Dat is op 28-09 bewust losgelaten: er is nog
+geen partner, DD bouwt alleen een basis, uitgangspunt "eerst een
+werkende basis, daarna optimaliseren". v0 is dus opgesteld door Claude +
+een ChatGPT-sessie (die de driedeling en de 17 knopen aandroeg), door
+Claude uitgewerkt tot pijlen en toetsbaarheid. **Consequentie:** wat er
+over zes maanden forward-getest wordt is niet DD's eigen wereldbeeld
+maar een conventioneel transmissiemodel. Een goed kalibratieresultaat in
+mei 2027 bewijst dus geen edge. Vastgelegd in `docs/causal-graph.md`
+("Herkomst") en in roadmap fase 1. Elke pijl die DD zelf wijzigt of
+toevoegt wordt met `[DD]` gemarkeerd.
+
+**Belangrijkste inhoudelijke vondst — niet elke pijl is toetsbaar.**
+Roadmap 1.10 belooft dat elke pijl deterministisch op de back-fill
+getoetst wordt. Dat kan voor 14 van de 41; 17 zijn zwak en 10 helemaal
+niet. Drie structurele oorzaken:
+1. **Definitie-overlap.** De NFCI bevat kredietspreads, VIX én
+   aandelenkoersen als componenten. Een lead-lag-correlatie tussen
+   `credit_risk_premium` en `financial_conditions` meet daarom grotendeels
+   dat een getal met zichzelf correleert — een schitterende,
+   betekenisloze uitslag. Zes pijlen.
+2. **Feedbackrichting.** De graaf is bewust géén DAG. In een lus
+   correleren A en B op elke lag, dus is de richting niet identificeerbaar.
+   Per lus wordt alleen de pijl met de langste vertraging getoetst.
+3. **Gelijktijdigheid.** `policy_stance → policy_expectations` speelt
+   binnen uren; op dagdata is dat geen lead-lag.
+
+Plus een meetvalkuil die apart genoemd staat: `energy_prices →
+inflation_persistence` gaat uitsluitend over tweede-ronde-effecten, want
+`inflation_persistence` wordt uit **core** CPI/PCE geschat en core sluit
+energie per definitie uit. Zonder die notitie wordt een nul-uitslag
+gelezen als "de pijl klopt niet" terwijl de meting het probleem is.
+
+**Wat de graaf zichtbaar maakt over cohort 0.** Van de 17 knopen worden
+er maar ~8 bediend door een agent die in cohort 0 daadwerkelijk
+voorspelt: 2 economic-knopen blijven buiten de lean-versie, commodity
+monitort alleen, en equity valt buiten het cohort. Dat bevestigt
+onafhankelijk dat `graph_node` in cohort 0 terecht optioneel is
+(correctie 6 van 27-09).
+
+**Vier gaten zijn goedkoop te dichten, alle vier via FRED** (`DTWEXBGS`
+voor `dollar` — lost meteen het bekende DXY-gat op; `T5YIE`/`T10YIE` voor
+`inflation_expectations`; `DGS2` voor `policy_expectations`; `WALCL` voor
+`liquidity`). **Minst zekere deel van dit werk, expliciet gevlagd:** of
+FRED dagelijkse olie-/gasreeksen heeft die de commodity agent van
+maandcadans naar dagcadans zouden tillen (en hem daarmee alsnog
+voorspellend in cohort 0 zouden maken) is hier niet te verifiëren — geen
+netwerktoegang in deze omgeving.
+
+**Nog niet gedaan, bewust:** de graaf is nergens in agent-code gewired.
+Geen enkele agent produceert of leest een `graph_node`, en `run_daily`
+raakt `graph.py` niet aan. Dat is een gedragswijziging over alle agents
+tegelijk en hoort bij 4.1 (`predictions`-tabel), niet hier.
+
+## Eerdere stand
 
 ## Belangrijke koerswijziging (26-09-2026) — volgorde omgedraaid rond T₀
 
