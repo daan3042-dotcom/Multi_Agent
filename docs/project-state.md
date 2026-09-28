@@ -1,6 +1,182 @@
 # Current Project State
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-28
+
+## 28-09-2026 — Causale graaf v0 vastgelegd (1.10, fase 1)
+
+Fase 1 is af op de back-fill-toets na, twee weken vóór schema. 309 tests
+groen (was 291).
+
+- `docs/causal-graph.md` — volledig herschreven van leeg sjabloon naar
+  v0: **17 toestandsknopen, 41 pijlen**, plus de driedeling
+  **observaties → toestanden → outputs**. Die driedeling is de
+  belangrijkste ontwerpkeuze: zonder haar wordt de graaf een verzameling
+  indicatoren. `CPILFESL` is geen knoop maar een observatie waaruit
+  `inflation_persistence` geschat wordt; sectorrotatie is geen knoop maar
+  een output.
+- `src/contract/graph.py` — dezelfde graaf machine-leesbaar: `Node`-enum,
+  `Edge` als bevroren dataclass met vertragingsvenster in dagen,
+  `NODE_OWNER`, `find_cycles()`, `validate_graph()`.
+- `tests/test_graph.py` — 18 tests.
+- `docs/agents.md` — nieuwe gedeelde sectie: welke agent welke knoop
+  bedient.
+
+**Procesafwijking, expliciet vastgelegd.** 1.10 stond als handwerk voor
+DD + partner, zonder LLM. Dat is op 28-09 bewust losgelaten: er is nog
+geen partner, DD bouwt alleen een basis, uitgangspunt "eerst een
+werkende basis, daarna optimaliseren". v0 is dus opgesteld door Claude +
+een ChatGPT-sessie (die de driedeling en de 17 knopen aandroeg), door
+Claude uitgewerkt tot pijlen en toetsbaarheid. **Consequentie:** wat er
+over zes maanden forward-getest wordt is niet DD's eigen wereldbeeld
+maar een conventioneel transmissiemodel. Een goed kalibratieresultaat in
+mei 2027 bewijst dus geen edge. Vastgelegd in `docs/causal-graph.md`
+("Herkomst") en in roadmap fase 1. Elke pijl die DD zelf wijzigt of
+toevoegt wordt met `[DD]` gemarkeerd.
+
+**Belangrijkste inhoudelijke vondst — niet elke pijl is toetsbaar.**
+Roadmap 1.10 belooft dat elke pijl deterministisch op de back-fill
+getoetst wordt. Dat kan voor 14 van de 41; 17 zijn zwak en 10 helemaal
+niet. Drie structurele oorzaken:
+1. **Definitie-overlap.** De NFCI bevat kredietspreads, VIX én
+   aandelenkoersen als componenten. Een lead-lag-correlatie tussen
+   `credit_risk_premium` en `financial_conditions` meet daarom grotendeels
+   dat een getal met zichzelf correleert — een schitterende,
+   betekenisloze uitslag. Zes pijlen.
+2. **Feedbackrichting.** De graaf is bewust géén DAG. In een lus
+   correleren A en B op elke lag, dus is de richting niet identificeerbaar.
+   Per lus wordt alleen de pijl met de langste vertraging getoetst.
+3. **Gelijktijdigheid.** `policy_stance → policy_expectations` speelt
+   binnen uren; op dagdata is dat geen lead-lag.
+
+Plus een meetvalkuil die apart genoemd staat: `energy_prices →
+inflation_persistence` gaat uitsluitend over tweede-ronde-effecten, want
+`inflation_persistence` wordt uit **core** CPI/PCE geschat en core sluit
+energie per definitie uit. Zonder die notitie wordt een nul-uitslag
+gelezen als "de pijl klopt niet" terwijl de meting het probleem is.
+
+**Wat de graaf zichtbaar maakt over cohort 0.** Van de 17 knopen worden
+er maar ~8 bediend door een agent die in cohort 0 daadwerkelijk
+voorspelt: 2 economic-knopen blijven buiten de lean-versie, commodity
+monitort alleen, en equity valt buiten het cohort. Dat bevestigt
+onafhankelijk dat `graph_node` in cohort 0 terecht optioneel is
+(correctie 6 van 27-09).
+
+**Vier gaten zijn goedkoop te dichten, alle vier via FRED** (`DTWEXBGS`
+voor `dollar` — lost meteen het bekende DXY-gat op; `T5YIE`/`T10YIE` voor
+`inflation_expectations`; `DGS2` voor `policy_expectations`; `WALCL` voor
+`liquidity`). **Minst zekere deel van dit werk, expliciet gevlagd:** of
+FRED dagelijkse olie-/gasreeksen heeft die de commodity agent van
+maandcadans naar dagcadans zouden tillen (en hem daarmee alsnog
+voorspellend in cohort 0 zouden maken) is hier niet te verifiëren — geen
+netwerktoegang in deze omgeving.
+
+### Vervolg dezelfde dag: drie van de vier goedkope graafgaten gedicht
+
+`monetary_policy_agent.py` haalt er vier FRED-reeksen bij (313 tests
+groen, was 309): `DGS2` → `policy_expectations`, `T5YIE`/`T10YIE` →
+`inflation_expectations`, `WALCL` → `liquidity`. Daarmee bezit die agent
+die knopen niet alleen op papier maar kan hij ze ook schatten. De
+deep-dive-prompt maakt nu expliciet onderscheid tussen wat de Fed dóét,
+wat de markt verwacht dát de Fed doet, en wat de markt aan inflatie
+verwacht — dat liep eerder door elkaar in één 10-jaars yield.
+
+Afgewogen en vastgelegd in de moduledocstring: `MAX_AGE` blijft 35 dagen
+hoewel drie nieuwe reeksen dagelijks zijn. Dat kan, omdat
+`run_monitoring()`'s `max_age` de **bron-polling** bewaakt (hoe lang
+geleden haalden we FRED voor dit domein succesvol op), niet de leeftijd
+van elke losse reeks. Blijvende bekende grens, niet nieuw: 35 dagen is
+ruim voor een agent die dagelijks draait.
+
+**Minst zekere deel, expliciet gevlagd (CLAUDE.md checkpoint 4):** de
+tolerance voor `WALCL` (100.000, verondersteld miljoenen USD ≈ $100 mrd).
+Niveau én eenheid zijn niet tegen de live API geverifieerd — geen
+netwerktoegang. Zwakker onderbouwd dan zelfs de commodity-tolerances.
+
+**Het vierde gat (`dollar` ← `DTWEXBGS`) is bewust NIET gedicht.** Dat
+hoort bij de currency agent, die op Alpha Vantage zit; het zou de eerste
+agent met twee providers maken. De Source Registry kan dat (één entry per
+provider+domain), maar `run_monitoring()` twee keer aanroepen voor
+hetzelfde domein kan twee TRIGGERED `qc_case`s opleveren waarvan er één
+voor altijd blijft hangen — de bekende grens uit 1.6 zou dan van
+theoretisch naar structureel gaan. Multi-provider-ondersteuning in
+`agents/base.py` is de echte voorwaarde en raakt alle zes agents. Ligt
+bij DD.
+
+### Vervolg: economic agent (2.7 lean) gebouwd en GEKOPPELD
+
+339 tests groen (was 313). De enige nieuwe agent die vóór T₀ mag, en
+daarmee de grootste resterende gatenvuller van de graaf: hij bedient
+`growth` (PAYEMS) en `labor_tightness` (UNRATE + ICSA).
+
+- `src/analysis/sahm_rule.py` — vijfde onderbouwingsmodel. Recessie-
+  indicator uit UNRATE die we toch al ophalen. De drempel van 0,50 pp is
+  expliciet GEEN plaatshouder: dat komt uit het gepubliceerde model
+  (Sahm, 2019) en mag niet gekalibreerd worden, anders meet je een eigen
+  model onder de naam van een gevestigd model. Weigert te rekenen op
+  minder dan 15 maanden i.p.v. een korter venster te verzinnen.
+- `src/agents/economic_agent.py` — ICSA (wekelijks), UNRATE en PAYEMS
+  (maandelijks). Eigen registry-entry `FRED:economic`, `MAX_AGE` 10 dagen
+  (strakker dan monetary's 35, omdat er een wekelijkse reeks tussen zit).
+- `src/contract/domain_ontology.py` — `"economic"` toegevoegd als MACRO.
+  Zonder dat faalt `classify_domain()` hard op het nieuwe domein.
+- 26 tests, sectie in `docs/agents.md`.
+
+**Checkpoint 1 gepasseerd op 28-09-2026.** DD heeft de agent beoordeeld
+en akkoord gegeven; hij staat nu in `runtime/daily.py::default_agents()`.
+Daarmee draaien er zes agents dagelijks in plaats van vijf. De test die
+vastlegde dat hij nog NIET gekoppeld was, is in diezelfde ronde vervangen
+door `test_agent_draait_mee_in_de_dagelijkse_runner` — die bewaakt nu het
+omgekeerde, want een agent die stilletjes uit de cyclus verdwijnt levert
+een gat in de reeks en dat maakt de kalibratie ongeldig.
+
+**Besloten op 28-09: UNRATE blijft bij beide agents.** De dubbele
+monitoring (monetary als beleidsinput, economic als eigenaar van
+`labor_tightness`) is een bewuste keuze, geen gat. Gevolg dat blijft
+staan: één werkloosheidscijfer dat beide drempels haalt geeft twee
+triggers en mogelijk twee deep-dives over dezelfde publicatie, met een
+andere invalshoek per agent.
+
+**Minst zekere deel (CLAUDE.md checkpoint 4):** de tolerances voor ICSA
+(25.000 aanvragen) en PAYEMS (250 duizend banen) veronderstellen dat ICSA
+in aantallen staat en PAYEMS in duizenden personen. Niet tegen de live API
+geverifieerd — geen netwerktoegang. Klopt PAYEMS' eenheid niet, dan staat
+de tolerance drie ordes van grootte naast de werkelijkheid en triggert hij
+nooit of altijd. Samen met `WALCL` het eerste wat op de VPS gecontroleerd
+moet worden.
+
+### Vervolg: `GRAPH_MAPPING` per agent (28-09, 362 tests groen)
+
+Elke agent declareert nu per opgehaalde reeks welke graafknoop die reeks
+helpt schatten, of expliciet `None`. Plus `validate_agent_mapping()` en
+`unserved_owned_nodes()` in `contract/graph.py`, en
+`tests/test_graph_mapping.py` (23 tests).
+
+Wat dit vangt: een reeks toevoegen zonder te beslissen welke toestand hij
+schat. Dat is hoe je ongemerkt een dashboard bouwt in plaats van een
+model — en het is precies het gat dat de monetary agent had (vijf knopen
+op zijn naam, één meetbaar), met de hand gevonden in plaats van door een
+test. Urgentie zit in de klok: een gat dat je in maand drie van de
+meetperiode ontdekt betekent drie maanden blinde data, en een forward
+test is niet achteraf aan te vullen.
+
+Twee vondsten uit het invullen zelf:
+- **Vijf van de tien commodity-reeksen voeden geen knoop** (tarwe, maïs,
+  katoen, suiker, koffie). Blijven gemonitord — zelfde API-call, dus
+  gratis — maar schatten niets.
+- **Alle elf sector-ETF's staan op `None`**, als ontwerp: sectorrotatie is
+  een output, geen toestand.
+
+Drie van de 17 knopen zijn onbediend en staan als test vastgelegd:
+`wage_growth`, `inflation_persistence` (allebei post-T₀) en
+`equity_valuation` (vraagt index-brede earnings yield).
+
+**Nog niet gedaan, bewust:** de mapping wordt nog nergens gelézen. Geen
+agent schrijft een `graph_node` op een claim of prediction, en `run_daily`
+raakt `graph.py` niet aan. De mapping is nu een declaratie plus een test;
+hij wordt dragend bij 4.1 (`predictions`-tabel), waar elke prediction een
+`graph_node` moet krijgen.
+
+## Eerdere stand
 
 ## Belangrijke koerswijziging (26-09-2026) — volgorde omgedraaid rond T₀
 
@@ -253,6 +429,99 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   (NFCI-interpretatie, Taylor Rule, relatieve sterkte, voortschrijdend-
   gemiddelde-afwijking).
 
+### Vervolg: API-budget gemeten — Alpha Vantage past waarschijnlijk niet (28-09)
+
+367 tests groen. Nieuw: `docs/data-sources.md` + `tests/test_api_budget.py`.
+Dit is het checklistpunt "API-quota meten" uit fase 0, dat vóór T₀ᵃ af moest
+met de clausule "anders bron wisselen".
+
+**De telling, rechtstreeks uit de code:**
+
+| Provider | Monitoring/dag | Worst case met deep-dives |
+|---|---|---|
+| FRED | 15 | 20 |
+| Alpha Vantage | **24** | **46** |
+
+FRED is ruim en gratis, geen zorg. **Alpha Vantage is het knelpunt:** de
+gratis tier ligt in de orde van 25 requests per dag, dus de monitoring
+alléén zit al tegen het plafond en elke deep-dive-dag gaat eroverheen.
+
+**Waarom dit erger is dan het lijkt:** het Alpha Vantage-volume piekt
+precies op de dagen dat er veel triggert. Vallen de calls daar stil, dan
+ontbreken systematisch de volatiele weken — en een gat dat samenhangt met
+marktbeweging maakt het track record beter dan het is. Dat is het ene
+faalpatroon dat de hele forward test ongeldig maakt, en je merkt het pas
+bij de evaluatie.
+
+**Niet geverifieerd (checkpoint 4):** het exacte quotum van de tier die bij
+DD's key hoort. Geen netwerktoegang vanuit de ontwikkelomgeving. Mogelijk
+heeft de key uit `analyst_agent.ai` een betaalde tier — dan verandert de
+conclusie. **DD moet dit op zijn accountpagina controleren.** De
+call-aantallen zelf staan wel vast; die komen uit de code.
+
+**Vier opties, uitgewerkt in `docs/data-sources.md`.** De interessantste is
+optie 1: commodity van Alpha Vantage naar FRED. Dat haalt 10 calls weg én
+tilt die agent van maand- naar dagcadans, waardoor hij in cohort 0 kan
+voorspellen in plaats van pas in cohort v1. Twee problemen in één keer.
+
+**Ook toegevoegd op DD's verzoek:** een nieuw checklistpunt bij T₀ᵇ —
+reeksenlijst per agent definitief, elke graafknoop bediend of expliciet
+uitgesteld. Met de notitie dat dat punt vóór de drempelkalibratie valt en
+niet bij de freeze: je kunt geen drempel kalibreren voor een reeks die nog
+niet gekozen is. De freeze bevroor wél de doelenlijst, de drempels en de
+prompts, maar nergens de monitoring-scope waaruit die doelen gekozen
+worden.
+
+### Vervolg: de laatste twee fase-0-codeitems (28-09, 375 tests groen)
+
+Hiermee zijn alle fase-0-items die niet op de VPS wachten afgerond. Wat
+rest in fase 0 is de back-fill (geblokkeerd tot er live data is) en vier
+punten op DD's naam.
+
+**1. Atomiciteit claims/agent_runs.** `storage/schema.py::
+save_output_with_run()` zet de DomainOutput, zijn claims én de
+`agent_runs`-regel in één transactie; `agents/base.py` gebruikt 'm op alle
+drie de opslagpaden (monitoring, geslaagde deep-dive, mislukte deep-dive).
+`save_domain_output()` en `record_agent_run()` blijven bestaan voor
+losse aanroepers.
+
+Het venster tussen de twee oude commits had twee uitgangen, en de tweede
+was erger dan waar het item voor bedoeld was:
+- **Crash ertussen** → claims zonder audit-regel. En omdat
+  `has_successful_run()` naar `agent_runs` kijkt, zag 1.7's idempotency de
+  cyclus als niet-gedaan: een herstart haalde alles opnieuw op en schreef
+  de claims er nóg een keer bij.
+- **Dubbele `event_id`** → de partial unique index weigerde de tweede
+  agent_run, maar de claims waren al gecommit. De bescherming tegen
+  dubbele verwerking leverde dus zelf dubbele claims op. Dat staat nu als
+  regressietest vast (`test_dubbele_event_id_laat_geen_dubbele_claims_achter`).
+
+Eén volgordewijziging in `run_monitoring()`: `evaluate_deltas()` draait nu
+vóór het opslaan in plaats van erna, omdat `trigger_count` in dezelfde
+transactie mee moet. Het leest alleen `previous_by_metric`, dat al
+opgehaald was, dus de uitkomst verandert niet.
+
+**2. Ouderdomsgrens in `system_health()`.** Een run ouder dan de grens
+telt niet meer als actuele status. Bewust asymmetrisch tussen de twee
+modi:
+- **monitoring** ouder dan 2 dagen → `STALE`. Deze hoort elke dag te
+  draaien, dus 'al dagen niets' betekent dat de cyclus stilstaat en dat
+  moet juist wél alarmeren.
+- **deep_dive** ouder dan 7 dagen → `UNKNOWN`. Deze draait alleen na een
+  trigger; weken niets is normaal en zegt niets over de gezondheid.
+
+Het probleem dat dit oplost: deep-dives zijn event-gedreven, dus na één
+mislukking kon het weken duren voor er een nieuwe run overheen kwam. Tot
+die tijd gaf `system_health()` elke dag opnieuw een kritieke melding over
+hetzelfde oude voorval — de manier waarop een monitoringsysteem zichzelf
+nutteloos maakt, omdat je leert de dagelijkse melding weg te klikken en
+daarmee ook de echte mist. Een oude *geslaagde* run wordt hetzelfde
+behandeld: even oud is even weinig informatief.
+
+Beide grenzen zijn parameters met een default, instelbaar door de
+aanroeper — zelfde dependency-injection-gedachte als de rest van die
+module.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
@@ -471,6 +740,11 @@ zijn output naar `AnalystAgentReport` vertaald krijgt) blijft zonder
 concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
+
+- **[28-09] `DTWEXBGS` → knoop `dollar`: uitgesteld tot na T₀ᵃ** (optie 3,
+  besloten 28-09). Vraagt multi-provider-ondersteuning in
+  `agents/base.py`; currency is in cohort 0 toch de controlegroep, dus
+  deze knoop is daar het minst kritisch.
 
 - **Waar draait de fetch-runner? — DD kiest een VPS (26-09-2026).**
   Richting bepaald; de concrete provider/instance moet nog besteld en

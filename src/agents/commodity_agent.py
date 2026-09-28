@@ -50,6 +50,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.moving_average_deviation import compute_deviation_from_average_pct, compute_moving_average
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -87,6 +88,29 @@ METRIC_SPECS = {
     "sugar": MetricSpec(label="Suiker", tolerance=1.5, severity="medium"),
     "coffee": MetricSpec(label="Koffie", tolerance=10.0, severity="medium"),
 }
+
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "wti": Node.ENERGY_PRICES,
+    "brent": Node.ENERGY_PRICES,
+    "natural_gas": Node.ENERGY_PRICES,
+    "copper": Node.INDUSTRIAL_METALS,
+    "aluminum": Node.INDUSTRIAL_METALS,
+    # De vijf hieronder voeden GEEN knoop. `food_ags` is bij het opstellen
+    # van de graaf bewust geschrapt: landbouwprijzen bewegen op weer en
+    # oogsten, niet op de economische machine, en ze zaten alleen in beeld
+    # omdat deze agent die reeksen toch al ophaalde -- de verkeerde reden om
+    # een knoop te maken. Ze blijven wel gemonitord (goedkoop, zelfde call),
+    # maar ze schatten niets.
+    "wheat": None,
+    "corn": None,
+    "cotton": None,
+    "sugar": None,
+    "coffee": None,
+}
+"""Vijf van de tien reeksen voeden geen enkele knoop. Dat is zichtbaar
+gemaakt in plaats van weggemoffeld: het is de scherpste illustratie van het
+verschil tussen data ophalen en een model hebben."""
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in grondstofprijzen \
 (ruwe olie, aardgas, industriële metalen, landbouwgrondstoffen). Duid wat een \

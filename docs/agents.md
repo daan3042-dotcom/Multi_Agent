@@ -41,6 +41,66 @@ tekst zelf verder brandschoon is. Onbetrouwbare onderliggende data kan
 geen goed geschreven tekst "redden". Een verouderde (maar niet
 onbereikbare) bron dwingt dit niet automatisch af.
 
+## Welke knoop van de causale graaf bedient welke agent (roadmap 1.10)
+
+Sinds 28-09-2026 ligt er één gedeeld model van de economische machine vast:
+17 toestandsknopen met 41 pijlen ertussen, in `docs/causal-graph.md` (en
+machine-leesbaar in `src/contract/graph.py`). Elke knoop heeft **precies
+één primaire eigenaar**; andere agents mogen hem lezen. Zonder die regel
+zouden vijf agents dezelfde toestand onafhankelijk schatten en er vijf
+verschillende getallen uit komen — precies de vrijzwevende analyse die de
+graaf moet voorkomen.
+
+| Agent | Bedient knopen | Nu al gedekt door zijn databron? |
+|---|---|---|
+| economic *(nieuw, 28-09)* | `growth`, `labor_tightness`, `wage_growth`, `inflation_persistence` | deels — de lean-versie dekt de eerste twee; `wage_growth` en `inflation_persistence` blijven post-T₀ |
+| monetary_policy | `inflation_expectations`, `policy_stance`, `policy_expectations`, `liquidity`, `term_premium` | deels — alleen `policy_stance`; de andere vier vragen nieuwe FRED-reeksen |
+| financial | `financial_conditions`, `credit_risk_premium`, `risk_appetite` | **ja, volledig** — enige agent zonder gat |
+| currency | `dollar` | deels — drie losse paren, brede dollarindex ontbreekt |
+| commodity | `energy_prices`, `industrial_metals` | ja, maar op maandcadans |
+| equity (adapter) | `earnings_growth`, `equity_valuation` | nee — per ticker, geen index-brede cijfers |
+| sector | **geen** | n.v.t. — zie hieronder |
+
+**De sector agent bedient bewust geen knoop.** Sectorrotatie is een
+*output*, geen oorzaak: rotatie is wat je zíét wanneer `risk_appetite` of
+`growth` beweegt. De sector agent is daarmee een cross-sectionele
+interpreet van de toestand, niet de eigenaar van een eigen toestand.
+
+Dit verandert niets aan wat een agent monitort of triggert. Het legt vast
+wélke toestand welke agent schat, zodat `graph_node` op een prediction
+(roadmap 4.1) naar iets verwijst dat één eigenaar heeft.
+
+### Per reeks: welke knoop helpt hij schatten (`GRAPH_MAPPING`)
+
+Sinds 28-09-2026 declareert **elke agent per opgehaalde reeks** welke knoop
+die reeks helpt schatten — of expliciet `None` als hij bij geen enkele
+knoop hoort. Staat in elk agent-bestand naast `METRIC_SPECS`, bewaakt door
+`tests/test_graph_mapping.py`.
+
+Waarom dat de moeite waard is: een reeks ophalen zonder te beslissen welke
+toestand hij schat, is hoe je ongemerkt een dashboard bouwt in plaats van
+een model. Nu dwingt het toevoegen van een reeks die vraag af, en een test
+controleert of elke knoop die een agent bezit ook echt een waarneming
+heeft. Precies dát gat zat er tot 28-09 bij de monetary agent: vijf knopen
+op zijn naam, één meetbaar.
+
+Twee dingen die deze mapping meteen zichtbaar maakte:
+
+- **Vijf van de tien commodity-reeksen voeden geen enkele knoop** (tarwe,
+  maïs, katoen, suiker, koffie). Landbouwprijzen bewegen op weer en
+  oogsten, niet op de economische machine; ze zaten alleen in beeld omdat
+  de agent ze toch al ophaalde. Ze blijven gemonitord — dezelfde API-call,
+  dus gratis — maar ze schatten niets.
+- **Alle elf sector-ETF's staan op `None`**, en dat is het ontwerp. De
+  sector agent bezit geen knoop; hij interpreteert de toestand
+  cross-sectioneel.
+
+Drie van de zeventien knopen worden op dit moment door niets gevoed:
+`wage_growth` en `inflation_persistence` (wachten op AHETPI/ECI en core
+PCE, post-T₀) en `equity_valuation` (vraagt een index-brede earnings yield
+die we niet hebben). Alle drie staan als test vastgelegd, zodat het aantal
+niet ongemerkt kan groeien.
+
 ## Monetary policy agent (`agents/monetary_policy_agent.py`)
 
 **Wat het volgt:** vier kernreeksen van FRED (Federal Reserve Economic
@@ -51,12 +111,25 @@ hieronder — die gebruikt óók FRED, maar met een andere ververssnelheid
 (10 dagen). Vóór 1.4 deelden ze onbedoeld dezelfde status, waardoor de
 ene agent's verse pulls de andere's veroudering kon verbergen.
 
-| Metric | FRED-reeks |
-|---|---|
-| Fed funds rate | FEDFUNDS |
-| 10-jaars Treasury yield | DGS10 |
-| CPI-index | CPIAUCSL |
-| Werkloosheidspercentage | UNRATE |
+| Metric | FRED-reeks | Bedient welke graafknoop |
+|---|---|---|
+| Fed funds rate | FEDFUNDS | `policy_stance` |
+| 10-jaars Treasury yield | DGS10 | `term_premium` |
+| CPI-index | CPIAUCSL | (input voor `inflation_persistence`) |
+| Werkloosheidspercentage | UNRATE | (input voor `labor_tightness`) |
+| 2-jaars Treasury yield | DGS2 | `policy_expectations` |
+| 5-jaars break-even inflatie | T5YIE | `inflation_expectations` |
+| 10-jaars break-even inflatie | T10YIE | `inflation_expectations` |
+| Fed-balanstotaal | WALCL | `liquidity` |
+
+De onderste vier zijn toegevoegd op 28-09-2026. Reden: de causale graaf
+(1.10) wees deze agent aan als eigenaar van `policy_expectations`,
+`inflation_expectations` en `liquidity`, maar hij had geen enkele
+waarneming om die knopen uit te schatten. Het onderscheid dat hiermee
+mogelijk wordt: **wat de Fed doet** (FEDFUNDS) is iets anders dan **wat de
+markt denkt dat de Fed gaat doen** (DGS2) en dan **wat de markt aan
+inflatie verwacht** (de break-evens). Zonder die drie apart bewoog er van
+alles in de 10-jaars yield dat de agent niet kon duiden.
 
 **Wanneer het triggert:** bij elke nieuwe waarde vergelijkt het agent met
 de vorige observatie (geen vaste absolute drempel, zie hieronder bij
@@ -68,6 +141,17 @@ de vorige observatie (geen vaste absolute drempel, zie hieronder bij
 | 10-jaars Treasury yield | > 0,25 procentpunt | medium |
 | CPI-index | > 2,0 punten | medium |
 | Werkloosheidspercentage | > 0,3 procentpunt | high |
+| 2-jaars Treasury yield | > 0,25 procentpunt | medium |
+| 5-jaars break-even inflatie | > 0,10 procentpunt | medium |
+| 10-jaars break-even inflatie | > 0,10 procentpunt | medium |
+| Fed-balanstotaal | > 100.000 (miljoen USD, ≈ $100 mrd) | medium |
+
+De break-even-drempels staan bewust lager (0,10) dan de rente-drempels:
+inflatieverwachtingen bewegen in honderdsten van procentpunten, dus 0,25
+zou daar vrijwel nooit vuren. **Het Fed-balanstotaal is de minst zekere
+drempel in dit hele project** — niveau én eenheid van WALCL zijn niet
+tegen de live API geverifieerd (geen netwerktoegang in de
+ontwikkelomgeving). Behandel die als een eerste gok, niet als een keuze.
 
 **Waar de deep-dive over gaat:** duidt wat de cijfers betekenen in hun
 macro-context — bijv. een verkrappend of verruimend beleidssignaal, of een
@@ -311,6 +395,93 @@ i.p.v. rentes/koersen/bedrijfsfundamentals) — zie ook `docs/roadmap.md`
 C.4's eigen bewoording. Supply-chain-signalen (bijv. een mijnverstoring)
 horen bewust NIET hier — dat is kwalitatief/nieuws-vormig en hoort bij de
 nog te bouwen news monitor agent (sectie D).
+
+## Economic agent (`agents/economic_agent.py`) — **nieuw, 28-09-2026**
+
+**Status:** draait mee in de dagelijkse cyclus (`src/runtime/daily.py`).
+Checkpoint 1 uit `CLAUDE.md` is op 28-09-2026 gepasseerd — DD heeft de
+agent beoordeeld en akkoord gegeven; de test die vastlegde dat hij nog
+niet gekoppeld was, is in diezelfde ronde vervangen door een die bewaakt
+dat hij niet stilletjes weer uit de cyclus verdwijnt. Hiermee draaien er
+zes agents dagelijks.
+
+**Waarom hij er is, als enige uitzondering op "geen nieuwe agents vóór
+T₀".** De causale graaf (1.10) heeft vier knopen in de reële economie en
+géén van de zes bestaande agents bediende er ook maar één. Zonder deze
+agent leert de forward test een half jaar lang niets over groei en
+arbeidsmarkt — en dat is de bovenkant van de transmissieketen. Een graaf
+die daar blind is, ziet alleen gevolgen en nooit de oorzaak.
+
+**Wat het volgt:** drie FRED-reeksen, "vers" tot 10 dagen (strakker dan de
+monetary agent's 35 dagen, omdat hier een wekelijkse reeks tussen zit).
+Eigen databron-registratie `FRED:economic` — de derde FRED-agent, dus
+zonder eigen `source_key` zouden drie agents dezelfde data_health-rij
+delen.
+
+| Metric | FRED-reeks | Cadans | Bedient welke graafknoop |
+|---|---|---|---|
+| Wekelijkse WW-aanvragen | ICSA | wekelijks | `labor_tightness` |
+| Werkloosheidspercentage | UNRATE | maandelijks | `labor_tightness` |
+| Banen buiten de landbouw | PAYEMS | maandelijks | `growth` |
+
+ICSA is de snelst resolvende macroreeks die er is. Daarmee is dit de enige
+macro-agent met een voorspeldoel dat op korte horizon af te rekenen valt —
+zie `docs/roadmap.md` deel A, "De agents van cohort 0".
+
+**Wanneer het triggert:**
+
+| Metric | Afwijking die triggert | Severity |
+|---|---|---|
+| Wekelijkse WW-aanvragen | > 25.000 aanvragen | medium |
+| Werkloosheidspercentage | > 0,2 procentpunt | high |
+| Banen buiten de landbouw | > 250 (duizend) | high |
+
+PAYEMS is een **niveau** in duizenden personen, dus het verschil tussen
+twee waarnemingen ís de maandelijkse banengroei. Een normale maand is +100
+tot +200; de drempel van 250 vangt dus de uitzonderlijke maanden en de
+banenverliezen, niet de gewone.
+
+**Waar de deep-dive over gaat:** de staat van de arbeidsmarkt en het tempo
+van de economische activiteit. De prompt waarschuwt expliciet voor drie
+dingen die hier misgaan: PAYEMS is een niveau en geen groeicijfer,
+wekelijkse WW-aanvragen zijn rumoerig (één week is zelden een signaal), en
+de Sahm Rule moet letterlijk overgenomen worden inclusief zijn
+voorbehoud.
+
+**Onderbouwing — de Sahm Rule** (`src/analysis/sahm_rule.py`, vijfde model
+in die map): bij een werkloosheidsclaim haalt Python 15 maanden UNRATE op
+en berekent of het 3-maands gemiddelde 0,50 procentpunt of meer boven het
+laagste 3-maands gemiddelde van de voorgaande twaalf maanden ligt. De LLM
+krijgt de uitkomst én de duiding als kant-en-klare claim en mag niet zelf
+inschatten of de arbeidsmarkt verslechtert.
+
+Twee dingen die hier bewust zo zijn:
+- **De drempel van 0,50 is géén plaatshouder.** Anders dan de tolerances
+  hierboven komt dat getal uit het gepubliceerde model (Sahm, 2019) en mag
+  het niet "gekalibreerd" worden — dan meet je een eigen model onder de
+  naam van een gevestigd model.
+- **Minder dan 15 maanden data levert géén berekening op**, geen kortere
+  variant. Dezelfde weiger-in-plaats-van-gokken-regel als de Taylor Rule.
+
+De agent geeft altijd mee dat de Sahm Rule **beschrijvend** is: hij
+signaleert dat een recessie waarschijnlijk al begonnen is, niet dat er een
+aankomt.
+
+**Bewust NIET in de lean versie** (alles post-T₀, staat zo in roadmap
+2.7): output gap via HP-filter, Misery Index, ISM-diffusie, Phillips
+Curve-residual. Elk daarvan vraagt een nieuwe bron of een parameterkeuze,
+en dat is precies wat vóór T₀ niet moet gebeuren. Gevolg: de graafknopen
+`wage_growth` en `inflation_persistence` blijven voorlopig onbediend —
+een vastgelegde grens, geen vergeten reeks.
+
+**Bewuste overlap met de monetary agent.** Die monitort UNRATE ook. Geen
+kopieerfout: de monetary agent leest werkloosheid als input voor de
+beleidsreactie (dual mandate), deze agent schat er de toestand
+`labor_tightness` uit. Gevolg dat je moet kennen: bij een
+werkloosheidscijfer dat beide drempels haalt vuren er **twee** triggers en
+kunnen er twee deep-dives volgen over dezelfde publicatie, elk met een
+andere invalshoek. Of dat wenselijk is, staat als open vraag in
+`docs/project-state.md`.
 
 ## Belangrijk voorbehoud, voor alle zes agents
 

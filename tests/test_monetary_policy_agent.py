@@ -205,3 +205,64 @@ def test_deep_dive_no_taylor_rule_claims_when_fed_funds_rate_absent(tmp_path, mo
 
     mpa.deep_dive(conn, client, output.claims, triggers, now=now)
     assert calls == []  # _fetch_taylor_rule_inputs wordt niet eens aangeroepen zonder fed_funds_rate-claim
+
+
+# --- Uitbreiding 28-09-2026: reeksen voor drie knopen van de causale graaf ---
+
+
+def test_nieuwe_reeksen_bedienen_de_lege_graafknopen():
+    """Het correcte geval: DGS2, T5YIE/T10YIE en WALCL zitten in FRED_SERIES.
+    Zonder deze reeksen bezit deze agent policy_expectations,
+    inflation_expectations en liquidity wel volgens contract/graph.py, maar
+    heeft hij geen enkele waarneming om ze uit te schatten."""
+    assert mpa.FRED_SERIES["2y_treasury_yield"] == "DGS2"
+    assert mpa.FRED_SERIES["inflation_expectations_5y"] == "T5YIE"
+    assert mpa.FRED_SERIES["inflation_expectations_10y"] == "T10YIE"
+    assert mpa.FRED_SERIES["fed_balance_sheet"] == "WALCL"
+
+
+def test_elke_opgehaalde_reeks_heeft_een_metric_spec():
+    """REGRESSIE. run_monitoring() doet `metric_specs.get(metric_key)` en slaat
+    een metric zonder spec stilzwijgend over voor de delta-trigger: de claim
+    wordt wél opgeslagen, maar er kan nooit een trigger op vuren. Een reeks
+    toevoegen aan FRED_SERIES en de spec vergeten levert dus data op die
+    niemand ooit ziet -- precies het stille-faal-patroon dat A.3 moet
+    voorkomen."""
+    assert set(mpa.FRED_SERIES) == set(mpa.METRIC_SPECS)
+
+
+def test_monitoring_maakt_claims_voor_de_nieuwe_reeksen(tmp_path, monkeypatch):
+    from storage.schema import load_latest_claims
+
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "2y_treasury_yield": {"value": "4.10", "date": "2026-09-28"},
+        "inflation_expectations_5y": {"value": "2.35", "date": "2026-09-28"},
+        "fed_balance_sheet": {"value": "6650000", "date": "2026-09-24"},
+    })
+
+    output, triggers = mpa.monitor(conn, now=now)
+
+    assert output is not None
+    assert triggers == []  # eerste observatie: geen vorige waarde om tegen af te zetten
+    metrics = {c.metric_key for c in load_latest_claims(conn, "monetary_policy")}
+    assert {"2y_treasury_yield", "inflation_expectations_5y", "fed_balance_sheet"} <= metrics
+
+
+def test_breakeven_beweging_boven_de_tolerance_triggert(tmp_path, monkeypatch):
+    """REGRESSIE op de tolerance zelf: break-evens bewegen in honderdsten van
+    procentpunten, dus een tolerance in dezelfde orde als die van de Fed funds
+    rate (0,25) zou vrijwel nooit vuren. 0,10 wél."""
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "inflation_expectations_5y": {"value": "2.30", "date": "2026-09-27"}})
+    mpa.monitor(conn, now=now)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "inflation_expectations_5y": {"value": "2.48", "date": "2026-09-28"}})
+    _, triggers = mpa.monitor(conn, now=now + timedelta(days=1))
+
+    assert any(t.metric_key == "inflation_expectations_5y" for t in triggers)

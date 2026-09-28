@@ -1,0 +1,131 @@
+# Databronnen en API-budget
+
+Hoort bij roadmap 1.11, checklistpunt "API-quota meten" (fase 0, vóór
+T₀ᵃ). De definition of done daar: *dagelijks callvolume (monitoring +
+deep-dives) < limiet van de gebruikte tier, gedocumenteerd hier; anders
+bron wisselen vóór T₀ᵃ*.
+
+**Stand: 28-09-2026. Er is een probleem, en het staat hieronder.**
+
+## Waarom dit telt
+
+Het systeem draait onbeheerd. Loopt het dagelijkse callvolume tegen een
+quotum aan, dan mislukken de laatste agents van de cyclus stil — of nog
+vervelender: ze mislukken pas op de drukke dagen, wanneer er deep-dives
+bij komen. Dat is precies het scenario waar de kalibratie kapot van gaat,
+want dan ontbreken **systematisch de moeilijke weken**. Een gat in de
+reeks dat samenhangt met marktvolatiliteit is erger dan willekeurig
+ontbrekende data: het maakt het track record beter dan het is.
+
+## Call-volume per dag — monitoring
+
+Afgeleid uit de code (`FRED_SERIES`, `FX_PAIRS`, `SECTOR_ETFS`,
+`COMMODITIES`), niet geschat. Eén call per reeks per cyclus;
+`run_daily.py` draait één cyclus per dag.
+
+| Provider | Agent | Calls |
+|---|---|---|
+| FRED | monetary_policy | 8 |
+| FRED | financial | 4 |
+| FRED | economic | 3 |
+| **FRED totaal** | | **15** |
+| Alpha Vantage | currency | 3 |
+| Alpha Vantage | sector | 11 |
+| Alpha Vantage | commodity | 10 |
+| **Alpha Vantage totaal** | | **24** |
+
+## Call-volume per dag — deep-dives erbij
+
+Deep-dives zijn opt-in (alleen met een meegegeven `client`), maar op een
+dag dat ze aanstaan komt dit erbovenop:
+
+| Provider | Waarvoor | Calls |
+|---|---|---|
+| FRED | Taylor Rule (CPI nu + 12 mnd terug, GDPC1, GDPPOT) | 4 |
+| FRED | Sahm Rule (15 UNRATE-waarnemingen in één call) | 1 |
+| Alpha Vantage | relatieve sterkte: 1 per getriggerde sector + SPY één keer | 1–12 |
+| Alpha Vantage | voortschrijdend gemiddelde: 1 per getriggerde grondstof | 0–10 |
+
+**Worst case op een volatiele dag:**
+
+| Provider | Monitoring | Deep-dives | Totaal |
+|---|---|---|---|
+| FRED | 15 | 5 | **20** |
+| Alpha Vantage | 24 | 22 | **46** |
+
+En let op de vorm van dat getal: het Alpha Vantage-volume **piekt precies
+op de dagen dat er veel triggert**, dus op de marktbewegingen waar we het
+meest over willen weten.
+
+## Het probleem
+
+**FRED** is ruim. De API is gratis en de limieten liggen ver boven 20
+calls per dag. Geen zorg.
+
+**Alpha Vantage is het knelpunt.** De gratis tier is de afgelopen jaren
+fors teruggeschroefd — naar de orde van **25 requests per dag**. Klopt
+dat, dan zit de monitoring alléén (24) al tegen het plafond en is elke
+deep-dive-dag gegarandeerd te veel.
+
+> **NIET GEVERIFIEERD VANUIT DEZE OMGEVING.** De ontwikkelomgeving heeft
+> geen netwerktoegang naar Alpha Vantage, dus het exacte quotum van de
+> tier die bij DD's key hoort is hier niet op te vragen. DD moet dit
+> controleren op zijn eigen accountpagina. Het kan zijn dat de key uit
+> `analyst_agent.ai` een betaalde tier heeft — dan verandert de conclusie.
+> Dit is expliciet gevlagd als het minst zekere deel van dit document
+> (`CLAUDE.md`, checkpoint 4).
+
+Wat wél zeker is, ongeacht het quotum: **24 calls per dag voor monitoring
+en tot 46 op een drukke dag.** Die getallen komen uit de code.
+
+## Wat de opties zijn, als het quotum inderdaad krap is
+
+In volgorde van hoe goed ze bij het project passen:
+
+**1. Sector en commodity naar FRED, waar dat kan.** FRED heeft dagelijkse
+olie- en gasreeksen en maandelijkse metaalprijzen. Dat zou de commodity
+agent van 10 Alpha Vantage-calls naar ~0 brengen, én — belangrijker — hem
+van maandcadans naar dagcadans tillen, waardoor hij in cohort 0 kan
+vóórspellen in plaats van pas in cohort v1 (roadmap deel A). Twee vliegen
+in één klap. **Reeks-id's hier niet te verifiëren.**
+
+**2. Een andere aanbieder voor de ETF-koersen.** De sector agent is met 11
+calls de grootverbruiker. Er zijn gratis bronnen voor dagelijkse
+slotkoersen met ruimere limieten. Kost een nieuwe fetch-implementatie,
+maar de agent-structuur verandert niet — alleen `fetch_snapshot()`.
+
+**3. Betaalde Alpha Vantage-tier.** Simpelste oplossing, kost geld per
+maand. Voor een systeem dat zes maanden moet draaien is dat een reële
+afweging tegen de tijd die optie 1 of 2 kost.
+
+**4. Cadans verlagen** (bijv. commodity wekelijks). Werkt, maar kost
+precies wat je niet wilt kwijtraken: waarnemingen. Bij een maandelijkse
+bron is dagelijks pollen sowieso overkill, dus voor commodity is dit
+verdedigbaar; voor sector niet.
+
+**Wat je NIET moet doen:** het laten zoals het is en hopen dat het meevalt.
+Als de calls stilvallen op de volatiele dagen, is dat het ene faalpatroon
+dat de hele forward test ongeldig maakt, en je merkt het pas bij de
+evaluatie in mei.
+
+## Onderhoud
+
+`tests/test_api_budget.py` telt deze aantallen uit de code en vergelijkt ze
+met de getallen hierboven. Voeg je een reeks toe aan een agent, dan faalt
+die test en moet dit document in dezelfde ronde bij — zodat het
+callvolume niet ongemerkt kan groeien tot het een keer op de VPS omvalt.
+
+## Per bron: wat we ophalen
+
+| Bron | Agents | Reeksen | Kosten | Cadans |
+|---|---|---|---|---|
+| FRED | monetary_policy | FEDFUNDS, DGS10, DGS2, CPIAUCSL, UNRATE, T5YIE, T10YIE, WALCL | gratis | gemengd |
+| FRED | financial | NFCI, BAMLH0A0HYM2, VIXCLS, T10Y2Y | gratis | dagelijks/wekelijks |
+| FRED | economic | ICSA, UNRATE, PAYEMS | gratis | wekelijks/maandelijks |
+| Alpha Vantage | currency | EUR/USD, USD/JPY, GBP/USD | tier-afhankelijk | continu |
+| Alpha Vantage | sector | 11 SPDR Select Sector-ETF's (+ SPY bij deep-dive) | tier-afhankelijk | dagelijks |
+| Alpha Vantage | commodity | WTI, Brent, aardgas, koper, aluminium, tarwe, maïs, katoen, suiker, koffie | tier-afhankelijk | maandelijks |
+
+Elke bron is apart geregistreerd in de Source Registry (roadmap 1.4) met
+een eigen `source_key` per (provider, domein), zodat de data-health van de
+ene agent die van de andere niet kan maskeren.

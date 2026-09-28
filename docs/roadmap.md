@@ -154,20 +154,31 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | ~~`run_daily.py` + cron, idempotent~~ | 1.11 | ✅ `tests/test_runtime_daily.py` | — |
 | ~~Fail-loud-notificatie~~ | 1.7/1.11 | ✅ | — |
 | VPS bestellen en inrichten: keys, `MI_DB_PATH`, `MI_WEBHOOK_URL`, cron met `flock` | 1.11 | eerste geslaagde `run_daily` op de VPS, melding ontvangen op je telefoon | DD |
-| API-quota meten | 1.11 | dagelijks callvolume (monitoring + deep-dives) < limiet van de gebruikte tier, gedocumenteerd in `docs/data-sources.md`; anders bron wisselen vóór T₀ᵃ | Claude Code |
+| ~~API-quota meten~~ **[28-09] gemeten — PROBLEEM** | 1.11 | ✅ geteld in `docs/data-sources.md` + `tests/test_api_budget.py`. FRED 15/dag (ruim). **Alpha Vantage 24/dag voor monitoring alleen, tot 46 op een volatiele dag** — de gratis tier ligt in de orde van 25/dag, dus dit past waarschijnlijk niet. Volume piekt precies op de dagen dat er veel triggert. DD moet het quotum van zijn key verifiëren; vier opties in `docs/data-sources.md` | DD beslist |
 | Geautomatiseerde offsite back-up | 1.11 | dagelijkse kopie buiten de VPS (Litestream of `.backup` + rclone) én één keer daadwerkelijk hersteld op een andere machine | DD |
 | Externe heartbeat / dead man's switch | 1.11 | alarm bij UITBLIJVEN van een run, getest door de machine bewust een dag uit te zetten | DD |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
 | Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar | Claude Code |
 | Economic agent, lean | 2.7 | monitoring + Sahm Rule + ICSA/UNRATE/PAYEMS, sectie in `docs/agents.md`, checkpoint 1 uit `CLAUDE.md` | Claude Code |
-| Atomiciteit claims/dedup | 1.11 | crash tussen `save_domain_output` en `record_agent_run` laat geen wezen achter | Claude Code |
-| Ouderdomsgrens in `system_health()` | 1.11 | één mislukte deep-dive geeft niet elke dag een kritieke melding | Claude Code |
+| ~~Atomiciteit claims/dedup~~ **[28-09] ✅** | 1.11 | `storage/schema.py::save_output_with_run()` zet beide inserts in één transactie; `agents/base.py` gebruikt 'm op alle drie de opslagpaden. Vóór de fix leverde een dubbele `event_id` juist dúbbele claims op: de IntegrityError sloeg toe ná de commit die hij moest voorkomen | — |
+| ~~Ouderdomsgrens in `system_health()`~~ **[28-09] ✅** | 1.11 | run ouder dan de grens telt niet meer als actuele status. Asymmetrisch: oude monitoring-run → STALE (de cyclus staat stil, dat is wél erg), oude deep-dive → UNKNOWN (event-gedreven, weken niets is normaal). Grenzen instelbaar per aanroeper | — |
 
 ## Fase 1 — De causale graaf (parallel, 6 – 26 okt, niet blokkerend)
 
-Handwerk voor DD en partner. Sjabloon: `docs/causal-graph.md`.
-Deliverables: 15–25 knopen, pijlen met vertraging, dekking per agent,
-`src/contract/graph.py` (enum). Sectie 1.10.
+**[28-09] v0 staat, twee weken vóór schema.** 17 knopen, 41 pijlen,
+`src/contract/graph.py` + 18 tests, dekking per agent in
+`docs/agents.md`. Wat rest binnen 1.10 is de back-fill-toets, en die
+wacht op de back-fill zelf (fase 0).
+
+Oorspronkelijk gepland als handwerk voor DD en partner. Op 28-09 anders
+gelopen: er is nog geen partner, en DD koos voor een door LLM's
+opgestelde v0 als vertrekpunt ("eerst een werkende basis, daarna
+optimaliseren"). **Wat dat kost staat expliciet in
+`docs/causal-graph.md`, "Herkomst":** een goed kalibratieresultaat in
+mei 2027 bewijst dan niet dat DD een edge heeft, maar hooguit dat een
+conventioneel transmissiemodel plus LLM-oordeel gekalibreerd is. Elke
+pijl die DD zelf toevoegt of wijzigt wordt met `[DD]` gemarkeerd, zodat
+achteraf te scheiden is wat van wie kwam.
 
 **Nieuw:** elke pijl wordt deterministisch getoetst op de back-fill
 (lead-lag-correlatie op de gekozen vertraging, volledige historie).
@@ -241,6 +252,9 @@ Secties 4.5, 4.6.
   forecast-ronde en resolver, alleen loggen, DD controleert dagelijks de
   logs tegen een vaste lijst.
 - **Freeze:** contract v0, resolution rules, drempels, prompts, model_id.
+  **[28-09]** De reeksenlijst per agent hoort hier NIET thuis maar eerder
+  — zie het eerste punt van de T₀ᵇ-checklist hieronder. Bij de freeze is
+  het te laat: de drempelkalibratie draait dan al.
 
 ## T₀ᵇ — de predictieklok loopt
 
@@ -252,6 +266,17 @@ Secties 4.5, 4.6.
 - [ ] Offsite back-up loopt dagelijks én is één keer hersteld (1.11)
 - [ ] Externe heartbeat actief en getest door de machine uit te zetten (1.11)
 - [ ] API-quota gemeten tegen het dagelijkse callvolume incl. deep-dives (1.11)
+- [ ] **[28-09] Reeksenlijst per agent definitief**: welke reeksen elke
+      agent ophaalt staat vast, en elke graafknoop is bediend óf expliciet
+      als uitgesteld genoteerd (`unserved_owned_nodes()`, 1.10/2.x).
+      **Dit punt valt vóór de drempelkalibratie hieronder, niet bij de
+      freeze** — je kunt geen drempel kalibreren voor een reeks die nog
+      niet gekozen is, en een reeks die je later toevoegt heeft minder
+      maanden data dan de rest van het cohort. Een voorspelling die je
+      niet gedaan hebt is de enige fout die ook een covariaat niet
+      repareert. Reden dat dit punt er pas op 28-09 bij kwam: de freeze
+      bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
+      de monitoring-scope waaruit die doelen gekozen worden
 - [ ] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2)
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
 - [ ] `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `model_id`, `prompt_version` (1.2/4.1)
@@ -610,18 +635,23 @@ losse analisten: de causale structuur is expliciet en handgeschreven, de
 inferentie deterministisch, en het taalmodel voedt hem alleen met
 waarnemingen.
 
-- [ ] 15–25 knopen vastleggen in `docs/causal-graph.md` (handwerk, DD +
-      partner). Voorbeelden van knooptypen: groei, inflatie,
-      kredietimpuls, liquiditeit, beleidsstance, financiële condities,
-      risicopremie, dollar, termijnpremie
-- [ ] Per pijl: richting, verwachte vertraging, en de waarneembare metric
-      die hem het beste meet
-- [ ] `src/contract/graph.py` — de knopen als enum, zodat een claim of
-      prediction er machine-checkbaar naar kan verwijzen
-- [ ] Per domain agent vastleggen welke knopen hij bedient (in
-      `docs/agents.md`)
-- [ ] Graaf-versionering: elke wijziging na T₀ krijgt een versienummer en
-      start een nieuw cohort
+- [x] **[28-09]** 17 knopen vastgelegd in `docs/causal-graph.md`, met de
+      driedeling observaties → toestanden → outputs. **Niet het
+      oorspronkelijke handwerk DD + partner:** er is nog geen partner, en
+      DD heeft op 28-09 gekozen voor een door LLM's opgestelde v0 als
+      basis. Consequentie voor wat de forward test bewijst: expliciet
+      vastgelegd in `docs/causal-graph.md`, "Herkomst"
+- [x] **[28-09]** 41 pijlen met richting, vertragingsvenster (in dagen,
+      zodat de lead-lag-toets er direct op kan rekenen), sterkte,
+      zekerheid en de waarneembare metric
+- [x] **[28-09]** `src/contract/graph.py` — knopen als enum, pijlen als
+      bevroren dataclass, eigenaarschap per agent, cykeldetectie en
+      `validate_graph()`. 18 tests in `tests/test_graph.py`
+- [x] **[28-09]** Per domain agent vastgelegd welke knopen hij bedient
+      (`docs/agents.md`). De sector agent bedient er bewust géén:
+      sectorrotatie is een output, geen oorzaak
+- [x] **[28-09]** Graaf-versionering: `GRAPH_VERSION = "v0"` +
+      versietabel onderaan `docs/causal-graph.md`
 - [ ] **[27-09]** Elke pijl deterministisch toetsen op de back-fill:
       lead-lag-correlatie op de opgegeven vertraging over de volledige
       historie, plus een kolom "houdt stand / niet / onbeslist" in
@@ -629,6 +659,16 @@ waarnemingen.
       dit is de enige toets van jullie eigen model die vóór mei 2027
       iets kan bewijzen. Een pijl die niet standhoudt gaat naar "Open
       punten", niet naar de enum.
+      **[28-09] Voorwerk gedaan, de toets zelf niet (wacht op de
+      back-fill):** elke pijl draagt nu een `Verifiability`-klasse, omdat
+      de toets anders nepresultaten oplevert die als bevestiging gelezen
+      worden. Van de 41 pijlen zijn er 14 volwaardig toetsbaar, 17 zwak
+      (uitslag alleen informatief bij het verkeerde teken) en 10 niet.
+      Drie structurele oorzaken, uitgewerkt in `docs/causal-graph.md`:
+      definitie-overlap (de NFCI bevat kredietspreads, VIX én
+      aandelenkoersen als componenten, dus correleert hij deels met
+      zichzelf), feedbackrichting (in een lus correleren A en B op elke
+      lag) en gelijktijdigheid (binnen uren, geen lead-lag op dagdata).
 - [ ] **[27-09]** `graph_node` optioneel in cohort 0, verplicht vanaf
       cohort v1 (zie deel A, correctie 6). De graaf is daarmee van het
       kritieke pad naar T₀ᵇ gehaald.
@@ -814,12 +854,16 @@ bediend worden. Zonder deze agent leert de forward test een half jaar
 lang niets over groei en arbeidsmarkt — daarom komt de kern vóór T₀,
 als enige uitzondering op "geen nieuwe agents". Lean betekent: één
 FRED-bron, drie reeksen, één model, checkpoint 1 uit `CLAUDE.md`.
-- [ ] **Pre-T₀ (lean):** monitoring mode + deep-dive mode op ICSA
+- [x] **[28-09] Pre-T₀ (lean):** monitoring mode + deep-dive mode op ICSA
       (initial claims, wekelijks — de snelst resolvende macroreeks die er
       is), UNRATE en PAYEMS (maandelijks); eigen registry-entry
-      `FRED:economic`; sectie in `docs/agents.md`
-- [ ] **Pre-T₀:** Sahm Rule (`src/analysis/sahm_rule.py`), gebouwd uit
-      UNRATE die al opgehaald wordt
+      `FRED:economic`; sectie in `docs/agents.md`. **Gekoppeld aan
+      `runtime/daily.py` op 28-09** na DD's review — checkpoint 1 uit
+      `CLAUDE.md` gepasseerd. Er draaien nu zes agents dagelijks
+- [x] **[28-09] Pre-T₀:** Sahm Rule (`src/analysis/sahm_rule.py`), gebouwd
+      uit UNRATE die al opgehaald wordt. Vijfde model in `analysis/`. De
+      drempel van 0,50 pp is expliciet GEEN plaatshouder: dat getal komt
+      uit het gepubliceerde model en mag niet gekalibreerd worden
 - [ ] **Pre-T₀:** doelen in de forecast-ronde: ICSA volgende 1/4
       weekprints, UNRATE en PAYEMS volgende 1/3 maandprints (kwantielen)
 - [ ] Output gap (HP-filter op bbp-reeks) — post-T₀

@@ -41,6 +41,9 @@ _EXACT_DOMAIN_MAP: dict[str, list[DomainCategory]] = {
     "financial": [DomainCategory.CREDIT, DomainCategory.MACRO],
     "sector": [DomainCategory.SECTORS, DomainCategory.EQUITIES],
     "commodity": [DomainCategory.COMMODITIES],
+    # Roadmap 2.7 (lean economic agent, 28-09-2026). Puur Macro: deze agent
+    # volgt de reële economie (arbeidsmarkt, banengroei), geen assetklasse.
+    "economic": [DomainCategory.MACRO],
 }
 
 

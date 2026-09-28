@@ -104,7 +104,7 @@ from storage.schema import (
     open_qc_case,
     record_agent_run,
     record_data_health,
-    save_domain_output,
+    save_output_with_run,
 )
 from triggers.trigger_engine import Severity, TriggerEvent, evaluate_data_health, evaluate_revision, evaluate_surprise
 
@@ -299,11 +299,18 @@ def run_monitoring(
         return None, triggers
 
     output = DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=now, claims=claims)
-    domain_output_id = save_domain_output(conn, output)
 
+    # De delta-triggers worden VOOR het opslaan bepaald, omdat het
+    # trigger_count-veld van de agent_run in dezelfde transactie mee moet
+    # (roadmap 1.11, atomiciteit). evaluate_deltas() leest alleen
+    # `previous_by_metric`, dat al opgehaald is -- de volgorde verandert
+    # dus niets aan de uitkomst.
     triggers.extend(evaluate_deltas(domain, claims, metric_specs, previous_by_metric, now=now))
 
-    record_agent_run(conn, domain, "monitoring", now, success=True, domain_output_id=domain_output_id, trigger_count=len(triggers), event_id=event_id)
+    domain_output_id, _ = save_output_with_run(
+        conn, output, "monitoring", now, success=True,
+        trigger_count=len(triggers), event_id=event_id,
+    )
     _maybe_open_qc_case(conn, domain, triggers, now)
 
     return output, triggers
@@ -457,9 +464,8 @@ def run_deep_dive(
             needs_review=True,
             review_issues=[str(e)],
         )
-        domain_output_id = save_domain_output(conn, output)
-        record_agent_run(
-            conn, domain, "deep_dive", now, success=False, domain_output_id=domain_output_id,
+        domain_output_id, _ = save_output_with_run(
+            conn, output, "deep_dive", now, success=False,
             trigger_count=len(trigger_events), error=str(e), event_id=event_id,
         )
         if qc_case is not None:
@@ -508,8 +514,10 @@ def run_deep_dive(
         needs_review=outcome == QCCaseStatus.QC_FAILED,
         review_issues=final_issues,
     )
-    domain_output_id = save_domain_output(conn, output)
-    record_agent_run(conn, domain, "deep_dive", now, success=True, domain_output_id=domain_output_id, trigger_count=len(trigger_events), event_id=event_id)
+    domain_output_id, _ = save_output_with_run(
+        conn, output, "deep_dive", now, success=True,
+        trigger_count=len(trigger_events), event_id=event_id,
+    )
 
     if qc_case is not None:
         advance_qc_case(conn, qc_case.id, QCCaseStatus.DEEP_DIVE_COMPLETE, now, domain_output_id=domain_output_id)
