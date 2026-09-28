@@ -232,8 +232,26 @@ alleen "het cijfer veranderde". 261 tests groen (`pytest`).
   FRED-helft (monetary_policy/financial/economic) is goedkoop en kan
   los; Alpha Vantage-helft (currency/sector/commodity) wacht op DD's
   beslissing over de AV-tier (prijzen aan het checken). 326 tests groen
-  (was 315). **Nog niet op de VPS gedraaid** — code is klaar, uitvoering
-  wacht op die tierbeslissing.
+  (was 315).
+
+  **Beslissing over de AV-tier: DD wil geen €50/maand-abonnement voor een
+  eenmalige actie** (na twee weken al veel abonnementen voor dit project
+  en "finance bro" afgesloten) — terecht. Alternatief bedacht en
+  afgesproken: AV-back-fill (~24 calls) morgenochtend vóór de reguliere
+  cron draaien, binnen de gratis dagquota — bijeffect: die dag falen
+  `currency`/`sector`/`commodity`'s REGULIERE monitoring waarschijnlijk
+  door een uitgeput quotum (FRED-agents onaangetast), herstelt zichzelf
+  de volgende dag automatisch. Geen nieuwe dependency overwogen
+  (yfinance zou pandas/numpy meebrengen, tegen CLAUDE.md-regel 2).
+
+  **FRED-helft daadwerkelijk gedraaid op de VPS, 28-09-2026:**
+  `monetary_policy` 18.932 claims (sinds 1947), `financial` 25.550
+  (sinds 1971), `economic` 5.111 (sinds 1939) — ruim boven de ≥20-jaar-eis.
+  Geverifieerd: (1) de historie-diepte via `MIN(source_time)` per domein,
+  (2) dat de back-fill-DomainOutput (generated_at op de oudste datum) de
+  ECHTE cyclus van vanochtend niet verdrongen heeft als "laatste cyclus"
+  voor `load_monitoring_claims()` — bevestigt in productie wat de
+  regressietest al beweerde. **AV-helft: gepland voor morgenochtend.**
 
 - 27-09-2026: fase 0 (`docs/roadmap.md` deel A), drie taken opgepakt.
   **0b-3, atomiciteit:** `agents/base.py::_save_output_and_record_run()` —
