@@ -52,7 +52,12 @@ def test_monitor_wires_into_run_monitoring(tmp_path, monkeypatch):
     output, triggers = mpa.monitor(conn, now=now)
     assert output is not None
     assert output.domain == "monetary_policy"
-    assert triggers == []
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []
 
 
 def test_monitor_registers_itself_in_the_source_registry(tmp_path, monkeypatch):
@@ -245,7 +250,12 @@ def test_monitoring_maakt_claims_voor_de_nieuwe_reeksen(tmp_path, monkeypatch):
     output, triggers = mpa.monitor(conn, now=now)
 
     assert output is not None
-    assert triggers == []  # eerste observatie: geen vorige waarde om tegen af te zetten
+    # Deze test gaat over het delta-mechanisme, niet over completeness.
+    # De stub levert bewust maar een deel van de verwachte reeksen, wat
+    # sinds 28-09-2026 een completeness-trigger geeft (metric_key=None);
+    # filteren op metric_key houdt de oorspronkelijke bedoeling scherp.
+    metric_triggers = [t for t in triggers if t.metric_key is not None]
+    assert metric_triggers == []  # eerste observatie: geen vorige waarde
     metrics = {c.metric_key for c in load_latest_claims(conn, "monetary_policy")}
     assert {"2y_treasury_yield", "inflation_expectations_5y", "fed_balance_sheet"} <= metrics
 
@@ -266,3 +276,40 @@ def test_breakeven_beweging_boven_de_tolerance_triggert(tmp_path, monkeypatch):
     _, triggers = mpa.monitor(conn, now=now + timedelta(days=1))
 
     assert any(t.metric_key == "inflation_expectations_5y" for t in triggers)
+
+
+def test_walcl_drempel_vuurt_op_een_realistische_weekverandering(tmp_path, monkeypatch):
+    """REGRESSIE op de drempelverlaging van 28-09-2026. Het niveau is live
+    gemeten op 6.747.704 (miljoenen USD). Een balansverandering van ~$40
+    miljard in een week is fors maar niet uitzonderlijk; met de oude
+    drempel van 100.000 vuurde dat niet en bleef de knoop `liquidity`
+    blind voor het tempo van de afbouw."""
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "fed_balance_sheet": {"value": "6747704", "date": "2026-09-24"}})
+    mpa.monitor(conn, now=now)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "fed_balance_sheet": {"value": "6707704", "date": "2026-10-01"}})  # -40.000
+    _, triggers = mpa.monitor(conn, now=now + timedelta(days=7))
+
+    assert any(t.metric_key == "fed_balance_sheet" for t in triggers)
+
+
+def test_walcl_drempel_negeert_een_rustige_week(tmp_path, monkeypatch):
+    """De tegenhanger: ~$10 miljard is het normale afbouwtempo en hoort de
+    deep-dive-machinerie niet wakker te maken."""
+    conn = init_db(str(tmp_path / "t.db"))
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "fed_balance_sheet": {"value": "6747704", "date": "2026-09-24"}})
+    mpa.monitor(conn, now=now)
+
+    monkeypatch.setattr(mpa, "fetch_snapshot", lambda: {
+        "fed_balance_sheet": {"value": "6737704", "date": "2026-10-01"}})  # -10.000
+    _, triggers = mpa.monitor(conn, now=now + timedelta(days=7))
+
+    assert not any(t.metric_key == "fed_balance_sheet" for t in triggers)

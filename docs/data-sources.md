@@ -57,6 +57,49 @@ En let op de vorm van dat getal: het Alpha Vantage-volume **piekt precies
 op de dagen dat er veel triggert**, dus op de marktbewegingen waar we het
 meest over willen weten.
 
+## GEMETEN op 28-09-2026: Alpha Vantage leverde 6 van de 24
+
+De eerste live runs na de merge maakten van een vermoeden een meting. Twee
+runs, hetzelfde beeld:
+
+| Run | FRED | Alpha Vantage |
+|---|---|---|
+| 07:15 (cron) | 8 van 8 | **6 van 24** — currency 1/3, sector 2/11, commodity 3/10 |
+| 16:37 (handmatig) | 15 van 15 | **5 van 24** — currency 1/3, sector 2/11, commodity 2/10 |
+
+FRED leverde beide keren alles. Alpha Vantage kwam niet verder dan een
+handvol calls per burst. De uitval lijkt eerder op een limiet per MINUUT
+dan per dag, maar voor de conclusie maakt dat niet uit: 24 calls in één
+burst komt er op de gratis tier niet doorheen.
+
+**En alle vijf agents rapporteerden `success=True`.** `fetch_snapshot()`
+geeft alleen een fout terug als GEEN ENKELE reeks lukt, dus een bron die
+voor 80% wegvalt was niet te onderscheiden van een gezonde dag. Dat is
+sinds diezelfde dag opgelost: de completeness-check (roadmap 1.3) is
+gewired en zet een gedeeltelijke pull om in een zichtbare trigger. **Die
+check is nu ook de controle op de betaalde tier hieronder** — komt er na
+de upgrade nog een completeness-trigger voorbij voor currency, sector of
+commodity, dan is het probleem niet opgelost.
+
+## BESLIST op 28-09-2026: betaalde Alpha Vantage-tier
+
+DD kiest voor een betaald plan in plaats van een bronmigratie. De
+afweging: een migratie naar FRED kost engineeringtijd en introduceert
+nieuwe, onzekere reeks-id's én andere eenheden (koper per ton in plaats
+van per pond, met alle tolerances die daarmee opnieuw gegokt moeten
+worden), terwijl T₀ᵃ vlakbij ligt en de klok geen kalendertijd
+terugkrijgt. Geld in plaats van werktijd.
+
+**Wat dit NIET oplost:** het Alpha Vantage commodity-endpoint blijft
+maandelijks. Een 5/21/63-daagse voorspelling is daar niet tegen te
+resolven, dus de commodity agent blijft in cohort 0 monitoring-only en
+komt pas vanaf cohort v1 in de scoring (roadmap deel A). Dat was al de
+planning; de upgrade verandert daar niets aan.
+
+**Te doen na de upgrade:** één run draaien en controleren dat er geen
+completeness-trigger meer komt. De vier opties hieronder blijven staan als
+verantwoording van de keuze, niet als openstaande actie.
+
 ## Het probleem
 
 **FRED** is ruim. De API is gratis en de limieten liggen ver boven 20

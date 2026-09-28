@@ -144,14 +144,15 @@ de vorige observatie (geen vaste absolute drempel, zie hieronder bij
 | 2-jaars Treasury yield | > 0,25 procentpunt | medium |
 | 5-jaars break-even inflatie | > 0,10 procentpunt | medium |
 | 10-jaars break-even inflatie | > 0,10 procentpunt | medium |
-| Fed-balanstotaal | > 100.000 (miljoen USD, ≈ $100 mrd) | medium |
+| Fed-balanstotaal | > 25.000 (miljoen USD, ≈ $25 mrd) | medium |
 
 De break-even-drempels staan bewust lager (0,10) dan de rente-drempels:
 inflatieverwachtingen bewegen in honderdsten van procentpunten, dus 0,25
-zou daar vrijwel nooit vuren. **Het Fed-balanstotaal is de minst zekere
-drempel in dit hele project** — niveau én eenheid van WALCL zijn niet
-tegen de live API geverifieerd (geen netwerktoegang in de
-ontwikkelomgeving). Behandel die als een eerste gok, niet als een keuze.
+zou daar vrijwel nooit vuren. **De WALCL-eenheid is op 28-09-2026
+geverifieerd** tegen de live API: de eerste run op de VPS leverde
+6.747.704, dus miljoenen USD (~$6,75 biljoen). Bij diezelfde meting ging
+de drempel van 100.000 naar 25.000 — $100 miljard in een week komt alleen
+bij crisis-QE voor, dus de oude waarde zou nooit gevuurd hebben.
 
 **Waar de deep-dive over gaat:** duidt wat de cijfers betekenen in hun
 macro-context — bijv. een verkrappend of verruimend beleidssignaal, of een

@@ -99,13 +99,14 @@ METRIC_SPECS = {
     # maanden en de banenverliezen.
     "nonfarm_payrolls": MetricSpec(label="Banen buiten de landbouw (PAYEMS)", tolerance=250.0, severity="high"),
 }
-"""NIET GEVERIFIEERD TEGEN DE LIVE API: de niveaus en eenheden hierboven
-(ICSA in aantallen, PAYEMS in duizenden personen) komen uit kennis van de
-reeksen, niet uit een echte respons -- de ontwikkelomgeving heeft geen
-netwerktoegang naar FRED. Klopt de eenheid van PAYEMS niet, dan staat de
-tolerance er drie ordes van grootte naast en triggert hij nooit of altijd.
-Dit is het eerste dat op de VPS gecontroleerd moet worden (CLAUDE.md,
-checkpoint 4)."""
+"""GEVERIFIEERD TEGEN DE LIVE API op 28-09-2026. De eerste run op de VPS
+leverde ICSA=197.000 en PAYEMS=159.075, wat beide aannames bevestigt: ICSA
+staat in aantallen aanvragen, PAYEMS in duizenden personen (~159 miljoen
+banen). De tolerances hierboven zijn daarmee in de juiste orde van grootte
+-- 25.000 aanvragen is een forse weekbeweging, 250 duizend banen een
+uitzonderlijke maand. Hiermee is de checkpoint-4-vlag op dit bestand
+vervallen; wat rest is de gewone drempelkalibratie tegen de back-fill
+(roadmap 1.5)."""
 
 GRAPH_MAPPING: dict[str, Node | None] = {
     "initial_claims": Node.LABOR_TIGHTNESS,

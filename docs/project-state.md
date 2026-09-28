@@ -522,6 +522,58 @@ Beide grenzen zijn parameters met een default, instelbaar door de
 aanroeper — zelfde dependency-injection-gedachte als de rest van die
 module.
 
+### 28-09-2026, avond: eerste live runs op de VPS — drie bevindingen
+
+398 tests groen (was 389). De VPS staat sinds vandaag op de default branch
+en heeft twee keer gedraaid met de nieuwe code. Dat leverde meer op dan een
+bevestiging.
+
+**1. De nieuwe code werkt op de FRED-kant, volledig.** Monetary haalde 8
+reeksen op (was 4), financial 4, economic 3 — 15 van de 15. De economic
+agent draait mee in de dagelijkse cyclus.
+
+**2. De drie onzekere eenheden kloppen allemaal.** Dit was het als minst
+zeker gevlagde deel van het werk (checkpoint 4):
+
+| Metric | Gemeten | Aanname | |
+|---|---|---|---|
+| `fed_balance_sheet` | 6.747.704 | miljoenen USD | ✅ |
+| `initial_claims` | 197.000 | aantal aanvragen | ✅ |
+| `nonfarm_payrolls` | 159.075 | duizenden personen | ✅ |
+
+De vlaggen zijn weggehaald. Eén drempel bleek wel fout: WALCL stond op
+100.000 (~$100 mrd per week), wat alleen bij crisis-QE voorkomt terwijl een
+normale week $5–30 mrd is. Die zou dus nooit gevuurd hebben en liet de
+knoop `liquidity` blind voor het afbouwtempo. Nu 25.000.
+
+**3. Alpha Vantage leverde 6 van de 24 — en niemand had het gemerkt.**
+Twee runs, hetzelfde beeld: currency 1/3, sector 2/11, commodity 2-3/10.
+FRED leverde beide keren alles. **Alle vijf agents rapporteerden
+`success=True`**, omdat `fetch_snapshot()` alleen faalt als geen enkele
+reeks lukt.
+
+Dat laatste was het echte probleem: een bron die voor 80% wegvalt was niet
+te onderscheiden van een gezonde dag, en dat is precies het faalpatroon dat
+een forward test ongeldig maakt — de uitval piekt op volatiele dagen, dus
+je verliest systematisch de weken die ertoe doen.
+
+**Daarom is de completeness-check (1.3) gewired**, na anderhalve dag
+bewust ongewired te zijn gebleven. `trigger_engine.
+evaluate_completeness_result()` zet een gedeeltelijke pull om in één
+trigger per cyclus (niet één per missende reeks), met severity naar rato.
+Elf bestaande tests voerden een gedeeltelijke stub-snapshot en gingen
+ervan uit dat dat geen trigger gaf; die filteren nu op `metric_key`,
+waarmee hun eigenlijke bedoeling — het delta-mechanisme, niet
+completeness — expliciet wordt.
+
+**Beslist door DD: betaalde Alpha Vantage-tier**, niet de commodity agent
+naar FRED migreren. Een migratie kost engineeringtijd en introduceert
+nieuwe onzekere reeks-id's én andere eenheden (koper per ton in plaats van
+per pond), terwijl T₀ᵃ vlakbij ligt en de klok geen kalendertijd
+terugkrijgt. Wat het NIET oplost: het commodity-endpoint blijft
+maandelijks, dus die agent blijft in cohort 0 monitoring-only — zoals al
+gepland. De completeness-check is meteen de controle op de upgrade.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

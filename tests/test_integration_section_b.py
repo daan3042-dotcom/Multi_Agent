@@ -44,8 +44,13 @@ def test_full_monitoring_trigger_escalation_synthesis_database_pipeline(tmp_path
 
         baseline_mpa_output, baseline_mpa_triggers = mpa.monitor(conn, now=t_baseline)
         baseline_ca_output, baseline_ca_triggers = ca.monitor(conn, now=t_baseline)
-        assert baseline_mpa_triggers == []
-        assert baseline_ca_triggers == []
+        # Completeness-triggers (metric_key=None) horen hier wel: de stubs
+        # leveren bewust een enkele reeks terwijl de agents er meer
+        # verwachten. Deze integratietest gaat over de keten
+        # trigger -> dispatch -> deep-dive -> synthese, dus filteren op de
+        # metric-triggers houdt dat scherp.
+        assert [t for t in baseline_mpa_triggers if t.metric_key is not None] == []
+        assert [t for t in baseline_ca_triggers if t.metric_key is not None] == []
 
         # -- Fed-besluit: raakt monetary policy EN currency tegelijk (het
         # voorbeeld dat het stappenplan zelf noemt voor de manager, A.6) --
@@ -58,8 +63,8 @@ def test_full_monitoring_trigger_escalation_synthesis_database_pipeline(tmp_path
         mpa.fetch_snapshot = mpa_original
         ca.fetch_snapshot = ca_original
 
-    assert len(mpa_triggers) == 1
-    assert len(ca_triggers) == 1
+    assert len([t for t in mpa_triggers if t.metric_key is not None]) == 1
+    assert len([t for t in ca_triggers if t.metric_key is not None]) == 1
 
     # -- A.6: manager groepeert de gelijktijdige triggers --
     all_triggers = mpa_triggers + ca_triggers

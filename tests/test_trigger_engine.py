@@ -78,3 +78,72 @@ def test_evaluate_revision_always_fires_no_tolerance():
     assert event.threshold == 2.5
     assert event.severity == "medium"
     assert "Revisie" in event.reason
+
+
+# --- Completeness-trigger (roadmap 1.3, gewired 28-09-2026) ---
+
+
+def _completeness(source, verwacht, aanwezig):
+    from health.data_health import evaluate_completeness
+
+    return evaluate_completeness(source, verwacht, aanwezig)
+
+
+def test_volledige_pull_geeft_geen_trigger():
+    """Het correcte geval: alles binnen, niets te melden."""
+    from triggers.trigger_engine import evaluate_completeness_result
+
+    result = _completeness("FRED:economic", ["a", "b", "c"], ["a", "b", "c"])
+    assert evaluate_completeness_result("economic", result) is None
+
+
+def test_gedeeltelijke_pull_geeft_een_trigger_met_de_missende_reeksen():
+    """REGRESSIE op de live meting van 28-09-2026: de sector agent haalde 2
+    van de 11 ETF's op en rapporteerde success=True, omdat fetch_snapshot()
+    alleen faalt als GEEN ENKELE reeks lukt. Zonder deze trigger is een bron
+    die voor 80% wegvalt niet te onderscheiden van een gezonde dag."""
+    from triggers.trigger_engine import evaluate_completeness_result
+
+    result = _completeness("AV:sector", ["xlk", "xlf", "xle", "xlv"], ["xlk", "xlf"])
+    trigger = evaluate_completeness_result("sector", result)
+
+    assert trigger is not None
+    assert trigger.metric_key is None  # een pull-probleem, geen metric-probleem
+    assert trigger.observed_value == 2
+    assert trigger.threshold == 4
+    assert "xle" in trigger.reason and "xlv" in trigger.reason
+
+
+def test_een_trigger_per_cyclus_niet_een_per_missende_reeks():
+    """Negen missende ETF's zijn één probleem, niet negen problemen."""
+    from triggers.trigger_engine import evaluate_completeness_result
+
+    verwacht = [f"etf_{i}" for i in range(11)]
+    result = _completeness("AV:sector", verwacht, ["etf_0", "etf_1"])
+    trigger = evaluate_completeness_result("sector", result)
+
+    assert trigger is not None
+    assert trigger.observed_value == 2
+
+
+def test_severity_schaalt_mee_met_hoeveel_er_ontbreekt():
+    """Een enkele reeks die een keer niet meekomt is ruis; de helft die
+    wegvalt is een storing. De grens ligt op 50%."""
+    from triggers.trigger_engine import evaluate_completeness_result
+
+    weinig = _completeness("FRED:monetary_policy", ["a", "b", "c", "d"], ["a", "b", "c"])
+    veel = _completeness("AV:sector", ["a", "b", "c", "d"], ["a", "b"])
+
+    assert evaluate_completeness_result("monetary_policy", weinig).severity == "medium"
+    assert evaluate_completeness_result("sector", veel).severity == "high"
+
+
+def test_reden_is_stabiel_tussen_runs():
+    """De missende sleutels worden gesorteerd, zodat dezelfde storing niet
+    elke run een andere tekst oplevert -- anders is een reden niet te
+    vergelijken tussen dagen."""
+    from triggers.trigger_engine import evaluate_completeness_result
+
+    een = evaluate_completeness_result("sector", _completeness("s", ["a", "b", "c"], ["a"])).reason
+    twee = evaluate_completeness_result("sector", _completeness("s", ["c", "b", "a"], ["a"])).reason
+    assert een == twee
