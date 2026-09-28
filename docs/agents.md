@@ -66,10 +66,40 @@ graaf moet voorkomen.
 `growth` beweegt. De sector agent is daarmee een cross-sectionele
 interpreet van de toestand, niet de eigenaar van een eigen toestand.
 
-Dit verandert vandaag niets aan wat een agent monitort of triggert — de
-graaf is nog nergens in de agent-code gewired. Het legt alleen vast wélke
-toestand welke agent straks schat, zodat `graph_node` op een prediction
+Dit verandert niets aan wat een agent monitort of triggert. Het legt vast
+wélke toestand welke agent schat, zodat `graph_node` op een prediction
 (roadmap 4.1) naar iets verwijst dat één eigenaar heeft.
+
+### Per reeks: welke knoop helpt hij schatten (`GRAPH_MAPPING`)
+
+Sinds 28-09-2026 declareert **elke agent per opgehaalde reeks** welke knoop
+die reeks helpt schatten — of expliciet `None` als hij bij geen enkele
+knoop hoort. Staat in elk agent-bestand naast `METRIC_SPECS`, bewaakt door
+`tests/test_graph_mapping.py`.
+
+Waarom dat de moeite waard is: een reeks ophalen zonder te beslissen welke
+toestand hij schat, is hoe je ongemerkt een dashboard bouwt in plaats van
+een model. Nu dwingt het toevoegen van een reeks die vraag af, en een test
+controleert of elke knoop die een agent bezit ook echt een waarneming
+heeft. Precies dát gat zat er tot 28-09 bij de monetary agent: vijf knopen
+op zijn naam, één meetbaar.
+
+Twee dingen die deze mapping meteen zichtbaar maakte:
+
+- **Vijf van de tien commodity-reeksen voeden geen enkele knoop** (tarwe,
+  maïs, katoen, suiker, koffie). Landbouwprijzen bewegen op weer en
+  oogsten, niet op de economische machine; ze zaten alleen in beeld omdat
+  de agent ze toch al ophaalde. Ze blijven gemonitord — dezelfde API-call,
+  dus gratis — maar ze schatten niets.
+- **Alle elf sector-ETF's staan op `None`**, en dat is het ontwerp. De
+  sector agent bezit geen knoop; hij interpreteert de toestand
+  cross-sectioneel.
+
+Drie van de zeventien knopen worden op dit moment door niets gevoed:
+`wage_growth` en `inflation_persistence` (wachten op AHETPI/ECI en core
+PCE, post-T₀) en `equity_valuation` (vraagt een index-brede earnings yield
+die we niet hebben). Alle drie staan als test vastgelegd, zodat het aantal
+niet ongemerkt kan groeien.
 
 ## Monetary policy agent (`agents/monetary_policy_agent.py`)
 

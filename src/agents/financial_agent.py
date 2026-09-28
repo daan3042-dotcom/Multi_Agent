@@ -48,6 +48,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.nfci_interpretation import classify_nfci
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -68,6 +69,27 @@ FRED_SERIES = {
     "vix": "VIXCLS",
     "yield_curve_10y_2y": "T10Y2Y",
 }
+
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "financial_conditions_index": Node.FINANCIAL_CONDITIONS,
+    "high_yield_credit_spread": Node.CREDIT_RISK_PREMIUM,
+    "vix": Node.RISK_APPETITE,
+    # Waarneming voor een knoop die de MONETARY agent bezit. Mag: deze agent
+    # leest de curve als onderdeel van de financieringscondities, maar de
+    # termijnpremie zelf wordt door monetary geschat.
+    "yield_curve_10y_2y": Node.TERM_PREMIUM,
+}
+"""De enige agent die al zijn eigen knopen dekt -- alle drie
+(financial_conditions, credit_risk_premium, risk_appetite) hebben een
+waarneming.
+
+LET OP BIJ HET UITBREIDEN: deze drie knopen overlappen elkaar in de METING.
+De NFCI bevat kredietspreads, VIX en aandelenkoersen als componenten, dus de
+drie reeksen hierboven zijn niet onafhankelijk. Dat is waarom zes pijlen in
+de graaf op Verifiability.NONE staan -- zie docs/causal-graph.md, "Wat niet
+toetsbaar is". Een reeks toevoegen die opnieuw in de NFCI zit, vergroot die
+overlap zonder informatie toe te voegen."""
 
 METRIC_SPECS = {
     "financial_conditions_index": MetricSpec(label="Financial Conditions Index (NFCI)", tolerance=0.1, severity="high"),

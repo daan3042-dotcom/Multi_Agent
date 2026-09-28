@@ -66,6 +66,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.sahm_rule import MINIMUM_OBSERVATIONS, classify_sahm_rule, compute_sahm_rule
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -96,6 +97,17 @@ METRIC_SPECS = {
     "unemployment_rate": MetricSpec(label="Werkloosheidspercentage (UNRATE)", tolerance=0.3, severity="high"),
     "nonfarm_payrolls": MetricSpec(label="Nonfarm Payrolls (PAYEMS)", tolerance=150.0, severity="high"),
 }
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "initial_claims": Node.LABOR_TIGHTNESS,
+    "unemployment_rate": Node.LABOR_TIGHTNESS,
+    "nonfarm_payrolls": Node.GROWTH,
+}
+"""Twee van de vier knopen die deze agent bezit worden bediend. `wage_growth`
+(vraagt AHETPI/ECI) en `inflation_persistence` (vraagt core PCE) blijven
+bewust leeg in de lean versie -- post-T0, zie roadmap 2.7. Dat is een
+vastgelegde grens, en `unserved_owned_nodes()` maakt hem elke testronde
+opnieuw zichtbaar in plaats van dat hij wegzakt."""
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaanse groei- \
 en arbeidsmarktdata: wekelijkse WW-aanvragen (Initial Claims), het werkloosheidspercentage, en \

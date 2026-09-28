@@ -68,6 +68,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.taylor_rule import compute_output_gap_pct, compute_taylor_rule_rate
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -123,6 +124,23 @@ METRIC_SPECS = {
     "inflation_expectations_10y": MetricSpec(label="10-jaars break-even inflatie", tolerance=0.10, severity="medium"),
     "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=100_000.0, severity="medium"),
 }
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "fed_funds_rate": Node.POLICY_STANCE,
+    "10y_treasury_yield": Node.TERM_PREMIUM,
+    "2y_treasury_yield": Node.POLICY_EXPECTATIONS,
+    "inflation_expectations_5y": Node.INFLATION_EXPECTATIONS,
+    "inflation_expectations_10y": Node.INFLATION_EXPECTATIONS,
+    "fed_balance_sheet": Node.LIQUIDITY,
+    # Waarnemingen voor knopen die de ECONOMIC agent bezit. Mag: eigenaarschap
+    # bepaalt wie de toestand schat, niet wie ernaar mag kijken. Deze agent
+    # leest ze als input voor de beleidsreactie (dual mandate).
+    "cpi_inflation_index": Node.INFLATION_PERSISTENCE,
+    "unemployment_rate": Node.LABOR_TIGHTNESS,
+}
+"""Welke graafknoop (1.10) elke opgehaalde reeks helpt schatten. Alle vijf
+knopen die deze agent bezit worden bediend -- `unserved_owned_nodes()`
+bewaakt dat. Tot 28-09-2026 gold dat voor maar een van de vijf."""
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaans \
 monetair beleid: Fed funds rate, 2- en 10-jaars Treasury yield, CPI-index, werkloosheid, \
