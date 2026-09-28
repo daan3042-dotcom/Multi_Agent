@@ -62,6 +62,7 @@ from contract.output_contract import DomainOutput
 from health.system_health import SystemHealthReport, sources_from_registry, system_health
 from manager.manager import DispatchPlan, dispatch
 from runtime.notifications import Notification, Notifier, build_notification, log_notifier
+from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
     load_latest_claims,
@@ -138,6 +139,7 @@ class DailyRunResult:
     notification: Notification | None = None
     missed_days: list[str] = field(default_factory=list)
     forecast_results: list[ForecastRoundResult] = field(default_factory=list)
+    resolver: ResolverResult | None = None
 
     @property
     def forecast_issues(self) -> list[str]:
@@ -165,6 +167,8 @@ class DailyRunResult:
         if any(o.deep_dive_error for o in self.outcomes):
             return True
         if self.forecast_issues:
+            return True
+        if self.resolver is not None and self.resolver.has_problems:
             return True
         return bool(self.missed_days)
 
@@ -393,6 +397,18 @@ def run_daily(
             _run_forecast_round(conn, agents, result, client, now, weekly_event_id(now))
         except Exception as e:  # noqa: BLE001
             logger.error("Forecast-fase afgebroken: %s: %s", type(e).__name__, e)
+
+    # De resolver draait DAGELIJKS en niet wekelijks: voorspellingen lopen
+    # af op hun eigen moment (5, 21, 63 handelsdagen; 1/2/3 publicaties),
+    # niet op maandag. Hij kost geen API-calls en geen LLM -- alles wat hij
+    # nodig heeft staat al in de database.
+    try:
+        result.resolver = resolve_due_predictions(conn, now)
+        if result.resolver.resolved or result.resolver.unresolvable:
+            logger.info(result.resolver.summary())
+    except Exception as e:  # noqa: BLE001
+        logger.error("Resolver afgebroken: %s: %s", type(e).__name__, e)
+        result.resolver = ResolverResult(errors=[f"resolver afgebroken: {e}"])
 
     try:
         result.missed_days = _missed_days(conn, agents, now)

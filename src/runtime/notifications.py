@@ -148,6 +148,22 @@ def build_notification(result, health: SystemHealthReport | None) -> Notificatio
         lines.append("Forecast-ronde met problemen (de week is pas verloren na zondag):")
         lines.extend(f"  - {i}" for i in forecast_issues)
 
+    resolver = getattr(result, "resolver", None)
+    if resolver is not None and resolver.has_problems:
+        # Een onafwikkelbare voorspelling is een voorspelling die nooit
+        # gescoord wordt, en de evaluations-tabel kent geen update-pad: hij
+        # is definitief uit het cohort. Bij één of twee is dat ruis, maar
+        # het patroon (een reeks die stopte met publiceren, een ontbrekende
+        # FOMC-kalender) is precies wat je vroeg wilt zien -- niet in mei,
+        # als de steekproef al kleiner is dan gedacht.
+        escalate("warning")
+        if resolver.unresolvable:
+            lines.append(
+                f"Voorspellingen die nooit meer gescoord worden: {resolver.unresolvable} "
+                f"(zie de resolver-regels in het log)"
+            )
+        lines.extend(f"  - resolver-fout: {e}" for e in resolver.errors)
+
     unhealthy = [c for c in (health.components if health is not None else []) if _STATUS_SEVERITY.get(c.status) is not None]
     if unhealthy:
         for component in unhealthy:

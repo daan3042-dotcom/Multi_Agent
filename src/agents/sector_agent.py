@@ -49,6 +49,7 @@ import requests
 
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -60,6 +61,11 @@ SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie moneta
 BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=5)  # dagelijkse slotkoersen; buffer voor een weekend + feestdag
 BENCHMARK_SYMBOL = "SPY"  # S&P 500-proxy voor de relatieve-sterkte-berekening
+BENCHMARK_KEY = "spy_benchmark"
+"""De metric_key waaronder de benchmark in de claims-historie staat. Staat
+hier als constante omdat de resolver hem straks bij naam opzoekt: raakt
+deze sleutel uit de pas met SECTOR_ETFS, dan is elk sector-doel achteraf
+onresolvbaar, en dat blijkt pas als de eerste voorspelling afloopt."""
 
 SECTOR_ETFS = {
     "xlk_technology": "XLK",
@@ -129,6 +135,8 @@ FORECAST_TARGETS = tuple(
         kind=PredictionKind.QUANTILE,
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21),
+        resolution_method=ResolutionMethod.RELATIVE_RETURN,
+        benchmark_metric_key=BENCHMARK_KEY,
         resolution_rule=(
             "Het RELATIEVE rendement van " + key + " t.o.v. SPY over {horizon_n} "
             "handelsdagen: de procentuele koersverandering van " + key + " tussen "
@@ -140,7 +148,7 @@ FORECAST_TARGETS = tuple(
         ),
     )
     for key in SECTOR_ETFS
-    if key != "spy_benchmark"
+    if key != BENCHMARK_KEY
 )
 # Roadmap deel A: 11 doelen, en daarmee de RIJKSTE TESTBRON van het cohort --
 # meer onafhankelijke doelen dan de andere vier agents samen. Dat telt, want

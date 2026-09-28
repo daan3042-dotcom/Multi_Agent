@@ -20,6 +20,7 @@ from agents.base import (
 )
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from storage.schema import init_db, list_agent_runs, list_predictions
 
 NU = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -30,6 +31,7 @@ DOELEN = [
         kind=PredictionKind.QUANTILE,
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21),
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule="DGS10 eerste print op of na resolves_at ({horizon_n} hd)",
     ),
 ]
@@ -247,4 +249,5 @@ def test_binair_doel_zonder_event_rule_wordt_geweigerd():
             metric_key="x", kind=PredictionKind.BINARY,
             horizon_kind=HorizonKind.RELEASES, horizons=(1,),
             cadence=ReleaseCadence.FOMC, resolution_rule="regel",
+            resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         )

@@ -666,6 +666,7 @@ def _forecast_client(tekst='{"forecasts": [{"metric_key": "testmetric", "horizon
 def _forecast_agent(domain="testdomain"):
     from agents.base import ForecastTarget
     from contract.prediction import HorizonKind, PredictionKind
+    from contract.resolution import ResolutionMethod
 
     spec = AgentSpec(
         domain,
@@ -676,6 +677,7 @@ def _forecast_agent(domain="testdomain"):
                 kind=PredictionKind.QUANTILE,
                 horizon_kind=HorizonKind.TRADING_DAYS,
                 horizons=(5,),
+                resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
                 resolution_rule="testmetric eerste print op of na resolves_at",
             ),
         ),

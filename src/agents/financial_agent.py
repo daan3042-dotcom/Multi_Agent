@@ -49,6 +49,7 @@ import requests
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from analysis.nfci_interpretation import classify_nfci
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -107,6 +108,7 @@ FORECAST_TARGETS = tuple(
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=node,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             reeks + " zoals EERST gepubliceerd, gemeten op de eerste beschikbare "
             "observatie op of na resolves_at ({horizon_n} handelsdagen na created_at). "
@@ -126,6 +128,7 @@ FORECAST_TARGETS = tuple(
         horizons=(1, 4, 12),
         cadence=ReleaseCadence.WEEKLY,
         graph_node=Node.FINANCIAL_CONDITIONS,
+        resolution_method=ResolutionMethod.NTH_RELEASE,
         resolution_rule=(
             "De {horizon_n}-de NFCI-publicatie na created_at, EERSTE print. "
             "Latere revisies wijzigen de uitkomst nooit."

@@ -69,6 +69,7 @@ import requests
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from analysis.taylor_rule import compute_output_gap_pct, compute_taylor_rule_rate
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -157,6 +158,7 @@ FORECAST_TARGETS = (
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=Node.TERM_PREMIUM,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             "DGS10 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
             "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
@@ -169,6 +171,7 @@ FORECAST_TARGETS = (
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=Node.POLICY_EXPECTATIONS,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             "DGS2 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
             "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
@@ -182,6 +185,7 @@ FORECAST_TARGETS = (
         horizons=(1, 2),
         cadence=ReleaseCadence.FOMC,
         graph_node=Node.POLICY_STANCE,
+        resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         event_rule=(
             "De Fed funds rate ligt na de {horizon_n}-de FOMC-vergadering na created_at "
             "HOGER dan de laatst bekende waarde op created_at"

@@ -145,6 +145,10 @@ def main(argv=None) -> int:
     if result.forecast_results:
         aantal = sum(len(r.predictions) for r in result.forecast_results)
         log.info("Forecast-ronde: %d voorspellingen opgeslagen", aantal)
+    if result.resolver is not None:
+        log.info(result.resolver.summary())
+        for fout in result.resolver.errors:
+            log.error("Resolver-fout: %s", fout)
     for probleem in result.forecast_issues:
         # Niet stil: een onvolledige ronde is een gat in de meting, en de
         # ronde haalt zichzelf alleen in binnen dezelfde ISO-week.

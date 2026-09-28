@@ -99,6 +99,7 @@ from contract.horizons import ReleaseCadence, resolves_at_for
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
 from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract.resolution import ResolutionMethod
 from health.data_health import (
     HealthStatus,
     QualityStatus,
@@ -601,15 +602,33 @@ class ForecastTarget:
     horizon_kind: HorizonKind
     horizons: tuple[int, ...]
     resolution_rule: str
+    resolution_method: ResolutionMethod
     cadence: ReleaseCadence | None = None
     graph_node: Node | None = None
     event_rule: str | None = None
+    benchmark_metric_key: str | None = None
 
     def __post_init__(self) -> None:
         if not self.horizons:
             raise ValueError(f"ForecastTarget {self.metric_key!r} zonder horizonnen")
         if self.kind is PredictionKind.BINARY and not self.event_rule:
             raise ValueError(f"binair doel {self.metric_key!r} vereist een event_rule")
+        # De methode en de regeltekst horen hetzelfde te zeggen; dat is een
+        # menselijke controle (zie contract/resolution.py). Wat WEL
+        # automatisch te controleren is, is of de methode zijn parameters
+        # heeft -- een relatief rendement zonder benchmark is achteraf
+        # niet te resolven, en dat merk je dan pas als de voorspelling
+        # afloopt en de data er niet meer bij te halen is.
+        if self.resolution_method is ResolutionMethod.RELATIVE_RETURN and not self.benchmark_metric_key:
+            raise ValueError(
+                f"doel {self.metric_key!r} resolvet op relatief rendement maar heeft "
+                f"geen benchmark_metric_key"
+            )
+        if self.benchmark_metric_key and self.resolution_method is not ResolutionMethod.RELATIVE_RETURN:
+            raise ValueError(
+                f"doel {self.metric_key!r} heeft een benchmark maar resolvet op "
+                f"{self.resolution_method.value} -- die methode gebruikt hem niet"
+            )
 
 
 @dataclass(frozen=True)
@@ -703,6 +722,8 @@ def _parse_forecast_response(
                     created_at=now,
                     resolves_at=resolves_at_for(now, target.horizon_kind, horizon_n, target.cadence),
                     resolution_rule=target.resolution_rule.format(horizon_n=horizon_n),
+                    resolution_method=target.resolution_method,
+                    benchmark_metric_key=target.benchmark_metric_key,
                     model_id=model_id,
                     prompt_version=prompt_version,
                     q10=entry.get("q10"),
