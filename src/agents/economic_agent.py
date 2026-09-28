@@ -58,6 +58,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.sahm_rule import MIN_OBSERVATIONS, compute_sahm_gap, describe_sahm_gap
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -105,6 +106,17 @@ netwerktoegang naar FRED. Klopt de eenheid van PAYEMS niet, dan staat de
 tolerance er drie ordes van grootte naast en triggert hij nooit of altijd.
 Dit is het eerste dat op de VPS gecontroleerd moet worden (CLAUDE.md,
 checkpoint 4)."""
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "initial_claims": Node.LABOR_TIGHTNESS,
+    "unemployment_rate": Node.LABOR_TIGHTNESS,
+    "nonfarm_payrolls": Node.GROWTH,
+}
+"""Twee van de vier knopen die deze agent bezit worden bediend. `wage_growth`
+(vraagt AHETPI/ECI) en `inflation_persistence` (vraagt core PCE) blijven
+bewust leeg in de lean versie -- post-T0, zie roadmap 2.7. Dat is een
+vastgelegde grens, en `unserved_owned_nodes()` maakt hem elke testronde
+opnieuw zichtbaar in plaats van dat hij wegzakt."""
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in de reële \
 Amerikaanse economie: arbeidsmarkt en groei. Je volgt wekelijkse WW-aanvragen (ICSA), \

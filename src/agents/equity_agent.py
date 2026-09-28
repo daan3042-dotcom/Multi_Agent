@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from agents.base import MetricSpec, evaluate_deltas
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
 from storage.schema import load_latest_claims, save_domain_output
 from triggers.trigger_engine import TriggerEvent
@@ -83,6 +84,24 @@ EQUITY_METRIC_SPECS = {
     "sec_interest_coverage_ratio": MetricSpec(label="Rentedekking", tolerance=1.0, severity="high"),
     "sec_roic": MetricSpec(label="ROIC", tolerance=0.02, severity="medium"),
 }
+
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "sec_operating_margin": Node.EARNINGS_GROWTH,
+    "sec_net_margin": Node.EARNINGS_GROWTH,
+    "sec_roic": Node.EARNINGS_GROWTH,
+    # Balansmaatstaven: zeggen iets over kredietwaardigheid van het BEDRIJF,
+    # niet over een macro-toestand in de graaf. Bewust None -- ze via
+    # credit_risk_premium koppelen zou een bedrijfsfeit met een marktbrede
+    # risicopremie verwarren.
+    "sec_net_debt_to_ebitda": None,
+    "sec_interest_coverage_ratio": None,
+}
+"""Deze agent bezit `earnings_growth` en `equity_valuation`, maar meet ze
+per TICKER terwijl de graafknopen marktbreed zijn. `equity_valuation` blijft
+daarom onbediend: daarvoor is een index-brede earnings yield nodig, en die
+hebben we niet. Equity valt sowieso buiten cohort 0 (kwartaalcadans past
+niet op 5/21/63 handelsdagen), dus dit is geen blokkade voor T0."""
 
 
 def equity_domain(ticker: str) -> str:

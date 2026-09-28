@@ -144,10 +144,37 @@ de tolerance drie ordes van grootte naast de werkelijkheid en triggert hij
 nooit of altijd. Samen met `WALCL` het eerste wat op de VPS gecontroleerd
 moet worden.
 
-**Nog niet gedaan, bewust:** de graaf is nergens in agent-code gewired.
-Geen enkele agent produceert of leest een `graph_node`, en `run_daily`
-raakt `graph.py` niet aan. Dat is een gedragswijziging over alle agents
-tegelijk en hoort bij 4.1 (`predictions`-tabel), niet hier.
+### Vervolg: `GRAPH_MAPPING` per agent (28-09, 362 tests groen)
+
+Elke agent declareert nu per opgehaalde reeks welke graafknoop die reeks
+helpt schatten, of expliciet `None`. Plus `validate_agent_mapping()` en
+`unserved_owned_nodes()` in `contract/graph.py`, en
+`tests/test_graph_mapping.py` (23 tests).
+
+Wat dit vangt: een reeks toevoegen zonder te beslissen welke toestand hij
+schat. Dat is hoe je ongemerkt een dashboard bouwt in plaats van een
+model — en het is precies het gat dat de monetary agent had (vijf knopen
+op zijn naam, één meetbaar), met de hand gevonden in plaats van door een
+test. Urgentie zit in de klok: een gat dat je in maand drie van de
+meetperiode ontdekt betekent drie maanden blinde data, en een forward
+test is niet achteraf aan te vullen.
+
+Twee vondsten uit het invullen zelf:
+- **Vijf van de tien commodity-reeksen voeden geen knoop** (tarwe, maïs,
+  katoen, suiker, koffie). Blijven gemonitord — zelfde API-call, dus
+  gratis — maar schatten niets.
+- **Alle elf sector-ETF's staan op `None`**, als ontwerp: sectorrotatie is
+  een output, geen toestand.
+
+Drie van de 17 knopen zijn onbediend en staan als test vastgelegd:
+`wage_growth`, `inflation_persistence` (allebei post-T₀) en
+`equity_valuation` (vraagt index-brede earnings yield).
+
+**Nog niet gedaan, bewust:** de mapping wordt nog nergens gelézen. Geen
+agent schrijft een `graph_node` op een claim of prediction, en `run_daily`
+raakt `graph.py` niet aan. De mapping is nu een declaratie plus een test;
+hij wordt dragend bij 4.1 (`predictions`-tabel), waar elke prediction een
+`graph_node` moet krijgen.
 
 ## Eerdere stand
 

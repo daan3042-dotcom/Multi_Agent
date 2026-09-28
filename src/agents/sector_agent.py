@@ -49,6 +49,7 @@ import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
+from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
 from storage.schema import register_source
 
@@ -86,6 +87,28 @@ METRIC_SPECS = {
     "xlre_real_estate": MetricSpec(label="XLRE (Real Estate)", tolerance=1.5, severity="medium"),
     "xlc_communication_services": MetricSpec(label="XLC (Communication Services)", tolerance=3.0, severity="medium"),
 }
+
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    key: None
+    for key in (
+        "xlk_technology", "xlf_financials", "xle_energy", "xlv_health_care",
+        "xly_consumer_discretionary", "xlp_consumer_staples", "xli_industrials",
+        "xlb_materials", "xlu_utilities", "xlre_real_estate",
+        "xlc_communication_services",
+    )
+}
+"""ALLE ELF BEWUST OP None, en dat is geen omissie maar het ontwerp.
+
+Sectorrotatie is een OUTPUT (laag 3), geen toestand (laag 2): rotatie is
+wat je ziet wanneer risk_appetite of growth beweegt, niet een oorzaak op
+zichzelf. Deze agent bezit daarom geen enkele knoop -- hij interpreteert
+de toestand cross-sectioneel. Zie docs/causal-graph.md, "Drie lagen".
+
+Zou je de elf ETF's wel als knopen opnemen, dan krijg je een graaf waarin
+alle pijlen binnenkomen en geen enkele vertrekt: een dashboard met pijlen
+in plaats van een model.
+"""
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in sector-rotatie binnen \
 Amerikaanse aandelenmarkten (de 11 SPDR Select Sector-ETF's). Duid wat een significante \

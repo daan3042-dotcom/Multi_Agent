@@ -28,6 +28,7 @@ find_cycles() en de waarschuwing bij Verifiability.NONE.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -338,6 +339,59 @@ def nodes_for_agent(domain: str) -> tuple[Node, ...]:
     tuple voor een agent die geen knoop bedient (de sector agent) -- dat is
     geen fout, dus geen ValueError zoals in classify_domain()."""
     return tuple(n for n, owner in NODE_OWNER.items() if owner == domain)
+
+
+def unserved_owned_nodes(domain: str, mapping: Mapping[str, Node | None]) -> tuple[Node, ...]:
+    """Knopen die `domain` BEZIT maar waarvoor hij geen enkele waarneming
+    ophaalt. Dit is de check waar de mapping voor bestaat.
+
+    Het gat dat dit vangt is echt gebeurd: op 28-09-2026 bezat de monetary
+    agent vijf knopen en kon hij er een meten -- policy_expectations,
+    inflation_expectations en liquidity stonden op zijn naam zonder dat er
+    een reeks voor werd opgehaald. Dat is met de hand gevonden door de graaf
+    naast de agents te leggen. Deze functie maakt er een test van.
+
+    Waarom dit vóór T0-b moet kloppen: een gat dat je in maand drie van de
+    meetperiode ontdekt, betekent drie maanden blinde data op die knoop, en
+    een forward test is niet achteraf aan te vullen."""
+    served = {node for node in mapping.values() if node is not None}
+    return tuple(node for node in nodes_for_agent(domain) if node not in served)
+
+
+def validate_agent_mapping(
+    domain: str, mapping: Mapping[str, Node | None], metric_keys: Iterable[str]
+) -> None:
+    """Controleert de mapping van een agent tegen zijn eigen metric_keys.
+    Fail loud (ValueError), zelfde precedent als output_contract.py.
+
+    Twee fouten worden gevangen, allebei stille-faal-patronen:
+
+    1. Een metric_key die WEL wordt opgehaald maar NIET in de mapping staat.
+       Dan haal je data op zonder ooit besloten te hebben welke toestand hij
+       schat -- precies hoe je ongemerkt een dashboard bouwt in plaats van
+       een model. Hoort een reeks bij geen enkele knoop, dan is `None` het
+       juiste antwoord: expliciet, en zichtbaar in de code.
+    2. Een mapping-regel voor een metric_key die niet bestaat. Meestal een
+       hernoemde reeks waarvan de mapping is blijven staan.
+
+    NIET gecontroleerd: of de knoop van deze agent zelf is. Een agent mag
+    waarnemen voor een knoop die een ander bezit -- de monetary agent haalt
+    CPI op, terwijl `inflation_persistence` van de economic agent is.
+    Eigenaarschap bepaalt wie de TOESTAND schat, niet wie ernaar mag kijken.
+    """
+    metric_keys = set(metric_keys)
+    ontbrekend = metric_keys - set(mapping)
+    if ontbrekend:
+        raise ValueError(
+            f"{domain}: metric_keys zonder mapping naar een graafknoop: "
+            f"{sorted(ontbrekend)}. Hoort de reeks bij geen knoop, zet dan "
+            f"expliciet None."
+        )
+    onbekend = set(mapping) - metric_keys
+    if onbekend:
+        raise ValueError(
+            f"{domain}: mapping verwijst naar niet-bestaande metric_keys: {sorted(onbekend)}"
+        )
 
 
 def find_cycles() -> tuple[tuple[Node, ...], ...]:

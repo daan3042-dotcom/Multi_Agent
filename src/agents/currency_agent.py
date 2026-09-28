@@ -28,6 +28,7 @@ from datetime import timedelta
 import requests
 
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
+from contract.graph import Node
 from storage.schema import register_source
 
 DOMAIN = "currency"
@@ -41,6 +42,22 @@ FX_PAIRS = {
     "usd_jpy": ("USD", "JPY"),
     "gbp_usd": ("GBP", "USD"),
 }
+
+
+GRAPH_MAPPING: dict[str, Node | None] = {
+    "eur_usd": Node.DOLLAR,
+    "usd_jpy": Node.DOLLAR,
+    "gbp_usd": Node.DOLLAR,
+}
+"""Alle drie de paren schatten dezelfde toestand: de brede dollarsterkte.
+Ze zijn drie waarnemingen van een knoop, geen drie knopen -- precies het
+onderscheid observatie/toestand uit docs/causal-graph.md.
+
+BEKENDE ZWAKTE: een brede dollarindex (DTWEXBGS) ontbreekt, dus deze knoop
+wordt geschat uit drie losse paren waarin de euro zwaar doorweegt. Het
+dichten daarvan is uitgesteld tot na T0-a (besloten 28-09-2026), omdat het
+een tweede databron in deze agent zou vragen -- zie docs/project-state.md.
+"""
 
 METRIC_SPECS = {
     "eur_usd": MetricSpec(label="EUR/USD", tolerance=0.01, severity="medium"),
