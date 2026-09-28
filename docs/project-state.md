@@ -690,7 +690,12 @@ erna hetzelfde `event_id` opleveren.
 
 **Met inhaalslag, en dat is een afweging.** Mislukt de maandag (VPS uit,
 API plat, onparseerbare respons), dan draait de ronde op de eerstvolgende
-dag die wél lukt, zolang het dezelfde ISO-week is. De prijs: een
+dag die wél lukt binnen dezelfde ISO-week. In de praktijk zijn dat vier
+kansen en niet zes: de cron draait ma t/m vr, dus in het weekend wordt de
+code niet aangeroepen en redt het weekend een verloren week niet. Dat
+staat nu expliciet in de docstring van `_forecast_due()`, omdat het
+verschil tussen "de week" en "de werkweek" vanuit de code alleen niet te
+zien is (DD merkte dat op, 28-09). De prijs: een
 voorspelling van woensdag is niet volledig vergelijkbaar met één van
 maandag. De opbrengst: geen lege week. Die keuze is asymmetrisch — een
 verschoven dag is achteraf te analyseren (`created_at` legt de werkelijke

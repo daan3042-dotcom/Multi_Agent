@@ -447,8 +447,21 @@ def _forecast_due(conn, spec: AgentSpec, now: datetime, week_id: str) -> bool:
     Maandag is de vaste dag. Maar als die maandag mislukt (VPS uit, API
     plat, onparseerbare respons), dan is de week zonder inhaalslag
     PERMANENT leeg -- en een ontbrekende week is niet achteraf te vullen.
-    Daarom draait de ronde ook op een latere weekdag zolang deze week nog
-    geen geslaagde ronde kende.
+    Daarom draait de ronde ook op een latere dag zolang deze week nog geen
+    geslaagde ronde kende.
+
+    HOEVEEL KANSEN DAT IN DE PRAKTIJK ZIJN: vier, niet zes. Deze functie
+    kijkt naar de ISO-week (ma t/m zo), maar de cron op de VPS draait
+    ma t/m vr (`15 7 * * 1-5`, zie docs/deployment.md). In het weekend
+    wordt deze code dus niet aangeroepen en redt het weekend een verloren
+    week niet. Mislukken maandag t/m vrijdag allemaal, dan is die week
+    definitief leeg.
+
+    Dat verschil staat hier expliciet omdat het onzichtbaar is vanuit de
+    code: wie alleen deze functie leest, telt zes inhaalkansen. Wijzigt de
+    cron ooit naar `1-7`, dan worden het er zes -- maar dan haalt de
+    monitoring in het weekend ook marktdata op terwijl de beurzen dicht
+    zijn, en dat kost Alpha Vantage-calls zonder nieuwe informatie.
 
     Dat kost iets: de "vaste dag" uit de roadmap is dan niet meer altijd
     dezelfde, en voorspellingen van een woensdag zijn niet volledig

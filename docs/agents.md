@@ -60,11 +60,20 @@ staan er al in zonder dat er een nieuwe handelsdag overheen is gegaan.
 De ronde draait één keer per ISO-week, niet één keer per dag: het
 `event_id` is de week (`2026-W40`). Lukt de maandag niet — VPS uit, API
 plat, onparseerbare respons — dan draait hij op de eerstvolgende dag die
-wél lukt, zolang het dezelfde week is. Dat is een bewuste asymmetrie: een
-voorspelling van woensdag is minder goed vergelijkbaar met één van
-maandag, maar dat is achteraf te zien aan `created_at`. Een week zonder
-voorspellingen is niet te repareren — voorspellen met de kennis van later
-is geen voorspelling meer.
+wél lukt. Dat is een bewuste asymmetrie: een voorspelling van woensdag is
+minder goed vergelijkbaar met één van maandag, maar dat is achteraf te
+zien aan `created_at`. Een week zonder voorspellingen is niet te
+repareren — voorspellen met de kennis van later is geen voorspelling meer.
+
+**Vier inhaalkansen, niet zes.** De code kijkt naar de ISO-week (maandag
+t/m zondag), maar de cron op de VPS draait alleen op werkdagen
+(`15 7 * * 1-5`). In het weekend gebeurt er dus niets, en dan redt het
+weekend een verloren week ook niet: mislukken maandag t/m vrijdag
+allemaal, dan is die week definitief leeg. Dat is ruim genoeg om niet
+naar zeven dagen per week uit te wijken — in het weekend zou de
+monitoring ook marktdata ophalen terwijl de beurzen dicht zijn, en dat
+kost Alpha Vantage-calls zonder dat er nieuwe informatie tegenover
+staat.
 
 Zonder API-key (dus zonder `--deep-dives`) draait de ronde niet. Dat is
 prima tijdens een dry-run, maar na T₀ᵇ is elke zo'n week een gat in de

@@ -222,7 +222,14 @@ currency 9, monetary_policy 8, economic 6). Staat er een domein op nul of
 op een te laag aantal, kijk dan in het log naar regels die beginnen met
 `Forecast-probleem:` — een deels mislukte ronde gooit de geldige
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
-gat. De ronde probeert het de rest van de week elke ochtend opnieuw.
+gat.
+
+De ronde probeert het de rest van de week elke ochtend opnieuw, maar
+**alleen op de dagen dat de cron draait**. Met `15 7 * * 1-5` zijn dat
+maandag t/m vrijdag: vier inhaalkansen na een mislukte maandag, en daarna
+is die week definitief leeg. Zie je op vrijdagochtend nog steeds nul
+voorspellingen voor die week, dan is dat het laatste moment om handmatig
+in te grijpen (`./run_daily.sh --deep-dives`) — zaterdag is te laat.
 
 **Stop en meld het hier** als er op enig moment een dag ONTBREEKT (geen
 enkele rij in `agent_runs` voor die datum) — dat is precies het

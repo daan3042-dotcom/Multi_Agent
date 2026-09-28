@@ -792,8 +792,9 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       daarmee is de eenheid van herhaling de week, en levert een cron die
       elke ochtend vuurt níét zeven sets voorspellingen op. **Met
       inhaalslag:** mislukt de maandag (VPS uit, API plat, onparseerbare
-      respons), dan draait de ronde op de eerstvolgende dag die wél lukt,
-      zolang het dezelfde ISO-week is. Een verschoven dag is achteraf te
+      respons), dan draait de ronde op de eerstvolgende dag die wél lukt
+      binnen dezelfde ISO-week — vier kansen in de praktijk, want de cron
+      draait ma t/m vr. Een verschoven dag is achteraf te
       analyseren via `created_at`; een ontbrekende week niet — die is
       permanent leeg, want voorspellen met de kennis van later is geen
       voorspelling meer. Forecast-problemen komen in de notificatie
