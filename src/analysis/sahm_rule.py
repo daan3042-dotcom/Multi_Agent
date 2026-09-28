@@ -13,7 +13,7 @@ BINNEN dezelfde reeks:
 
     sahm_waarde = (3-maands-voortschrijdend-gemiddelde van UNRATE, nu)
                   - min(3-maands-voortschrijdend-gemiddelde van UNRATE)
-                    over de afgelopen 12 maanden (incl. nu)
+                    over de twaalf VOORAFGAANDE maanden (excl. nu)
 
 De regel signaleert het BEGIN van een recessie zodra sahm_waarde >= 0,50
 procentpunt. Dit is de OFFICIEEL gepubliceerde drempel, geen zelfbedachte
@@ -30,10 +30,23 @@ from __future__ import annotations
 SAHM_TRIGGER_THRESHOLD = 0.50  # procentpunt -- officiële drempel (Sahm, 2019)
 MOVING_AVERAGE_MONTHS = 3
 LOOKBACK_MONTHS = 12
-# Minstens dit aantal maandelijkse observaties nodig: LOOKBACK_MONTHS
-# opeenvolgende 3-maands-gemiddelden vergen LOOKBACK_MONTHS + (MOVING_
-# AVERAGE_MONTHS - 1) ruwe maandpunten.
-MINIMUM_OBSERVATIONS = LOOKBACK_MONTHS + MOVING_AVERAGE_MONTHS - 1
+
+# BESLIST OP 28-09-2026 (DD): het terugblikvenster bevat de twaalf
+# VOORAFGAANDE 3-maands-gemiddelden, NIET het huidige. Beide lezingen van
+# "de afgelopen twaalf maanden" bestaan in de praktijk en ze geven een
+# andere uitkomst:
+#
+#   - inclusief nu (14 observaties): zodra de werkloosheid op haar laagste
+#     punt staat is het huidige gemiddelde zelf het minimum, dus de
+#     sahm_waarde is per definitie 0 -- de indicator kan dan niet stijgen
+#     zonder eerst een eerdere bodem te hebben.
+#   - exclusief nu (15 observaties, hier gekozen): de vergelijking loopt
+#     altijd tegen het verleden, waardoor een stijging vanaf de bodem
+#     meteen zichtbaar wordt.
+#
+# Vastgelegd omdat dit getal bij T0 bevriest: erna verschuiven betekent
+# een nieuw cohort in de scoring (roadmap 4.5), niet een verbetering.
+MINIMUM_OBSERVATIONS = LOOKBACK_MONTHS + MOVING_AVERAGE_MONTHS
 
 
 def compute_three_month_averages(monthly_rates: list[float]) -> list[float]:
@@ -50,10 +63,14 @@ def compute_three_month_averages(monthly_rates: list[float]) -> list[float]:
 
 def compute_sahm_rule(monthly_rates: list[float]) -> float:
     """`monthly_rates`: maandelijkse UNRATE-waarden, OUDSTE EERST, minstens
-    MINIMUM_OBSERVATIONS (14) observaties. Te weinig data -> ValueError,
+    MINIMUM_OBSERVATIONS (15) observaties. Te weinig data -> ValueError,
     geen gok op een onvolledige reeks (zelfde principe als de rest van
     analysis/: nooit stilzwijgend een cijfer verzinnen op ontbrekende
-    input)."""
+    input).
+
+    Het terugblikvenster sluit het huidige 3-maands-gemiddelde uit -- zie
+    de toelichting bij MINIMUM_OBSERVATIONS voor waarom, en waarom dat
+    getal niet meer mag verschuiven na T0."""
     if len(monthly_rates) < MINIMUM_OBSERVATIONS:
         raise ValueError(
             f"Sahm Rule heeft minstens {MINIMUM_OBSERVATIONS} maandelijkse observaties nodig, "
@@ -61,7 +78,7 @@ def compute_sahm_rule(monthly_rates: list[float]) -> float:
         )
     averages = compute_three_month_averages(monthly_rates)
     current = averages[-1]
-    trailing_window = averages[-LOOKBACK_MONTHS:]
+    trailing_window = averages[-(LOOKBACK_MONTHS + 1) : -1]
     return current - min(trailing_window)
 
 

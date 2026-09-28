@@ -28,11 +28,14 @@ cyclus halverwege afbreekt.
 
 | Agent | Provider | Monitoring (elke cyclus) | Deep-dive (alleen bij trigger, per keer) |
 |---|---|---|---|
-| monetary_policy | FRED | 4 (`FEDFUNDS`, `DGS10`, `CPIAUCSL`, `UNRATE`) | +4 (`_fetch_taylor_rule_inputs()`: CPI nu, CPI 12 mnd terug, `GDPC1`, `GDPPOT`) — alleen als `fed_funds_rate` triggerde |
+| monetary_policy | FRED | 8 (`FEDFUNDS`, `DGS10`, `DGS2`, `CPIAUCSL`, `UNRATE`, `T5YIE`, `T10YIE`, `WALCL`) | +4 (`_fetch_taylor_rule_inputs()`: CPI nu, CPI 12 mnd terug, `GDPC1`, `GDPPOT`) — alleen als `fed_funds_rate` triggerde |
 | financial | FRED | 4 (`NFCI`, `BAMLH0A0HYM2`, `VIXCLS`, `T10Y2Y`) | +0 (NFCI-interpretatie is pure Python, geen extra call) |
+| economic | FRED | 3 (`ICSA`, `UNRATE`, `PAYEMS`) | +1 (Sahm Rule: 15 UNRATE-waarnemingen in één call) — alleen als `unemployment_rate` in de claims zit |
 | currency | Alpha Vantage | 3 (EUR/USD, USD/JPY, GBP/USD) | +0 |
 | sector | Alpha Vantage | 11 (elk van de 11 SPDR-ETF's) | +1 (SPY-benchmark, één keer per deep-dive) +1 per getriggerde ETF (t/m 11) |
 | commodity | Alpha Vantage | 10 (elk van de 10 grondstoffen) | +1 per getriggerde grondstof (t/m 10) |
+
+**Bijgewerkt 28-09-2026:** de monetary agent kreeg er vier FRED-reeksen bij (`DGS2`, `T5YIE`, `T10YIE`, `WALCL`) om drie lege knopen van de causale graaf te bedienen, en de economic agent is toegevoegd. FRED ging daarmee van 8 naar 15 calls per dag — ruim binnen de limiet, en het verandert niets aan de Alpha Vantage-conclusie hieronder.
 
 `equity_agent.py` staat hier niet bij: die heeft geen eigen live databron
 (adapter op een al-afgeronde `analyst_agent.ai`-run, zie
@@ -42,21 +45,21 @@ cyclus halverwege afbreekt.
 ## Totalen per dag
 
 **Monitoring-only (elke dag, gegarandeerd — dit is de bodem):**
-- FRED: 4 + 4 = **8 calls/dag**
+- FRED: 8 + 4 + 3 = **15 calls/dag**
 - Alpha Vantage: 3 + 11 + 10 = **24 calls/dag**
 
-**Worst case (alle vijf domeinen triggeren tegelijk een deep-dive op
+**Worst case (alle zes domeinen triggeren tegelijk een deep-dive op
 dezelfde dag):**
-- FRED: 8 + 4 (Taylor Rule) = **12 calls/dag**
+- FRED: 15 + 4 (Taylor Rule) + 1 (Sahm Rule) = **20 calls/dag**
 - Alpha Vantage: 24 + (1 SPY + 11 sector) + 10 commodity = **46 calls/dag**
-- Anthropic (LLM): t/m 5 deep-dive-calls (één per getriggerd domein) — geen
+- Anthropic (LLM): t/m 6 deep-dive-calls (één per getriggerd domein) — geen
   vast quotum-probleem zoals FRED/AV, wel een kostenpost, zie
   `docs/architecture.md`'s LLM-taken-tabel (1.8).
 
 ## Conclusie en aanbeveling
 
 FRED's rate limit (publiek gedocumenteerd: ~120 requests/minuut) is voor
-dit volume (8–12 calls/dag) geen enkel risico.
+dit volume (15–20 calls/dag) geen enkel risico.
 
 **Alpha Vantage is het risico, en het manifesteert zich al zonder één
 enkele deep-dive:** de monitoring-only bodem van 24 calls/dag zit al

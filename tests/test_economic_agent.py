@@ -107,14 +107,14 @@ def test_fetch_unrate_history_happy_path(monkeypatch):
         resp = MagicMock()
         resp.raise_for_status = lambda: None
         resp.json = lambda: {
-            "observations": [{"value": f"{4.0 + i * 0.01}", "date": f"2025-{i + 1:02d}-01"} for i in range(14)]
+            "observations": [{"value": f"{4.0 + i * 0.01}", "date": f"2025-{i + 1:02d}-01"} for i in range(15)]
         }
         return resp
 
     monkeypatch.setattr(eca.requests, "get", fake_get)
     history = eca._fetch_unrate_history("fake-key")
     assert history is not None
-    assert len(history) == 14
+    assert len(history) == 15
     assert history[0] == 4.0  # oudste eerst, zelfde volgorde als sahm_rule.compute_sahm_rule() verwacht
 
 
