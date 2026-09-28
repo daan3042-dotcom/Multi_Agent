@@ -613,3 +613,139 @@ def test_migratie_is_idempotent(tmp_path):
     conn = _db(tmp_path)
     assert _migreer_agent_runs_mode(conn) is False
     assert _migreer_agent_runs_mode(conn) is False
+
+
+# --------------------------------------------------------------------------
+# Evaluations + de migratie van predictions (roadmap 4.5)
+# --------------------------------------------------------------------------
+
+
+
+def _een_voorspelling(conn) -> int:
+    """Een geldige voorspelling in de tabel, zodat de foreign key van
+    evaluations klopt en de CHECK-constraints getest worden in plaats van
+    de FK."""
+    from datetime import datetime, timedelta, timezone
+
+    from contract.prediction import HorizonKind, Prediction, PredictionKind
+    from contract.resolution import ResolutionMethod
+    from storage.schema import save_prediction
+
+    nu = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    return save_prediction(conn, Prediction(
+        agent="monetary_policy", domain="monetary_policy",
+        target_metric_key="10y_treasury_yield",
+        kind=PredictionKind.QUANTILE,
+        horizon_kind=HorizonKind.TRADING_DAYS, horizon_n=21,
+        created_at=nu, resolves_at=nu + timedelta(days=21),
+        resolution_rule="regel", resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
+        model_id="claude-x", prompt_version="mp-v1",
+        q10=3.9, q50=4.1, q90=4.4,
+    ))
+
+def test_evaluations_weigert_een_resolved_rij_zonder_uitkomst(tmp_path):
+    """Het schema herhaalt wat de resolver al bewaakt. Dubbelop met opzet:
+    een bug in de resolver mag geen half-lege meting opleveren, want die is
+    achteraf niet van een echte te onderscheiden."""
+    import sqlite3
+
+    from storage.schema import init_db
+
+    conn = init_db(str(tmp_path / "t.db"))
+    pid = _een_voorspelling(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO evaluations (prediction_id, status, resolved_at, "
+            "evidence_claim_ids_json, scorer_version) VALUES (?, 'resolved', ?, '[]', 'v1')",
+            (pid, "2026-10-23T07:00:00+00:00"),
+        )
+
+
+def test_evaluations_weigert_een_onafwikkelbare_rij_zonder_reden(tmp_path):
+    import sqlite3
+
+    from storage.schema import init_db
+
+    conn = init_db(str(tmp_path / "t.db"))
+    pid = _een_voorspelling(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO evaluations (prediction_id, status, resolved_at, "
+            "evidence_claim_ids_json, scorer_version) VALUES (?, 'unresolvable', ?, '[]', 'v1')",
+            (pid, "2026-10-23T07:00:00+00:00"),
+        )
+
+
+def test_een_voorspelling_krijgt_maar_een_uitkomst(tmp_path):
+    """De UNIQUE op prediction_id. Zonder die constraint zou een tweede
+    resolver-run een tweede score kunnen opleveren, en dan telt één
+    voorspelling dubbel mee in de kalibratie."""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    from storage.schema import init_db, save_evaluation
+
+    conn = init_db(str(tmp_path / "t.db"))
+    pid = _een_voorspelling(conn)
+    nu = datetime(2026, 10, 23, 7, 0, tzinfo=timezone.utc)
+    save_evaluation(conn, pid, "unresolvable", nu, "v1", reason="test")
+    with pytest.raises(sqlite3.IntegrityError):
+        save_evaluation(conn, pid, "unresolvable", nu, "v1", reason="nog een keer")
+
+
+def test_migratie_voegt_resolution_method_toe_aan_een_oude_database(tmp_path):
+    """Regressiegeval van hetzelfde soort als de agent_runs-migratie: een
+    database van vóór 28-09 heeft de oude predictions-tabel, en zou bij de
+    eerste forecast-ronde omvallen op een kolom die er niet is."""
+    import sqlite3
+
+    from storage.schema import _migreer_predictions_resolution_method, init_db
+
+    pad = str(tmp_path / "oud.db")
+    conn = sqlite3.connect(pad)
+    conn.executescript(
+        """
+        CREATE TABLE predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            resolves_at TEXT NOT NULL
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    conn = init_db(pad)
+    kolommen = {r[1] for r in conn.execute("PRAGMA table_info(predictions)")}
+    assert "resolution_method" in kolommen
+    assert "benchmark_metric_key" in kolommen
+    # Idempotent: een tweede keer draaien doet niets.
+    assert _migreer_predictions_resolution_method(conn) is False
+
+
+def test_migratie_weigert_te_gokken_bij_bestaande_rijen(tmp_path):
+    """Nooit stilzwijgend een beste gok (CLAUDE.md). Een bestaande
+    voorspelling een resolutiemethode geven die niemand heeft afgesproken,
+    zou hem straks volgens een andere regel afwikkelen dan waaronder hij
+    gemaakt is."""
+    import sqlite3
+
+    from storage.schema import init_db
+
+    pad = str(tmp_path / "oud.db")
+    conn = sqlite3.connect(pad)
+    conn.executescript(
+        """
+        CREATE TABLE predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            resolves_at TEXT NOT NULL
+        );
+        INSERT INTO predictions (agent, resolves_at) VALUES ('oud', '2026-10-01T00:00:00+00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError, match="resolution_method"):
+        init_db(pad)

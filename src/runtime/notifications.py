@@ -132,6 +132,38 @@ def build_notification(result, health: SystemHealthReport | None) -> Notificatio
         lines.append("Deep-dives die mislukten (de monitoring-data is wel binnen):")
         lines.extend(f"  - {o.domain}: {o.deep_dive_error}" for o in deep_dive_failures)
 
+    forecast_issues = list(getattr(result, "forecast_issues", []) or [])
+    if forecast_issues:
+        # De wekelijkse forecast-ronde is de meting zelf (roadmap 2.0): een
+        # week zonder voorspellingen is een week die nooit gescoord wordt,
+        # en die is achteraf niet te repareren -- voorspellen met de kennis
+        # van nu is geen voorspelling meer.
+        #
+        # Waarom "warning" en niet "critical", anders dan bij missed_days:
+        # de ronde haalt zichzelf in zolang de ISO-week loopt, dus een
+        # mislukte maandag is nog geen verloren week. De melding herhaalt
+        # dagelijks tot het gerepareerd is, en dat is precies de druk die
+        # hier hoort.
+        escalate("warning")
+        lines.append("Forecast-ronde met problemen (de week is pas verloren na zondag):")
+        lines.extend(f"  - {i}" for i in forecast_issues)
+
+    resolver = getattr(result, "resolver", None)
+    if resolver is not None and resolver.has_problems:
+        # Een onafwikkelbare voorspelling is een voorspelling die nooit
+        # gescoord wordt, en de evaluations-tabel kent geen update-pad: hij
+        # is definitief uit het cohort. Bij één of twee is dat ruis, maar
+        # het patroon (een reeks die stopte met publiceren, een ontbrekende
+        # FOMC-kalender) is precies wat je vroeg wilt zien -- niet in mei,
+        # als de steekproef al kleiner is dan gedacht.
+        escalate("warning")
+        if resolver.unresolvable:
+            lines.append(
+                f"Voorspellingen die nooit meer gescoord worden: {resolver.unresolvable} "
+                f"(zie de resolver-regels in het log)"
+            )
+        lines.extend(f"  - resolver-fout: {e}" for e in resolver.errors)
+
     unhealthy = [c for c in (health.components if health is not None else []) if _STATUS_SEVERITY.get(c.status) is not None]
     if unhealthy:
         for component in unhealthy:

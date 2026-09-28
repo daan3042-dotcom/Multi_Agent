@@ -49,6 +49,7 @@ import requests
 
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -60,6 +61,11 @@ SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie moneta
 BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=5)  # dagelijkse slotkoersen; buffer voor een weekend + feestdag
 BENCHMARK_SYMBOL = "SPY"  # S&P 500-proxy voor de relatieve-sterkte-berekening
+BENCHMARK_KEY = "spy_benchmark"
+"""De metric_key waaronder de benchmark in de claims-historie staat. Staat
+hier als constante omdat de resolver hem straks bij naam opzoekt: raakt
+deze sleutel uit de pas met SECTOR_ETFS, dan is elk sector-doel achteraf
+onresolvbaar, en dat blijkt pas als de eerste voorspelling afloopt."""
 
 SECTOR_ETFS = {
     "xlk_technology": "XLK",
@@ -129,6 +135,8 @@ FORECAST_TARGETS = tuple(
         kind=PredictionKind.QUANTILE,
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21),
+        resolution_method=ResolutionMethod.RELATIVE_RETURN,
+        benchmark_metric_key=BENCHMARK_KEY,
         resolution_rule=(
             "Het RELATIEVE rendement van " + key + " t.o.v. SPY over {horizon_n} "
             "handelsdagen: de procentuele koersverandering van " + key + " tussen "
@@ -140,7 +148,7 @@ FORECAST_TARGETS = tuple(
         ),
     )
     for key in SECTOR_ETFS
-    if key != "spy_benchmark"
+    if key != BENCHMARK_KEY
 )
 # Roadmap deel A: 11 doelen, en daarmee de RIJKSTE TESTBRON van het cohort --
 # meer onafhankelijke doelen dan de andere vier agents samen. Dat telt, want
@@ -154,6 +162,20 @@ FORECAST_TARGETS = tuple(
 # De metric_key verwijst naar de ETF-reeks; de resolution_rule legt de
 # bewerking vast. Dat is dezelfde scheiding die het contract overal hanteert:
 # de sleutel zegt WELKE reeks, de regel zegt WAT ermee gebeurt.
+
+
+FORECAST_PROMPT_VERSION = "v1"
+"""Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
+prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
+`agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.
+
+VERHOOG DIT ZODRA EEN VAN DIE TWEE VERANDERT. Binnen een cohort is een
+promptwijziging een covariaat en geen nieuw cohort (CLAUDE.md), maar dan
+moet je achteraf wel kunnen zien wélke voorspellingen onder welke prompt
+zijn gedaan. Vergeet je het, dan zijn twee verschillende prompts achteraf
+niet meer te scheiden en is dat deel van het cohort onbruikbaar.
+`tests/test_forecast_prompt_version.py` faalt als de prompt verandert
+zonder dat dit getal meebeweegt."""
 
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een analist gespecialiseerd in sector-rotatie binnen \

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from contract.graph import GRAPH_VERSION, Node
+from contract.resolution import ResolutionMethod
 from contract.prediction import (
     CONTRACT_VERSION,
     HorizonKind,
@@ -34,6 +35,7 @@ def _kwantiel(**overrides) -> Prediction:
         horizon_kind=HorizonKind.TRADING_DAYS, horizon_n=21,
         created_at=NU, resolves_at=STRAKS,
         resolution_rule="eerste print van DGS10 op resolves_at + 3 dagen",
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         model_id="claude-x", prompt_version="mp-v1",
         q10=3.9, q50=4.1, q90=4.4,
     )
@@ -49,6 +51,7 @@ def _binair(**overrides) -> Prediction:
         horizon_kind=HorizonKind.RELEASES, horizon_n=1,
         created_at=NU, resolves_at=STRAKS,
         resolution_rule="FOMC-besluit van 2026-10-28, target range vergeleken met de vorige",
+        resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         model_id="claude-x", prompt_version="mp-v1",
         probability=0.35, event_rule="FOMC verhoogt de target range op 2026-10-28",
     )

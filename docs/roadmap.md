@@ -141,8 +141,10 @@ intraday (buiten scope, zie Scope-afbakening).
 |---|---|---|---|
 | 1 | Geen live data (403 in de sandbox) | Zonder live data geen forward test | 1.11 |
 | 2 | Geen scheduler op eigen infra | Gaten in de reeks maken kalibratie ongeldig — de moeilijke weken ontbreken systematisch | 1.11 |
-| 3 | `predictions` bestaat niet | Er is niets te scoren | 1.2 / 4.1 |
+| 3 | ~~`predictions` bestaat niet~~ **[28-09 opgelost]** | Er is niets te scoren | 1.2 / 4.1 |
 | 4 | Geen resolver, geen baselines | Een ongescoorde voorspelling is een mening | 4.5 / 4.6 |
+| | └ resolver + scores **[28-09 opgelost]** | | 4.5 |
+| | └ drie baselines — **open** | Zonder baseline is niet vast te stellen of we iets gebouwd hebben of alleen kosten gemaakt | 4.6 |
 
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
@@ -228,7 +230,7 @@ vanaf cohort v1 verplicht.
 
 Secties 4.5, 4.6.
 
-- Resolver dagelijks in `run_daily`; `evaluations`-tabel.
+- Resolver dagelijks in `run_daily`; `evaluations`-tabel. **[28-09 af]**
 - Scores: pinball loss + CRPS (kwantielen), Brier + log loss (binair),
   kalibratiecurve, discriminatie (AUC), en **effectieve n** via
   block-bootstrap over overlappende horizonnen — naast de nominale n.
@@ -279,9 +281,9 @@ Secties 4.5, 4.6.
       de monitoring-scope waaruit die doelen gekozen worden
 - [ ] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2)
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
-- [ ] `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `model_id`, `prompt_version` (1.2/4.1)
-- [ ] Forecast-ronde draait wekelijks voor vijf agents + synthesizer; menselijke invoer werkt (2.0/4.8)
-- [ ] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5)
+- [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
+- [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
+- [~] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5) **[28-09: gebouwd en getest; nog niet tegen echte afgelopen voorspellingen gedraaid — dat kan pas als de eerste horizon verstrijkt]**
 - [ ] Drie baselines draaien mee (4.6)
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
@@ -767,8 +769,7 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       completeness-check. `agent_runs.mode` kreeg `'forecast'` erbij, met
       een migratie voor bestaande databases (de VPS-database had de oude
       CHECK nog).
-      **De wekelijkse cron-aanroep zelf moet nog**, die zit nog niet in
-      `runtime/daily.py`. **[27-09]** Los van de trigger-keten: predictions die
+      **[27-09]** Los van de trigger-keten: predictions die
       alleen bij triggers ontstaan geven selectiebias (alleen voorspellen
       in volatiele weken) en onregelmatige aantallen. Een trigger mag
       wél extra predictions opleveren, gevlagd `trigger_conditioned=1`.
@@ -786,6 +787,25 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
       extra Alpha Vantage-call per cyclus (24 → 25). De dagelijkse
       relatieve sterkte wordt óók opgeslagen maar triggert bewust niet.
       **Totaal over vijf agents: 57 voorspellingen per wekelijkse ronde.**
+- [x] **[28-09]** **De wekelijkse aanroep draait**, in `runtime/daily.py`,
+      op maandagochtend (DD's keuze): verse week, en de slotkoersen van
+      vrijdag staan erin zonder dat er een nieuwe handelsdag overheen is
+      gegaan. Het `event_id` is de ISO-week (`2026-W40`), niet de dag —
+      daarmee is de eenheid van herhaling de week, en levert een cron die
+      elke ochtend vuurt níét zeven sets voorspellingen op. **Met
+      inhaalslag:** mislukt de maandag (VPS uit, API plat, onparseerbare
+      respons), dan draait de ronde op de eerstvolgende dag die wél lukt
+      binnen dezelfde ISO-week — vier kansen in de praktijk, want de cron
+      draait ma t/m vr. Een verschoven dag is achteraf te
+      analyseren via `created_at`; een ontbrekende week niet — die is
+      permanent leeg, want voorspellen met de kennis van later is geen
+      voorspelling meer. Forecast-problemen komen in de notificatie
+      terecht (warning, dagelijks herhaald tot het gerepareerd is) en in
+      de exit-code van `run_daily.py`. Elke agent kreeg een
+      `FORECAST_PROMPT_VERSION`, bewaakt door een hash-test: verandert de
+      prompt zonder dat het versienummer meebeweegt, dan faalt de test —
+      anders staan er achteraf twee verschillende prompts onder hetzelfde
+      label in het cohort.
 - [ ] **[27-09]** Richtlijn vervangen: niet "~5 voorspellingen per week"
       maar **zoveel mogelijk onafhankelijke doelen** per agent, elk op
       cadans-bewuste horizonnen (handelsdagen 5/21/63 voor dagreeksen,
@@ -1045,7 +1065,8 @@ gescoord wordt er al in.
   | `evidence_claim_ids` | de claims waarop dit rust |
   | `trigger_version`, `trigger_conditioned` | welke regelversie actief was (1.5); of dit uit een trigger of uit de forecast-ronde kwam |
   | `regime_at_creation` | later invulbaar (3.3) |
-  | `resolves_at`, `resolution_rule` | **de machine-uitvoerbare regel, inclusief vintage** — eerste print zoals opgeslagen in de eigen claims-historie op `resolves_at + 3 dagen`; latere revisies wijzigen een uitkomst nooit |
+  | `resolves_at`, `resolution_rule` | **de regel inclusief vintage** — eerste print zoals opgeslagen in de eigen claims-historie; latere revisies wijzigen een uitkomst nooit. `resolves_at` zegt alleen wanneer de resolver gaat kijken |
+  | `resolution_method`, `benchmark_metric_key` | **[28-09]** de machine-leesbare tegenhanger van de regeltekst: welke van de vier resolutiefuncties hem uitvoert, en (alleen bij relatief rendement) waartegen. Vrije tekst is niet uitvoerbaar, en een LLM de regel laten interpreteren zou het model zijn eigen voorspelling laten beoordelen |
   | `market_implied_ref` | **[27-09]** waar gratis beschikbaar (futures/forwards) op het moment van voorspellen; niet reconstrueerbaar achteraf |
 
 - [x] **[28-09]** `resolution_rule` verplicht en machine-uitvoerbaar.
@@ -1122,13 +1143,34 @@ en dat window is nu al beschikbaar.
 
 ### 4.5 Scoring Engine — **[nieuw]**, T₀-BLOKKADE, fase 3
 
-- [ ] **Resolver**: draait dagelijks in `run_daily`, pakt elke prediction
-      waarvan `resolves_at` verstreken is, past `resolution_rule` toe
-      (incl. vintage-regel), schrijft een `evaluation`-rij weg. Kan een
+- [x] **[28-09] Resolver**: draait dagelijks in `run_daily`
+      (`src/scoring/resolver.py`), pakt elke prediction waarvan
+      `resolves_at` verstreken is en nog geen uitkomst heeft, past de
+      resolutiemethode toe en schrijft een `evaluations`-rij weg. Kan een
       release-horizon afwikkelen (wacht op de print, niet op de datum).
-- [ ] **[27-09] Pinball loss + CRPS** per kwantielvoorspelling; **Brier +
-      log loss** per binaire voorspelling. Proper scoring rules: belonen
-      eerlijkheid, straffen zowel overmoed als lafheid. Richtings- en
+      **De regeltekst is niet uitvoerbaar, dus draagt elke prediction
+      naast `resolution_rule` ook een `resolution_method`** (enum, vier
+      waarden, `src/contract/resolution.py`). De tekst blijft de
+      autoriteit voor mensen; de methode doet het rekenwerk. Dat ze
+      hetzelfde zeggen is een menselijke controle, vastgepind in
+      `tests/test_resolution_mapping.py`.
+      **Drie toestanden, niet twee:** afgewikkeld, nog-niet-afwikkelbaar
+      (geen rij, morgen opnieuw) en onafwikkelbaar (rij met reden). Tussen
+      de laatste twee zit een wachttijd van 30 dagen — ruim boven de
+      grootste publicatievertraging die we kennen (PAYEMS, ~14 dagen),
+      ruim onder een kwartaal. **Te bevestigen bij de freeze**, want die
+      grens bepaalt mede welke voorspellingen in het cohort belanden.
+      **De vintage-regel kwam gratis:** we slaan elke cyclus op wat de
+      bron op dat moment zei, dus de claims-historie ís een
+      vintage-archief. "Eerste print" = de claim met die `source_time` die
+      wij als eerste zagen.
+- [x] **[28-09] Pinball loss + CRPS** per kwantielvoorspelling; **Brier +
+      log loss** per binaire voorspelling (`src/scoring/scores.py`).
+      Proper scoring rules: belonen eerlijkheid, straffen zowel overmoed
+      als lafheid — met een test die dat bewijst in plaats van aanneemt.
+      CRPS is **benaderd** uit drie kwantielniveaus (2 × de gemiddelde
+      pinball loss); geldig voor onderlinge vergelijking met de baselines,
+      niet voor vergelijking met een CRPS uit de literatuur. Richtings- en
       drempelscores worden uit de kwantielen afgeleid, zodat ze
       vergelijkbaar blijven met de oude binaire vorm.
 - [ ] **Kalibratiecurve per agent** — zegt een agent tien keer "70%",

@@ -69,6 +69,7 @@ import requests
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from analysis.taylor_rule import compute_output_gap_pct, compute_taylor_rule_rate
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
@@ -157,6 +158,7 @@ FORECAST_TARGETS = (
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=Node.TERM_PREMIUM,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             "DGS10 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
             "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
@@ -169,6 +171,7 @@ FORECAST_TARGETS = (
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=Node.POLICY_EXPECTATIONS,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             "DGS2 zoals EERST gepubliceerd, gemeten op de eerste beschikbare observatie "
             "op of na resolves_at ({horizon_n} handelsdagen na created_at). Latere revisies "
@@ -182,6 +185,7 @@ FORECAST_TARGETS = (
         horizons=(1, 2),
         cadence=ReleaseCadence.FOMC,
         graph_node=Node.POLICY_STANCE,
+        resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         event_rule=(
             "De Fed funds rate ligt na de {horizon_n}-de FOMC-vergadering na created_at "
             "HOGER dan de laatst bekende waarde op created_at"
@@ -198,6 +202,20 @@ FORECAST_TARGETS = (
 # knoop policy_expectations te bedienen, en een extra ONAFHANKELIJK doel is
 # precies wat de statistische kracht omhoog brengt (correctie 2 van 27-09:
 # breedte telt, herhaling niet).
+
+
+FORECAST_PROMPT_VERSION = "v1"
+"""Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
+prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
+`agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.
+
+VERHOOG DIT ZODRA EEN VAN DIE TWEE VERANDERT. Binnen een cohort is een
+promptwijziging een covariaat en geen nieuw cohort (CLAUDE.md), maar dan
+moet je achteraf wel kunnen zien wélke voorspellingen onder welke prompt
+zijn gedaan. Vergeet je het, dan zijn twee verschillende prompts achteraf
+niet meer te scheiden en is dat deel van het cohort onbruikbaar.
+`tests/test_forecast_prompt_version.py` faalt als de prompt verandert
+zonder dat dit getal meebeweegt."""
 
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een macro-analist gespecialiseerd in Amerikaans \

@@ -207,6 +207,44 @@ puur "haalt de ingestieklok elke dag zonder tussenkomst echte data op".
 `ANTHROPIC_API_KEY` in `.env`), en **T₀ᵃ is gehaald** zodra dat ook 7 dagen
 op rij zonder handmatige actie draait (roadmap 1.11's eigen DoD).
 
+**Let op wat die vlag sinds 28-09 nog meer aanzet:** de wekelijkse
+forecast-ronde (roadmap 2.0) draait mee op de maandagcyclus, mits er een
+Anthropic-client is. Er is dus GEEN aparte cron-regel voor; de bestaande
+`15 7 * * 1-5` dekt hem. Controleer op de eerste maandag na het aanzetten:
+
+```bash
+sqlite3 market_intelligence.db \
+  "SELECT domain, COUNT(*) FROM predictions GROUP BY domain;"
+```
+
+Verwacht: vijf domeinen, samen 57 rijen (sector 22, financial 12,
+currency 9, monetary_policy 8, economic 6). Staat er een domein op nul of
+op een te laag aantal, kijk dan in het log naar regels die beginnen met
+`Forecast-probleem:` — een deels mislukte ronde gooit de geldige
+voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
+gat.
+
+**De resolver draait elke dag mee** en kost niets (geen API-calls, geen
+LLM). Vanaf het moment dat de eerste voorspellingen aflopen — vijf
+handelsdagen na de eerste ronde — hoort dit te groeien:
+
+```bash
+sqlite3 market_intelligence.db \
+  "SELECT status, COUNT(*) FROM evaluations GROUP BY status;"
+```
+
+Alleen `resolved` is goed. Verschijnt er `unresolvable`, kijk dan naar de
+reden (`SELECT reason FROM evaluations WHERE status = 'unresolvable'`):
+dat is een voorspelling die nooit meer gescoord wordt en dus definitief uit
+het cohort is. De melding zegt het ook, maar het patroon zie je hier.
+
+De forecast-ronde probeert het de rest van de week elke ochtend opnieuw, maar
+**alleen op de dagen dat de cron draait**. Met `15 7 * * 1-5` zijn dat
+maandag t/m vrijdag: vier inhaalkansen na een mislukte maandag, en daarna
+is die week definitief leeg. Zie je op vrijdagochtend nog steeds nul
+voorspellingen voor die week, dan is dat het laatste moment om handmatig
+in te grijpen (`./run_daily.sh --deep-dives`) — zaterdag is te laat.
+
 **Stop en meld het hier** als er op enig moment een dag ONTBREEKT (geen
 enkele rij in `agent_runs` voor die datum) — dat is precies het
 faalscenario dat de externe heartbeat hieronder moet opvangen als niemand

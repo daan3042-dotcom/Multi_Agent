@@ -53,6 +53,80 @@ uitsluitend in volatiele weken, en is de score niet te vergelijken met een
 baseline die elke week draait. Een trigger mág extra voorspellingen
 opleveren; die worden gevlagd met `trigger_conditioned`.
 
+**Wanneer precies: maandagochtend**, meeliftend op de dagelijkse cyclus
+(`run_daily.py --deep-dives`). Verse week, en de slotkoersen van vrijdag
+staan er al in zonder dat er een nieuwe handelsdag overheen is gegaan.
+
+De ronde draait één keer per ISO-week, niet één keer per dag: het
+`event_id` is de week (`2026-W40`). Lukt de maandag niet — VPS uit, API
+plat, onparseerbare respons — dan draait hij op de eerstvolgende dag die
+wél lukt. Dat is een bewuste asymmetrie: een voorspelling van woensdag is
+minder goed vergelijkbaar met één van maandag, maar dat is achteraf te
+zien aan `created_at`. Een week zonder voorspellingen is niet te
+repareren — voorspellen met de kennis van later is geen voorspelling meer.
+
+**Vier inhaalkansen, niet zes.** De code kijkt naar de ISO-week (maandag
+t/m zondag), maar de cron op de VPS draait alleen op werkdagen
+(`15 7 * * 1-5`). In het weekend gebeurt er dus niets, en dan redt het
+weekend een verloren week ook niet: mislukken maandag t/m vrijdag
+allemaal, dan is die week definitief leeg. Dat is ruim genoeg om niet
+naar zeven dagen per week uit te wijken — in het weekend zou de
+monitoring ook marktdata ophalen terwijl de beurzen dicht zijn, en dat
+kost Alpha Vantage-calls zonder dat er nieuwe informatie tegenover
+staat.
+
+Zonder API-key (dus zonder `--deep-dives`) draait de ronde niet. Dat is
+prima tijdens een dry-run, maar na T₀ᵇ is elke zo'n week een gat in de
+meting.
+
+## Hoe een voorspelling wordt afgewikkeld (roadmap 4.5)
+
+De resolver draait **dagelijks** mee in dezelfde cyclus — voorspellingen
+lopen af op hun eigen moment (5, 21 of 63 handelsdagen; 1, 2 of 3
+publicaties), niet op maandag. Hij kost niets: geen API-calls, geen LLM.
+Alles wat hij nodig heeft staat al in de database.
+
+**Hij beoordeelt nooit zelf.** Elke voorspelling draagt een regel in
+mensentaal (`resolution_rule`) én een verwijzing naar de functie die hem
+uitvoert (`resolution_method`). Een taalmodel komt er niet aan te pas —
+anders zou het model dat de voorspelling deed, ook bepalen of hij uitkwam.
+
+| Methode | Voor welke doelen | Wat hij doet |
+|---|---|---|
+| `level_at_or_after` | DGS10, DGS2, VIX, HY-spread, 10Y-2Y, de drie FX-paren | het niveau op de eerste observatie op of na de afloopdatum |
+| `nth_release` | ICSA, UNRATE, PAYEMS, NFCI | de n-de nieuwe publicatie ná het moment van voorspellen |
+| `relative_return` | de elf sector-ETF's | rendement van de ETF minus dat van SPY, over precies dezelfde twee observatiemomenten |
+| `direction_after_fomc` | FEDFUNDS-richting | ligt de rente hoger na de n-de FOMC-vergadering? **Vereist een kalender die nog ingevuld moet worden** |
+
+**"Eerste print" is geen extra werk maar een gevolg van het ontwerp.**
+Omdat we elke cyclus opslaan wat de bron op dát moment zei, is de
+claims-historie een vintage-archief. Komt er later een revisie binnen, dan
+is dat een nieuwe claim met dezelfde periode — en die telt niet mee. Bij
+PAYEMS is dat geen formaliteit: die revisies zijn fors.
+
+**Wachten is een normale uitkomst.** Ontbreekt de observatie nog (een
+feestdagenweek, een vertraagde publicatie), dan gebeurt er niets en
+probeert de resolver het de volgende dag opnieuw. Pas na 30 dagen wordt de
+voorspelling als onafwikkelbaar weggeschreven, mét reden, en verschijnt
+dat in de melding — een voorspelling die nooit gescoord wordt, is stil uit
+het cohort verdwenen.
+
+**Wat er gemeten wordt, in gewone taal:**
+
+- **Pinball loss** — per kwantiel, asymmetrisch. Bij het 10%-punt is te
+  hoog voorspellen negen keer zo duur als te laag. Daardoor loont het om
+  je echte 10%-punt op te schrijven en niet een veilige marge.
+- **CRPS** — de drie pinball losses samengevat in één getal.
+- **Brier** en **log loss** — voor kansvoorspellingen. Log loss straft
+  overmoed veel harder: 99% zeggen en ernaast zitten kost een veelvoud van
+  90% zeggen en ernaast zitten.
+- **Binnen het interval?** — over veel voorspellingen hoort dit ~80% te
+  zijn. Zit een agent op 50%, dan is hij overmoedig; zit hij op 98%, dan
+  zijn zijn voorspellingen zo breed dat ze niets zeggen. Allebei
+  onzichtbaar in een gemiddelde pinball loss.
+
+Bij alle vier geldt: **lager is beter.**
+
 **Eén LLM-call per agent**, alle doelen in één JSON. Niet per doel een
 call: dat is duurder en maakt de voorspellingen onderling inconsistent,
 terwijl een agent zijn eigen doelen juist samenhangend hoort te zien.

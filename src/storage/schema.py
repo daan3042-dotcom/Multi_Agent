@@ -29,6 +29,7 @@ from typing import Iterator
 
 from contract.graph import Node
 from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract.resolution import ResolutionMethod
 from contract.output_contract import Claim, DomainOutput, Mode
 from health.data_health import QualityStatus
 from qc.qc import QCCase, QCCaseStatus, validate_qc_transition
@@ -182,10 +183,15 @@ CREATE TABLE IF NOT EXISTS predictions (
     regime_at_creation TEXT,
     market_implied_ref REAL,
     note TEXT,
+    resolution_method TEXT NOT NULL CHECK (resolution_method IN (
+        'level_at_or_after', 'nth_release', 'relative_return', 'direction_after_fomc'
+    )),
+    benchmark_metric_key TEXT,
     -- Dezelfde vormeisen als contract/prediction.py, maar dan in het
     -- schema: een prediction die langs het contract komt maar niet langs
     -- deze checks zou een bug in het contract blootleggen, en andersom.
     CHECK (horizon_n > 0),
+    CHECK (resolution_method != 'relative_return' OR benchmark_metric_key IS NOT NULL),
     CHECK (
         (kind = 'quantile' AND q10 IS NOT NULL AND q50 IS NOT NULL AND q90 IS NOT NULL
              AND probability IS NULL AND event_rule IS NULL AND q10 <= q50 AND q50 <= q90)
@@ -197,6 +203,37 @@ CREATE TABLE IF NOT EXISTS predictions (
 CREATE INDEX IF NOT EXISTS idx_predictions_resolves_at ON predictions(resolves_at);
 CREATE INDEX IF NOT EXISTS idx_predictions_agent_cohort ON predictions(agent, cohort);
 CREATE INDEX IF NOT EXISTS idx_predictions_target ON predictions(domain, target_metric_key);
+
+CREATE TABLE IF NOT EXISTS evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prediction_id INTEGER NOT NULL REFERENCES predictions(id),
+    status TEXT NOT NULL CHECK (status IN ('resolved', 'unresolvable')),
+    resolved_at TEXT NOT NULL,
+    realised_value REAL,
+    realised_at TEXT,
+    evidence_claim_ids_json TEXT NOT NULL,
+    reason TEXT,
+    pinball_q10 REAL,
+    pinball_q50 REAL,
+    pinball_q90 REAL,
+    pinball_mean REAL,
+    crps REAL,
+    brier REAL,
+    log_loss REAL,
+    within_interval INTEGER,
+    scorer_version TEXT NOT NULL,
+    -- Eén uitkomst per voorspelling, voor altijd. Een voorspelling die nog
+    -- niet afgewikkeld KAN worden krijgt bewust GEEN rij: dan blijft hij
+    -- vanzelf in beeld bij de volgende run, en is "nog wachten" niet te
+    -- verwarren met "nooit gelukt".
+    UNIQUE (prediction_id),
+    CHECK (
+        (status = 'resolved' AND realised_value IS NOT NULL AND realised_at IS NOT NULL)
+        OR
+        (status = 'unresolvable' AND reason IS NOT NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_evaluations_status ON evaluations(status);
 """
 
 
@@ -207,6 +244,9 @@ def init_db(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path("") else None
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
+    # Vóór het schema-script: deze migratie ruimt een tabelvorm op die de
+    # nieuwe indexen niet aankunnen. Zie zijn docstring.
+    _migreer_predictions_resolution_method(conn)
     conn.executescript(_SCHEMA)
     conn.commit()
     _migreer_agent_runs_mode(conn)
@@ -774,8 +814,8 @@ def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
             cohort, contract_version, graph_version, graph_node,
             causal_chain_json, evidence_claim_ids_json,
             trigger_version, trigger_conditioned, regime_at_creation,
-            market_implied_ref, note
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            market_implied_ref, note, resolution_method, benchmark_metric_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             prediction.agent, prediction.domain, prediction.target_metric_key,
             prediction.kind.value, prediction.horizon_kind.value, prediction.horizon_n,
@@ -789,6 +829,7 @@ def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
             json.dumps(list(prediction.evidence_claim_ids)),
             prediction.trigger_version, int(prediction.trigger_conditioned),
             prediction.regime_at_creation, prediction.market_implied_ref, prediction.note,
+            prediction.resolution_method.value, prediction.benchmark_metric_key,
         ),
     )
     conn.commit()
@@ -802,7 +843,7 @@ def _row_to_prediction(row: tuple) -> Prediction:
         q10, q50, q90, probability, event_rule, cohort, contract_version,
         graph_version, graph_node, causal_chain_json, evidence_claim_ids_json,
         trigger_version, trigger_conditioned, regime_at_creation,
-        market_implied_ref, note,
+        market_implied_ref, note, resolution_method, benchmark_metric_key,
     ) = row
     return Prediction(
         agent=agent, domain=domain, target_metric_key=target_metric_key,
@@ -819,6 +860,8 @@ def _row_to_prediction(row: tuple) -> Prediction:
         trigger_version=trigger_version, trigger_conditioned=bool(trigger_conditioned),
         regime_at_creation=regime_at_creation, market_implied_ref=market_implied_ref,
         note=note,
+        resolution_method=ResolutionMethod(resolution_method),
+        benchmark_metric_key=benchmark_metric_key,
     )
 
 
@@ -856,6 +899,57 @@ def list_due_predictions(conn: sqlite3.Connection, now: datetime) -> list[Predic
     ).fetchall()
     return [_row_to_prediction(r) for r in rows]
 
+
+
+def _migreer_predictions_resolution_method(conn: sqlite3.Connection) -> bool:
+    """Voegt `resolution_method` en `benchmark_metric_key` toe aan een
+    bestaande `predictions`-tabel. Geeft True terug als er gemigreerd is.
+
+    Zelfde reden als `_migreer_agent_runs_mode()`: `CREATE TABLE IF NOT
+    EXISTS` raakt een bestaande tabel niet aan, dus een database die vóór
+    28-09 is aangemaakt heeft de oude vorm en zou bij de eerste
+    forecast-ronde een OperationalError geven op een kolom die er niet is.
+
+    WAAROM HERBOUWEN EN NIET `ALTER TABLE ADD COLUMN`. Die laatste kan geen
+    NOT NULL-kolom toevoegen zonder default, en een default verzinnen zou
+    betekenen dat oude rijen een resolutiemethode krijgen die niemand heeft
+    afgesproken -- dan wordt een voorspelling straks afgewikkeld volgens
+    een regel die er bij het voorspellen niet was. Herbouwen houdt de
+    CHECK-constraints gelijk aan die van een verse database, zodat er geen
+    twee soorten installaties ontstaan.
+
+    DRAAIT VÓÓR HET SCHEMA-SCRIPT en laat het opnieuw opbouwen. Dat moet
+    ook: de nieuwe indexen verwijzen naar kolommen die de oude tabel niet
+    heeft, dus `CREATE INDEX IF NOT EXISTS` zou op de oude tabel stuklopen
+    voordat de migratie überhaupt aan de beurt was.
+
+    RIJEN GAAN NIET VERLOREN, maar ze kunnen ook niet compleet gemaakt
+    worden: bestaande voorspellingen (die er in de praktijk niet zijn --
+    de forecast-ronde draait nog nergens in productie) zouden een
+    onbekende methode krijgen. Daarom weigert de migratie hard als er wél
+    rijen staan, in plaats van te gokken."""
+    huidige = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'predictions'"
+    ).fetchone()
+    if huidige is None or "resolution_method" in huidige[0]:
+        return False
+
+    aantal = conn.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
+    if aantal:
+        raise RuntimeError(
+            f"predictions bevat {aantal} rij(en) zonder resolution_method. Die kunnen "
+            f"niet automatisch een methode krijgen zonder te raden hoe ze afgewikkeld "
+            f"moeten worden. Bepaal dat met de hand (zie contract/resolution.py) of "
+            f"gooi de rijen weg als het testdata is."
+        )
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with conn:
+            conn.execute("DROP TABLE predictions")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    return True
 
 def _migreer_agent_runs_mode(conn: sqlite3.Connection) -> bool:
     """Voegt 'forecast' toe aan de toegestane modes van `agent_runs`.
@@ -913,3 +1007,124 @@ def _migreer_agent_runs_mode(conn: sqlite3.Connection) -> bool:
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
     return True
+
+
+# ---------------------------------------------------------------------------
+# Evaluations (roadmap 4.5) -- de uitkomst van een voorspelling
+# ---------------------------------------------------------------------------
+
+
+def list_unevaluated_due_predictions(
+    conn: sqlite3.Connection, now: datetime
+) -> list[tuple[int, Prediction]]:
+    """Voorspellingen waarvan `resolves_at` verstreken is en die nog GEEN
+    evaluation-rij hebben. De invoer van de resolver.
+
+    Geeft (id, Prediction)-paren terug: de resolver heeft het id nodig om
+    de uitkomst aan de voorspelling te koppelen, maar `Prediction` is het
+    contract en draagt bewust geen databasesleutel.
+
+    Bestaat naast `list_due_predictions()` (die NIET filtert op al
+    afgewikkeld) omdat de resolver dagelijks draait: zonder deze filter
+    zou hij elke dag opnieuw elke afgelopen voorspelling oppakken, en dat
+    groeit ongelimiteerd mee met het cohort."""
+    rows = conn.execute(
+        "SELECT p.* FROM predictions p "
+        "LEFT JOIN evaluations e ON e.prediction_id = p.id "
+        "WHERE p.resolves_at <= ? AND e.id IS NULL "
+        "ORDER BY p.resolves_at ASC, p.id ASC",
+        (now.isoformat(),),
+    ).fetchall()
+    return [(r[0], _row_to_prediction(r)) for r in rows]
+
+
+def save_evaluation(
+    conn: sqlite3.Connection,
+    prediction_id: int,
+    status: str,
+    resolved_at: datetime,
+    scorer_version: str,
+    realised_value: float | None = None,
+    realised_at: datetime | None = None,
+    claim_ids: tuple[int, ...] = (),
+    reason: str | None = None,
+    scores: dict[str, float] | None = None,
+) -> int:
+    """Schrijft één uitkomst weg. Onveranderlijk zodra geschreven: er is
+    geen update-pad, net zomin als bij predictions.
+
+    Dat is geen voorzichtigheid maar de kern van de meetopstelling. Een
+    score die achteraf bijgesteld kan worden is geen track record."""
+    scores = scores or {}
+    cur = conn.execute(
+        """INSERT INTO evaluations (
+            prediction_id, status, resolved_at, realised_value, realised_at,
+            evidence_claim_ids_json, reason,
+            pinball_q10, pinball_q50, pinball_q90, pinball_mean, crps,
+            brier, log_loss, within_interval, scorer_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            prediction_id, status, resolved_at.isoformat(), realised_value,
+            realised_at.isoformat() if realised_at else None,
+            json.dumps(list(claim_ids)), reason,
+            scores.get("pinball_q10"), scores.get("pinball_q50"),
+            scores.get("pinball_q90"), scores.get("pinball_mean"), scores.get("crps"),
+            scores.get("brier"), scores.get("log_loss"),
+            None if scores.get("within_interval") is None else int(scores["within_interval"]),
+            scorer_version,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_evaluations(
+    conn: sqlite3.Connection, status: str | None = None, limit: int | None = None
+) -> list[dict]:
+    """De evaluaties als dicts -- bewust geen dataclass.
+
+    Een evaluation is een meetresultaat en geen contract: er gaat niets
+    langs deze rijen heen dat gevalideerd moet worden, en de kolommen
+    groeien mee met 4.5 (kalibratiecurve, AUC, effectieve n). Een
+    dataclass zou daar elke keer achteraan lopen zonder iets te vangen."""
+    query = "SELECT * FROM evaluations"
+    params: list = []
+    if status is not None:
+        query += " WHERE status = ?"
+        params.append(status)
+    query += " ORDER BY id ASC"
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    kolommen = [d[0] for d in conn.execute("SELECT * FROM evaluations LIMIT 0").description]
+    return [dict(zip(kolommen, row)) for row in conn.execute(query, params).fetchall()]
+
+
+def load_observations(
+    conn: sqlite3.Connection, metric_key: str
+) -> list[tuple[int, str, float, str]]:
+    """De ruwe waarnemingen voor één reeks: (claim_id, source_time, waarde,
+    analysis_time), alleen de rijen met een bruikbare source_time en een
+    numerieke waarde.
+
+    Claims zonder `source_time` worden overgeslagen: dat veld is wat de
+    BRON als observatiedatum opgeeft, en zonder die datum is niet te
+    zeggen op welke periode een waarde slaat. Een fallback naar
+    `analysis_time` zou de ophaaldatum als observatiedatum voorstellen en
+    daarmee elke horizon stilzwijgend verschuiven."""
+    rows = conn.execute(
+        "SELECT id, source_time, value_json, analysis_time FROM claims "
+        "WHERE metric_key = ? AND source_time IS NOT NULL ORDER BY source_time ASC",
+        (metric_key,),
+    ).fetchall()
+    resultaat = []
+    for claim_id, source_time, value_json, analysis_time in rows:
+        try:
+            waarde = float(json.loads(value_json))
+        except (TypeError, ValueError):
+            # Tekstclaims (deep-dive-verhalen) staan in dezelfde tabel en
+            # hebben geen metric_key, maar een defensieve overslag kost
+            # niets en voorkomt dat één rare rij de resolver laat vallen.
+            continue
+        resultaat.append((claim_id, source_time, waarde, analysis_time))
+    return resultaat

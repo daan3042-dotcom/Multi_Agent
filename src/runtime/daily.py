@@ -52,13 +52,20 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Literal
 
-from agents.base import AlreadyProcessedError
+from agents.base import (
+    AlreadyProcessedError,
+    ForecastRoundResult,
+    ForecastTarget,
+    run_forecast_round,
+)
 from contract.output_contract import DomainOutput
 from health.system_health import SystemHealthReport, sources_from_registry, system_health
 from manager.manager import DispatchPlan, dispatch
 from runtime.notifications import Notification, Notifier, build_notification, log_notifier
+from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
+    load_latest_claims,
     load_monitoring_claims,
     load_trigger_events_for_day,
     record_trigger_event,
@@ -81,6 +88,16 @@ class AgentSpec:
     domain: str
     monitor: Callable[..., tuple[DomainOutput | None, list[TriggerEvent]]]
     deep_dive: Callable[..., DomainOutput] | None = None
+    # Roadmap 2.0. Leeg voor agents die in cohort 0 niet voorspellen
+    # (commodity: maandelijkse bron, niet resolvbaar op korte horizon;
+    # equity: kwartaalcadans, buiten het cohort).
+    forecast_targets: tuple[ForecastTarget, ...] = ()
+    forecast_system_prompt: str = ""
+    prompt_version: str = ""
+
+    @property
+    def forecasts(self) -> bool:
+        return bool(self.forecast_targets)
 
 
 @dataclass(frozen=True)
@@ -121,6 +138,15 @@ class DailyRunResult:
     health: SystemHealthReport | None = None
     notification: Notification | None = None
     missed_days: list[str] = field(default_factory=list)
+    forecast_results: list[ForecastRoundResult] = field(default_factory=list)
+    resolver: ResolverResult | None = None
+
+    @property
+    def forecast_issues(self) -> list[str]:
+        """Alles wat er in de forecast-ronde niet goed ging, over alle agents
+        heen. Een ontbrekende voorspelling is een gat in de meting dat niet
+        achteraf te vullen is, dus dit hoort in de melding terecht te komen."""
+        return [f"{r.domain}: {i}" for r in self.forecast_results for i in r.issues]
 
     @property
     def all_triggers(self) -> list[TriggerEvent]:
@@ -139,6 +165,10 @@ class DailyRunResult:
         if any(o.status in ("failed", "crashed") for o in self.outcomes):
             return True
         if any(o.deep_dive_error for o in self.outcomes):
+            return True
+        if self.forecast_issues:
+            return True
+        if self.resolver is not None and self.resolver.has_problems:
             return True
         return bool(self.missed_days)
 
@@ -180,13 +210,40 @@ def default_agents() -> list[AgentSpec]:
     )
 
     return [
-        AgentSpec("monetary_policy", monetary_policy_agent.monitor, monetary_policy_agent.deep_dive),
-        AgentSpec("currency", currency_agent.monitor, currency_agent.deep_dive),
-        AgentSpec("financial", financial_agent.monitor, financial_agent.deep_dive),
-        AgentSpec("sector", sector_agent.monitor, sector_agent.deep_dive),
-        AgentSpec("commodity", commodity_agent.monitor, commodity_agent.deep_dive),
-        AgentSpec("economic", economic_agent.monitor, economic_agent.deep_dive),
+        _spec("monetary_policy", monetary_policy_agent),
+        _spec("currency", currency_agent),
+        _spec("financial", financial_agent),
+        _spec("sector", sector_agent),
+        # Commodity voorspelt niet in cohort 0: de Alpha Vantage-bron is
+        # maandelijks en dus niet te resolven op 5/21/63 handelsdagen.
+        _spec("commodity", commodity_agent),
+        _spec("economic", economic_agent),
     ]
+
+
+def _spec(domain: str, module) -> AgentSpec:
+    """Bouwt een AgentSpec uit een agent-module.
+
+    Bewust afgeleid uit de module in plaats van hier per agent opgeschreven:
+    een agent zonder FORECAST_TARGETS krijgt een lege tuple en doet
+    daarmee vanzelf niet mee aan de wekelijkse ronde. Zo is er geen tweede
+    lijst die uit de pas kan lopen met de agents zelf -- een agent die
+    voorspeldoelen krijgt, gaat voorspellen zonder dat iemand dit bestand
+    hoeft aan te raken.
+
+    De forecast-prompt is de deep-dive-prompt: dezelfde vakinhoud, en
+    `run_forecast_round` plakt de vormregels (FORECAST_SYSTEM_RULES)
+    ervoor. Twee losse vakinhoudelijke prompts per agent zouden uit elkaar
+    gaan lopen, en dan meet de scoring iets anders dan de deep-dive
+    vertelt."""
+    return AgentSpec(
+        domain=domain,
+        monitor=module.monitor,
+        deep_dive=module.deep_dive,
+        forecast_targets=tuple(getattr(module, "FORECAST_TARGETS", ())),
+        forecast_system_prompt=getattr(module, "DEEP_DIVE_SYSTEM_PROMPT", ""),
+        prompt_version=f"{domain}-{getattr(module, 'FORECAST_PROMPT_VERSION', 'v0')}",
+    )
 
 
 def _run_one_agent(conn, spec: AgentSpec, now: datetime, event_id: str) -> AgentOutcome:
@@ -332,6 +389,27 @@ def run_daily(
         except Exception as e:  # noqa: BLE001
             logger.error("Deep-dive-fase afgebroken: %s: %s", type(e).__name__, e)
 
+    # De forecast-ronde draait NA monitoring, zodat hij de cijfers van
+    # vandaag ziet, en na de deep-dives, zodat een dure LLM-fase de
+    # goedkope niet kan blokkeren.
+    if client is not None:
+        try:
+            _run_forecast_round(conn, agents, result, client, now, weekly_event_id(now))
+        except Exception as e:  # noqa: BLE001
+            logger.error("Forecast-fase afgebroken: %s: %s", type(e).__name__, e)
+
+    # De resolver draait DAGELIJKS en niet wekelijks: voorspellingen lopen
+    # af op hun eigen moment (5, 21, 63 handelsdagen; 1/2/3 publicaties),
+    # niet op maandag. Hij kost geen API-calls en geen LLM -- alles wat hij
+    # nodig heeft staat al in de database.
+    try:
+        result.resolver = resolve_due_predictions(conn, now)
+        if result.resolver.resolved or result.resolver.unresolvable:
+            logger.info(result.resolver.summary())
+    except Exception as e:  # noqa: BLE001
+        logger.error("Resolver afgebroken: %s: %s", type(e).__name__, e)
+        result.resolver = ResolverResult(errors=[f"resolver afgebroken: {e}"])
+
     try:
         result.missed_days = _missed_days(conn, agents, now)
     except Exception as e:  # noqa: BLE001
@@ -356,6 +434,95 @@ def run_daily(
         _notify_safely(notifier, result.notification)
 
     return result
+
+
+FORECAST_WEEKDAY = 0  # maandag = eerste dag van de ISO-week
+"""De beoogde dag van de wekelijkse forecast-ronde (roadmap 2.0), gekozen
+door DD op 28-09-2026. Maandagochtend: verse week, en de koersen van
+vrijdag staan er al in terwijl er nog geen nieuwe handelsdag overheen is
+gegaan.
+
+Deze constante stuurt de planning niet aan -- dat doet `weekly_event_id`,
+die maandag als eerste dag van de ISO-week gebruikt. Hij staat hier zodat
+de bedoelde dag vindbaar is en een test kan vastleggen dat de ronde op
+maandag valt."""
+
+
+def weekly_event_id(now: datetime) -> str:
+    """ISO-week als dedup-sleutel: "2026-W40". Daarmee is de eenheid van
+    herhaling de WEEK en niet de dag -- precies wat een wekelijkse ronde
+    nodig heeft. Twee runs in dezelfde week leveren dus niet twee sets
+    voorspellingen op, wat de scoring zou vervuilen."""
+    jaar, week, _ = now.isocalendar()
+    return f"{jaar}-W{week:02d}"
+
+
+def _forecast_due(conn, spec: AgentSpec, now: datetime, week_id: str) -> bool:
+    """Of deze agent deze week nog moet voorspellen.
+
+    Maandag is de vaste dag. Maar als die maandag mislukt (VPS uit, API
+    plat, onparseerbare respons), dan is de week zonder inhaalslag
+    PERMANENT leeg -- en een ontbrekende week is niet achteraf te vullen.
+    Daarom draait de ronde ook op een latere dag zolang deze week nog geen
+    geslaagde ronde kende.
+
+    HOEVEEL KANSEN DAT IN DE PRAKTIJK ZIJN: vier, niet zes. Deze functie
+    kijkt naar de ISO-week (ma t/m zo), maar de cron op de VPS draait
+    ma t/m vr (`15 7 * * 1-5`, zie docs/deployment.md). In het weekend
+    wordt deze code dus niet aangeroepen en redt het weekend een verloren
+    week niet. Mislukken maandag t/m vrijdag allemaal, dan is die week
+    definitief leeg.
+
+    Dat verschil staat hier expliciet omdat het onzichtbaar is vanuit de
+    code: wie alleen deze functie leest, telt zes inhaalkansen. Wijzigt de
+    cron ooit naar `1-7`, dan worden het er zes -- maar dan haalt de
+    monitoring in het weekend ook marktdata op terwijl de beurzen dicht
+    zijn, en dat kost Alpha Vantage-calls zonder nieuwe informatie.
+
+    Dat kost iets: de "vaste dag" uit de roadmap is dan niet meer altijd
+    dezelfde, en voorspellingen van een woensdag zijn niet volledig
+    vergelijkbaar met die van een maandag. Maar `created_at` legt de
+    werkelijke dag vast, dus dat is achteraf te analyseren -- en een gat
+    in de reeks is dat niet.
+
+    Let op wat hier NIET staat: een expliciete maandag-check. Die zou
+    overbodig zijn en daarmee misleidend. De ISO-week begint op maandag,
+    dus "eens per ISO-week, zodra de cyclus draait" IS maandag zolang de
+    maandag lukt; elke latere dag is per definitie een inhaalslag. Eén
+    regel met één betekenis is hier veiliger dan twee die elkaar
+    overlappen."""
+    if not spec.forecasts:
+        return False
+    return not has_successful_run(conn, spec.domain, "forecast", week_id)
+
+
+def _run_forecast_round(conn, agents, result, client, now, week_id) -> None:
+    """De wekelijkse ronde voor elke voorspellende agent, elk in zijn eigen
+    try/except -- een agent die omvalt mag de andere vier hun week niet
+    kosten, zelfde reden als bij monitoring."""
+    for spec in agents:
+        if not _forecast_due(conn, spec, now, week_id):
+            continue
+        try:
+            claims = load_latest_claims(conn, spec.domain)
+            uitkomst = run_forecast_round(
+                conn, client, spec.domain, spec.forecast_system_prompt,
+                list(spec.forecast_targets), claims,
+                prompt_version=spec.prompt_version, now=now, event_id=week_id,
+            )
+            result.forecast_results.append(uitkomst)
+            logger.info(
+                "%s: forecast-ronde %s -- %d voorspellingen%s",
+                spec.domain, week_id, len(uitkomst.predictions),
+                "" if uitkomst.is_complete else f", {len(uitkomst.issues)} probleem(en)",
+            )
+        except AlreadyProcessedError:
+            continue
+        except Exception as e:  # noqa: BLE001
+            logger.error("Forecast-ronde %s mislukt: %s: %s", spec.domain, type(e).__name__, e)
+            result.forecast_results.append(
+                ForecastRoundResult(spec.domain, (), (f"ronde afgebroken: {e}",))
+            )
 
 
 def _missed_days(conn, agents: list[AgentSpec], now: datetime, lookback: int = 7) -> list[str]:

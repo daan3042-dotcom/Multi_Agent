@@ -30,6 +30,7 @@ import requests
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
+from contract.resolution import ResolutionMethod
 from contract.graph import Node
 from storage.schema import register_source
 
@@ -74,6 +75,7 @@ FORECAST_TARGETS = tuple(
         horizon_kind=HorizonKind.TRADING_DAYS,
         horizons=(5, 21, 63),
         graph_node=Node.DOLLAR,
+        resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         resolution_rule=(
             label + " zoals opgehaald bij de reguliere monitoring, eerste observatie "
             "op of na resolves_at ({horizon_n} handelsdagen na created_at). "
@@ -86,6 +88,20 @@ FORECAST_TARGETS = tuple(
 # dat hij een random walk niet verslaat. Blijkt dat zo, dan is dat geen
 # mislukking maar de bevestiging dat de meetopstelling werkt -- en verslaat
 # hij hem wel, dan is dat pas interessant omdat de lat vooraf laag lag.
+
+
+FORECAST_PROMPT_VERSION = "v1"
+"""Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
+prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
+`agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.
+
+VERHOOG DIT ZODRA EEN VAN DIE TWEE VERANDERT. Binnen een cohort is een
+promptwijziging een covariaat en geen nieuw cohort (CLAUDE.md), maar dan
+moet je achteraf wel kunnen zien wélke voorspellingen onder welke prompt
+zijn gedaan. Vergeet je het, dan zijn twee verschillende prompts achteraf
+niet meer te scheiden en is dat deel van het cohort onbruikbaar.
+`tests/test_forecast_prompt_version.py` faalt als de prompt verandert
+zonder dat dit getal meebeweegt."""
 
 
 DEEP_DIVE_SYSTEM_PROMPT = """Je bent een valuta-analist gespecialiseerd in majeure \

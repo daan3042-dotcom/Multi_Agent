@@ -654,9 +654,6 @@ unique index op `event_id` stil kwijtraken zou 1.7's idempotency ongemerkt
 uitschakelen. Vier tests, waaronder een die bewijst dat bestaande rijen
 behouden blijven.
 
-**Nog te doen:** de wekelijkse aanroep zit nog niet in `runtime/daily.py`,
-dus de ronde draait nog nergens vanzelf.
-
 **De sector agent heeft doelen gekregen (DD, 28-09).** SPY wordt nu elke
 cyclus opgehaald en opgeslagen naast de elf ETF's, zodat het relatieve
 rendement over een horizon achteraf uit de claims-historie te berekenen
@@ -676,6 +673,143 @@ ik eerder deze dag bouwde sloegen daarop meteen aan (het API-budget en de
 graafmapping), en dat is precies waarvoor ze er zijn.
 
 **Totaal: 57 voorspellingen per wekelijkse ronde over vijf agents.**
+
+### De wekelijkse aanroep draait (2.0) — 474 tests groen
+
+De ronde zat in `agents/base.py` maar werd nergens aangeroepen. Nu wel, in
+`runtime/daily.py`, en daarmee is 2.0 als geheel af.
+
+**Maandagochtend, DD's keuze.** Verse week, en de slotkoersen van vrijdag
+staan er al in zonder dat er een nieuwe handelsdag overheen is gegaan.
+
+**Het `event_id` is de ISO-week, niet de dag** (`2026-W40`). Daarmee is de
+eenheid van herhaling de week. Cron vuurt elke ochtend; zonder dit zouden
+dat zeven sets voorspellingen per week zijn, en dan meet de scoring straks
+iets anders dan bedoeld. Een test pint dat maandag, dinsdag en de zondag
+erna hetzelfde `event_id` opleveren.
+
+**Met inhaalslag, en dat is een afweging.** Mislukt de maandag (VPS uit,
+API plat, onparseerbare respons), dan draait de ronde op de eerstvolgende
+dag die wél lukt binnen dezelfde ISO-week. In de praktijk zijn dat vier
+kansen en niet zes: de cron draait ma t/m vr, dus in het weekend wordt de
+code niet aangeroepen en redt het weekend een verloren week niet. Dat
+staat nu expliciet in de docstring van `_forecast_due()`, omdat het
+verschil tussen "de week" en "de werkweek" vanuit de code alleen niet te
+zien is (DD merkte dat op, 28-09). De prijs: een
+voorspelling van woensdag is niet volledig vergelijkbaar met één van
+maandag. De opbrengst: geen lege week. Die keuze is asymmetrisch — een
+verschoven dag is achteraf te analyseren (`created_at` legt de werkelijke
+dag vast), een ontbrekende week niet. Voorspellen met de kennis van later
+is geen voorspelling meer.
+
+In de code staat daarom géén expliciete maandag-check. Die zou overbodig
+zijn: de ISO-week begint op maandag, dus "eens per ISO-week, zodra de
+cyclus draait" ÍS maandag zolang de maandag lukt. Eén regel met één
+betekenis, in plaats van twee die elkaar overlappen.
+
+**Forecast-problemen komen ergens uit.** `DailyRunResult.forecast_issues`
+→ `has_problems` → exit-code van `run_daily.py` én de notificatie
+(warning, niet critical: de ronde haalt zichzelf in binnen de week, dus
+een mislukte maandag is nog geen verloren week; de melding herhaalt
+dagelijks tot het gerepareerd is). Zonder die koppeling zou een ronde
+kunnen mislukken terwijl cron exit 0 teruggeeft — het terugkerende
+bugpatroon uit CLAUDE.md, een check die wel iets vaststelt maar nergens
+uitkomt.
+
+**Welke agents voorspellen, wordt afgeleid en niet opgeschreven.**
+`_spec()` leest `FORECAST_TARGETS` uit de agent-module; geen doelen = geen
+ronde. Zo is er geen tweede lijst die uit de pas kan lopen met de agents
+zelf. Commodity heeft bewust geen doelen (maandelijkse bron, niet
+resolvbaar op 5/21/63 handelsdagen) en een test legt dát als beslissing
+vast, zodat het geen vergeten regel wordt.
+
+**`FORECAST_PROMPT_VERSION` per agent, bewaakt met een hash.** Elke
+prediction draagt `prompt_version`. Verandert iemand een prompt zonder het
+versienummer op te hogen, dan staan er achteraf twee verschillende prompts
+onder hetzelfde label en is dat deel van het cohort niet meer te
+analyseren — en dat merk je pas bij de evaluatie, maanden later.
+`tests/test_forecast_prompt_version.py` hasht de daadwerkelijk verstuurde
+system prompt (FORECAST_SYSTEM_RULES + de vakinhoudelijke prompt) en faalt
+met de nieuwe hash in de foutmelding. Zelfde patroon als
+`test_api_budget.py`: een onzichtbaar effect zichtbaar maken op het moment
+dat de regel geschreven wordt.
+
+**De `--deep-dives`-vlag schakelt nu twee LLM-fasen in.** Een dry-run
+zonder die vlag is dus een dry-run zonder voorspellingen. Vóór T₀ᵇ is dat
+prima; daarna is elke zo'n week een gat in het cohort.
+
+### Resolver, evaluations en scores (4.5) — 529 tests groen
+
+Het systeem kon voorspellen maar niets afwikkelen. Blokkade 4 is daarmee
+voor de helft weg; de drie baselines (4.6) staan nog open.
+
+**De regeltekst is niet uitvoerbaar, en dat was het hele probleem.** Elke
+prediction draagt een `resolution_rule` in vrije taal. Python kan die niet
+uitvoeren, en een LLM hem laten interpreteren zou betekenen dat het model
+dat de voorspelling deed ook bepaalt of hij uitkwam. Daarom draagt elke
+prediction nu ook een `resolution_method`: een enum met vier waarden die
+verwijst naar een functie in `src/contract/resolution.py`. De tekst is de
+autoriteit voor mensen, de methode doet het rekenwerk. Dat ze hetzelfde
+zeggen is een menselijk oordeel — `tests/test_resolution_mapping.py` pint
+de afgesproken combinatie per doel vast, zodat een wijziging aan één van
+beide opvalt.
+
+De vier methoden: `level_at_or_after` (dagreeksen op een
+handelsdagen-horizon), `nth_release` (week- en maandreeksen),
+`relative_return` (de sector agent) en `direction_after_fomc` (de twee
+binaire monetary-doelen).
+
+**De vintage-regel kwam gratis.** Bijna elke regel zegt "eerste print,
+latere revisies wijzigen de uitkomst nooit". Dat is hier geen extra werk:
+we slaan elke cyclus op wat de bron op dat moment zei, dus de
+claims-historie ís een vintage-archief. De eerste print van een periode is
+de claim met die `source_time` die wij als eerste zagen.
+
+**Drie toestanden, niet twee.** Afgewikkeld, nog-niet-afwikkelbaar en
+onafwikkelbaar. De middelste krijgt bewust GEEN rij: dan blijft de
+voorspelling vanzelf in beeld bij de volgende run. Pas na 30 dagen wachten
+wordt hij als `unresolvable` weggeschreven, met reden. Zonder die grens
+zou een reeks die stil gestopt is met publiceren een groeiende stapel
+opleveren die elke dag opnieuw geprobeerd wordt en nooit opvalt; zonder
+het wachten zou een normale publicatievertraging een geldige meting uit
+het cohort gooien. De 30 dagen zijn een keuze, geen berekening — ruim
+boven de grootste vertraging die we kennen (PAYEMS, ~14 dagen), ruim onder
+een kwartaal. **Hoort bij de freeze bevestigd te worden.**
+
+**Scores.** Pinball loss per kwantiel, CRPS, Brier, log loss, en
+`within_interval` als directe kalibratiecheck. Allemaal proper scoring
+rules: wie zijn echte verdeling opschrijft scoort gemiddeld beter dan wie
+iets anders opschrijft. Dat is de eigenschap waar de hele meetopstelling
+op rust, dus er staat een test die het bewíjst op een steekproef van
+20.000 trekkingen in plaats van het aan te nemen — overmoed én lafheid
+verliezen allebei.
+
+CRPS is **benaderd** uit drie kwantielniveaus (2 × de gemiddelde pinball
+loss). De echte CRPS integreert over alle niveaus; wij hebben er drie. Dat
+mag omdat agents en baselines exact dezelfde behandeling krijgen en de
+vertekening dus wegvalt in het verschil. Wat er niet mee mag: dit getal
+vergelijken met een CRPS uit de literatuur.
+
+**Twee bugs die de tests vonden, allebei van het stille soort:**
+
+1. `resolves_at` erft het tijdstip van `created_at` (maandag 07:15 UTC),
+   terwijl `source_time` van een dagreeks een kale datum is. Op tijdstip
+   vergelijken sloeg de observatie van de afwikkeldag zelf over: elke
+   handelsdagen-horizon zou één waarneming te ver gemeten hebben. De
+   scores zouden gewoon binnenkomen — alleen van de verkeerde dag.
+2. De FOMC-kalender stond als default-argument, en die wordt in Python één
+   keer geëvalueerd bij het definiëren van de functie. Het invullen van de
+   kalender zou dan pas na een herstart effect hebben gehad.
+
+**Openstaand, en bewust: `FOMC_MEETING_DATES` is leeg.** De Fed publiceert
+de vergaderdata jaren vooruit, maar ze zijn vanuit deze ontwikkelomgeving
+niet te verifiëren en een verkeerde datum wikkelt een voorspelling
+stilzwijgend op het verkeerde moment af. Benaderen met "de n-de
+FEDFUNDS-print" mag niet: FEDFUNDS publiceert twaalf keer per jaar, de
+FOMC vergadert acht keer, dus dat zou een andere gebeurtenis scoren dan de
+voorspelling beschrijft. Zolang de tuple leeg is, blijven de twee
+FEDFUNDS-doelen onafwikkelbaar en zegt de resolver per stuk waarom.
+**Checkpoint 4 — DD vult de kalender vóór T₀ᵇ.**
 
 ## Known problems
 

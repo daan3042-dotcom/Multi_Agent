@@ -50,6 +50,7 @@ from datetime import datetime
 from enum import Enum
 
 from contract.graph import GRAPH_VERSION, Node
+from contract.resolution import ResolutionMethod
 
 CONTRACT_VERSION = "v0"
 """Versie van DIT contract. Een wijziging hieraan start een nieuw cohort in
@@ -98,6 +99,7 @@ class Prediction:
     horizon_n: int
     resolves_at: datetime
     resolution_rule: str
+    resolution_method: ResolutionMethod
     created_at: datetime
     model_id: str
     prompt_version: str
@@ -122,6 +124,7 @@ class Prediction:
     trigger_conditioned: bool = False
     regime_at_creation: str | None = None
     market_implied_ref: float | None = None
+    benchmark_metric_key: str | None = None
     note: str | None = None
 
     def __post_init__(self) -> None:
@@ -148,6 +151,17 @@ class Prediction:
 
         if self.horizon_n <= 0:
             raise ValueError(f"horizon_n moet positief zijn, kreeg {self.horizon_n!r}")
+
+        # De methode is wat de resolver STRAKS uitvoert; de regeltekst is
+        # wat een mens leest. Beide staan op de rij, want een voorspelling
+        # die alleen tekst draagt is niet deterministisch af te wikkelen,
+        # en een die alleen een methode draagt is niet uit te leggen.
+        if self.resolution_method is ResolutionMethod.RELATIVE_RETURN and not self.benchmark_metric_key:
+            raise ValueError(
+                "resolution_method=relative_return vereist een benchmark_metric_key -- "
+                "zonder benchmark is er geen relatief rendement te berekenen "
+                f"(target={self.target_metric_key!r})"
+            )
 
         if self.kind is PredictionKind.QUANTILE:
             self._valideer_kwantielen()
