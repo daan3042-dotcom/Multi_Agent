@@ -24,16 +24,19 @@ VÓÓR T₀ᵇ. Een ridge die gefit is op een halve back-fill is een ridge die
 je moet vervangen, en vervangen betekent een nieuwe RIDGE_SPEC_VERSION.
 
 WAT JE IN DE UITVOER MOET BEKIJKEN:
-  - `oos/rw`  De uit-de-steekproef-MSE gedeeld door die van "geen
-              verandering". Onder 1,0 betekent dat de inputs iets zeggen.
-              Rond 1,0 (of erboven) is prima voor een baseline -- het model
-              regelt zichzelf dan naar niets toe -- maar dan verwacht je van
-              het LLM ook niet dat de inputs alleen het werk doen.
+  - `oos/rw`  De uit-de-steekproef-MSE gedeeld door die van "geen verandering".
+              Het model kiest uit een raster dat "geen verandering" bevat, dus
+              deze waarde kan niet meer ruim boven 1,000 uitkomen; staat er
+              toch iets als 1,01 of hoger, dan is dat een bug: meld het en
+              bevries niet. WAARDEN NET ONDER 1 (0,97-1,00) ZIJN GEEN BEWIJS
+              VAN VOORSPELKRACHT: de cross-validatie kiest de toevallig beste
+              uit 14 combinaties (winner's curse). Echte structuur zie je aan
+              duidelijk lagere waarden, zoals VIX h=63 op 0,88.
   - `rijen`   Trainingsrijen. Ze overlappen (vensters van 21 of 63 dagen), dus
               de effectieve n is veel lager; kijk naar de orde van grootte.
-  - `dropped` Inputs die uit het model zijn gelaten wegens te korte
-              historie. Staat hier een reeks die je WEL verwacht, dan is de
-              back-fill niet klaar.
+  - `weggelaten` Inputs die uit het model zijn gelaten wegens te korte
+              historie (minder dan 80% van de trainingsrijen). Zie de noot in
+              docs/project-state.md: dat zijn ook reeksen die het LLM wél ziet.
 
 EXIT CODES: 0 = alles gefit (en bij --freeze: bevroren), 1 = ten minste één
 doel kon niet gefit worden, 2 = database niet te openen.
@@ -116,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{sleutel} {'':>6} {'':>7} {'':>7}  MISLUKT: {e}")
                     continue
                 m = fit.model
-                status = f"{len(m['features'])} inputs"
+                status = f"{len(m['features'])} inputs, {'met' if m['drift'] else 'zonder'} drift"
                 if m["dropped"]:
                     status += f", weggelaten: {'; '.join(m['dropped'])}"
                 if args.freeze:

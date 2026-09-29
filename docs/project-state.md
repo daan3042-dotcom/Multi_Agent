@@ -1025,6 +1025,49 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### De eerste droge run van de ridge op echte data (29-09) — 653 tests groen
+
+Voor het eerst tegen de echte back-fill. Alle 55 doelen zijn gefit, zonder
+`MISLUKT`. Het model vindt echte structuur waar die te verwachten is: **VIX h=63
+op 0,884** en **h=21 op 0,945** (de VIX keert terug naar zijn gemiddelde, dus de
+z-score voorspelt de verandering) en nonfarm payrolls op 0,931 en 0,976 (stabiele
+trend). Bij de meeste doelen ligt `oos/rw` rond 1,00: de inputs zeggen op deze
+horizonnen bijna niets, het klassieke beeld voor koersen. Het LLM moet dus een
+bijna-random-walk verslaan.
+
+**De run vond ook een echte fout, en die is de reden dat we niet bevroren.** Een
+aantal doelen scoorde *slechter* dan "geen verandering": **gbp_usd h=63 op 1,175**,
+usd_jpy h=63 op 1,093, 2y-rente h=63 op 1,066, xlc op 1,059. Twee oorzaken, allebei
+in mijn ontwerp: (1) het model schatte een gemiddelde trend (intercept) uit de
+historie, en bij valutakoersen is dat ruis die uit-de-steekproef niet klopt; (2) het
+λ-raster stopte bij 100 terwijl de cross-validatie bij bijna elk doel precies die
+bovengrens koos, het teken dat nog sterkere regularisatie beter was en het
+"niets doen"-model niet bereikbaar.
+
+**De fix:** de cross-validatie kiest per doel tussen *mét* en *zonder* drift, en het
+raster loopt nu tot 10.000. Daarmee is "geen verandering" altijd beschikbaar en kan
+de ridge niet meer met meer dan afrondingsverschil van de random walk verliezen.
+Een eigenschapstest over 18 reeksen (trend die van teken wisselt, ruis, stabiele
+trend) bewaakt dat; op de oude versie geeft die oos/rw van 1,03 tot 1,07, dezelfde
+orde als op de VPS. **De run moet opnieuw voordat er iets bevroren wordt.**
+
+**Wat `oos/rw` onder 1 wel en niet betekent.** Een waarde van 0,98 is geen bewijs van
+voorspelkracht: de cross-validatie kiest uit 14 combinaties, dus de toevallig beste
+(winner's curse). Op pure ruis komt het model ook op ~0,98 uit; een test legt dat
+vast met een ondergrens. Echte structuur zie je aan duidelijk lagere waarden.
+
+**Open punt voor de freeze: weggelaten inputs.** Een input met minder dan 80% van
+de trainingsrijen wordt weggelaten, en dat is bij de lange doelen systematisch:
+de 10-jaars rente (sinds 1962) verliest de balans van de Fed (2002), de
+inflatieverwachtingen (2003) en de 2-jaars rente; de negen oudste sector-ETF's
+verliezen XLC (2018) en XLRE (2015). Het LLM ziet die reeksen wél. Alternatief:
+alle inputs meenemen en trainen op het gemeenschappelijke venster (10-jaars:
+~5.900 rijen sinds 2003 in plaats van 16.100). Dat is trouwer aan "de inputs die
+het LLM ziet", maar levert veel minder rijen en jaren op (bij sector: 2.000 rijen,
+7,5 jaar, incl. COVID). Voor een baseline waarvan de inputs bijna niets voorspellen
+is het effect klein, maar het is een keuze tussen trouw en steekproefgrootte, dus
+van DD. Standaard blijft de huidige regel.
+
 ### Alpha Vantage gaf een lege `{}` voor élk endpoint (29-09) — open
 
 Na ruim 100 calls op één dag (dagelijkse runs, testruns, experimenten en de

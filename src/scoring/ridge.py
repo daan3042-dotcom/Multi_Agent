@@ -97,7 +97,12 @@ MIN_FEATURE_COVERAGE = 0.8
 reeks met korte historie) wordt uit het model gelaten en genoteerd in
 `dropped`, in plaats van 20% van de rijen weg te gooien voor één feature."""
 
-LAMBDA_GRID = (0.01, 0.1, 1.0, 10.0, 100.0)
+LAMBDA_GRID = (0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0)
+"""Het raster loopt door tot 10.000 zodat het 'niets doen'-model bereikbaar is.
+Bij λ = 10.000 zijn alle coëfficiënten praktisch nul. Het eerste raster stopte
+bij 100, en in de eerste droge run op echte data koos de cross-validatie bij
+bijna elk doel precies die bovengrens: het teken dat nog sterkere regularisatie
+beter was."""
 CV_BLOCKS = 6
 
 CADENCE_RULES: dict[str, tuple[int, int]] = {
@@ -205,13 +210,28 @@ def solve_linear(a: list[list[float]], b: list[float]) -> list[float]:
     return x
 
 
-def fit_ridge(x: list[list[float]], y: list[float], lam: float) -> tuple[float, list[float]]:
-    """Ridge met onbestrafte intercept. λ is geschaald op het GEMIDDELDE
-    (X'X/n), niet op de som: zo betekent dezelfde λ hetzelfde bij 200 en bij
-    5000 rijen, en is het raster te vergelijken over doelen heen."""
+def fit_ridge(
+    x: list[list[float]], y: list[float], lam: float, drift: bool = True
+) -> tuple[float, list[float]]:
+    """Ridge. λ is geschaald op het GEMIDDELDE (X'X/n), niet op de som: zo
+    betekent dezelfde λ hetzelfde bij 200 en bij 5000 rijen.
+
+    `drift=True`: met een onbestrafte intercept, dus het model schat de
+    gemiddelde verandering uit de trainingsdata en telt die op bij elke
+    voorspelling. `drift=False`: zonder intercept; alleen de inputs voorspellen
+    een verandering, en zonder inputs is de voorspelling 'geen verandering'.
+
+    WAAROM BEIDE. Bij een reeks met een echte, stabiele trend (banen, prijzen)
+    is de drift precies wat een goed model moet vangen. Bij een reeks zonder
+    (valutakoersen) is de geschatte trend ruis die uit-de-steekproef niet klopt,
+    en dat maakte het model in de eerste droge run tot 17% slechter dan 'geen
+    verandering'. De cross-validatie kiest per doel."""
     n, p = len(x), len(x[0])
-    xm = [sum(r[j] for r in x) / n for j in range(p)]
-    ym = sum(y) / n
+    if drift:
+        xm = [sum(r[j] for r in x) / n for j in range(p)]
+        ym = sum(y) / n
+    else:
+        xm, ym = [0.0] * p, 0.0
     a = [[0.0] * p for _ in range(p)]
     b = [0.0] * p
     for row, yi in zip(x, y):
@@ -247,7 +267,7 @@ class RidgeFit:
 
 
 def _cv_residuen(
-    x: list[list[float]], y: list[float], horizon_n: int, lam: float
+    x: list[list[float]], y: list[float], horizon_n: int, lam: float, drift: bool = True
 ) -> list[float] | None:
     """Uit-de-steekproef-residuen via expanding-window CV. Tussen trainings-
     en validatieblok zit een gat van `horizon_n` rijen: de vensters
@@ -261,7 +281,7 @@ def _cv_residuen(
         train_eind = grenzen[k] - horizon_n
         if train_eind < MIN_TRAIN_ROWS // 2:
             continue
-        intercept, beta = fit_ridge(x[:train_eind], y[:train_eind], lam)
+        intercept, beta = fit_ridge(x[:train_eind], y[:train_eind], lam, drift)
         for i in range(grenzen[k], grenzen[k + 1]):
             resid.append(y[i] - _voorspel(intercept, beta, x[i]))
     return resid or None
@@ -307,19 +327,20 @@ def fit_ridge_model(
             f"minimaal {MIN_TRAIN_ROWS} nodig (back-fill onvolledig?)"
         )
 
+    # Alle combinaties van (drift, lambda), van complex naar eenvoudig. Bij gelijke
+    # MSE wint de LAATSTE, dus de eenvoudigste: zonder drift, sterkste regularisatie.
     beste = None
-    for lam in LAMBDA_GRID:
-        resid = _cv_residuen(x, y, horizon_n, lam)
-        if resid is None:
-            continue
-        mse = sum(r * r for r in resid) / len(resid)
-        # Bij gelijke MSE de STERKERE regularisatie: de grid loopt op, dus
-        # '<=' geeft de laatste (grootste) lam.
-        if beste is None or mse <= beste[0]:
-            beste = (mse, lam, resid)
+    for drift in (True, False):
+        for lam in LAMBDA_GRID:
+            resid = _cv_residuen(x, y, horizon_n, lam, drift)
+            if resid is None:
+                continue
+            mse = sum(r * r for r in resid) / len(resid)
+            if beste is None or mse <= beste[0]:
+                beste = (mse, lam, resid, drift)
     if beste is None:
         raise _Insufficient(f"{domain}/{target.metric_key} h={horizon_n}: te weinig rijen voor cross-validatie")
-    mse, lam, resid = beste
+    mse, lam, resid, drift = beste
 
     # Diagnostiek: dezelfde validatiepunten, voorspeld met 'geen verandering'.
     n = len(x)
@@ -330,11 +351,12 @@ def fit_ridge_model(
         if grenzen[k] - horizon_n >= MIN_TRAIN_ROWS // 2
         for i in range(grenzen[k], grenzen[k + 1])
     ]
-    intercept, beta = fit_ridge(x, y, lam)
+    intercept, beta = fit_ridge(x, y, lam, drift)
     q10, q50, q90 = _kwantielen(resid)
     model = {
         "spec_version": RIDGE_SPEC_VERSION,
         "lambda": lam,
+        "drift": drift,
         "intercept": intercept,
         "features": [f.key for _, f, _ in behouden],
         "coefficients": beta,
@@ -394,7 +416,8 @@ def _ridge_prediction(
     if not all(math.isfinite(v) for v in (q10, q50, q90)):
         raise _Insufficient(f"{target.metric_key} h={horizon_n}: niet-eindige ridge-voorspelling")
     note = (
-        f"ridge {RIDGE_SPEC_VERSION}: lambda={model['lambda']:g}, {len(model['features'])} inputs, "
+        f"ridge {RIDGE_SPEC_VERSION}: lambda={model['lambda']:g}, "
+        f"{'met' if model.get('drift', True) else 'zonder'} drift, {len(model['features'])} inputs, "
         f"{model['n_rows']} rijen, {model['n_oos']} uit-de-steekproef-residuen, "
         f"gefit t/m {model['as_of'][:10]}, anker {sample.anchor:g} ({sample.anchor_date.date()})"
     )
