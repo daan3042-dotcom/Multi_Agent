@@ -40,7 +40,8 @@ deep-dive mist niets.
 EXIT CODES (cron/monitoring kan hierop sturen):
     0 -- cyclus voltooid, niets mis
     1 -- cyclus voltooid, maar minstens één agent faalde of crashte
-    2 -- de cyclus zelf kon niet draaien (database onbereikbaar, onbekende MI_COHORT e.d.)
+    2 -- de cyclus zelf kon niet draaien (database onbereikbaar, onbekende MI_COHORT,
+         of MI_COHORT=cohort_0 met een trigger-regelset die niet bevroren is)
 """
 
 from __future__ import annotations
@@ -55,7 +56,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 
 from contract.prediction import COHORT_0, current_cohort  # noqa: E402
 from runtime.daily import daily_event_id, run_daily  # noqa: E402
+from contract.trigger_version import TRIGGER_VERSION  # noqa: E402
 from runtime.notifications import log_notifier, webhook_notifier  # noqa: E402
+from runtime.trigger_guard import TriggerPinError, check_trigger_pin  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db  # noqa: E402
 
 
@@ -130,6 +133,17 @@ def main(argv=None) -> int:
         log.info("Cohort voor nieuwe voorspellingen: %s (ECHT COHORT -- telt mee in het track record)", cohort)
     else:
         log.info("Cohort voor nieuwe voorspellingen: %s (telt NIET mee; zet MI_COHORT=cohort_0 op T₀ᵇ)", cohort)
+
+    # De regelset van de triggers (roadmap 1.5). Onder het echte cohort moet
+    # die exact de bevroren versie zijn; een drempel die na de klokstart
+    # verschuift start een nieuw cohort. Voor dry_run/pseudo_oos is alleen de
+    # melding relevant: zo zie je in de log met welke regels er gedraaid is.
+    try:
+        check_trigger_pin(cohort)
+    except TriggerPinError as e:
+        log.critical("%s", e)
+        return 2
+    log.info("Trigger-versie: %s", TRIGGER_VERSION)
 
     try:
         conn = init_db(args.db)
