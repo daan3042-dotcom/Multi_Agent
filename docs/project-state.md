@@ -1025,6 +1025,29 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Alpha Vantage gaf een lege `{}` voor élk endpoint (29-09) — open
+
+Na ruim 100 calls op één dag (dagelijkse runs, testruns, experimenten en de
+back-fill) begon Alpha Vantage rond 11:07 UTC voor **elk** endpoint `{}` terug te
+geven, met HTTP 200 en zonder tekst: koersen, grondstoffen en macro, ook een
+endpoint dat een uur eerder nog een volledige koers gaf. Key en plan kloppen
+(bevestigingsmail: premium, 75 calls per minuut). Het is niet gedocumenteerd
+gedrag, dus de oorzaak is niet vastgesteld; alleen Alpha Vantage kan dat zien.
+
+**Wat het verandert aan eerdere aannames.** De ontbrekende reeksen van de eerste
+testrun (cotton, wti, xlb, xli, gbp_usd) heb ik toegeschreven aan calls die
+langer dan de timeout van 15 s duurden. Een deel klopt (er zijn echte antwoorden
+van 30 s gemeten), maar een deel was mogelijk al `{}`. Een langere timeout lost een
+leeg antwoord niet op en een herhaling direct erna krijgt hetzelfde antwoord, dus
+het voorstel voor 60 s timeout plus één herhaalpoging bij de dagelijkse agents is
+**ingetrokken tot de oorzaak bekend is**.
+
+**Wat er nu is:** de back-fill meldt een leeg antwoord als zodanig ("LEEG antwoord
+({})") in plaats van "geen 'data'", en noemt bij een onbekend antwoord de velden
+die er wel waren. Een mail aan Alpha Vantage support is opgesteld. Openstaand:
+commodity-back-fill (10 maandreeksen), en of de dagelijkse run van 30-09 07:15
+weer reeksen mist. Dat laatste zie je vanzelf: de completeness-check meldt het.
+
 ### `.env` voor de handmatige scripts (29-09) — 641 tests groen
 
 `run_daily.sh` laadt `.env` (cron kent geen shell-profile), maar `backfill.py` en

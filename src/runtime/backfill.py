@@ -139,7 +139,18 @@ def _av_series(payload: dict, series_key: str):
             raise BackfillFetchError(f"Alpha Vantage: {redact_secrets(str(payload[veld]))[:300]}")
     series = payload.get(series_key)
     if not series:
-        raise BackfillFetchError(f"Alpha Vantage: geen '{series_key}' in het antwoord")
+        if not payload:
+            # Op 29-09 gaf Alpha Vantage voor ELK endpoint (koersen, grondstoffen,
+            # macro) `{}` met HTTP 200, zonder enige tekst. Dat is niet
+            # gedocumenteerd; zeg dus wat er stond in plaats van te doen alsof
+            # er een veld ontbreekt.
+            raise BackfillFetchError(
+                "Alpha Vantage gaf een LEEG antwoord ({}) met HTTP 200: geen data en geen "
+                "foutmelding. Niet gedocumenteerd; lijkt op throttling of een storing aan hun "
+                "kant. Wacht en probeer opnieuw."
+            )
+        velden = ", ".join(sorted(str(k) for k in payload)[:8])
+        raise BackfillFetchError(f"Alpha Vantage: geen '{series_key}' in het antwoord (wel: {velden})")
     return series
 
 

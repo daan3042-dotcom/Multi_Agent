@@ -283,6 +283,10 @@ cd /opt/multi_agent
     check je tier.
   - *"premium endpoint"* → dit endpoint zit niet in je plan.
   - *"api_key is invalid"* / *"invalid API call"* → verkeerde of niet-actieve key.
+  - *"LEEG antwoord ({})"* → Alpha Vantage antwoordde met HTTP 200 en niets erin, ook
+    voor endpoints die eerder werkten. Niet gedocumenteerd; gezien op 29-09 na ruim
+    100 calls op één dag. Stop met testen, wacht, en test met één call; houdt het aan,
+    mail hun support.
   - *"ReadTimeout"* / *"timed out"* → Alpha Vantage was te traag (gemeten: tot 30 s
     voor één call). Draai opnieuw; de timeout staat op 120 s.
 

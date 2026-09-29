@@ -546,3 +546,21 @@ def test_cli_tweede_run_slaat_over_en_geeft_nul(tmp_path, monkeypatch, capsys):
     uitvoer = capsys.readouterr().out
     assert uitvoer.count("overgeslagen") == 3  # de drie FX-paren
     assert "OPGESLAGEN" not in uitvoer
+
+
+def test_leeg_antwoord_wordt_als_zodanig_gemeld(monkeypatch):
+    """Op 29-09 gaf Alpha Vantage voor elk endpoint `{}` met HTTP 200. De melding
+    moet dat zeggen, in plaats van te doen alsof er een veld ontbreekt."""
+    import runtime.backfill as bf
+
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({}))
+    with pytest.raises(BackfillFetchError, match="LEEG antwoord"):
+        fetch_av_time_series_daily_full_history("XLK", "fake-key")
+
+
+def test_onbekend_antwoord_noemt_de_velden_die_er_wel_waren(monkeypatch):
+    import runtime.backfill as bf
+
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Meta Data": {}, "Iets": 1}))
+    with pytest.raises(BackfillFetchError, match="wel: Iets, Meta Data"):
+        fetch_av_time_series_daily_full_history("XLK", "fake-key")
