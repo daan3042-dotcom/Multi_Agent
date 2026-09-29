@@ -531,7 +531,9 @@ gebouwd wordt staat in deel A, niet hier.
       triggerde) — T₀-BLOKKADE.** Dit stond hier al, maar is nu kritiek
       pad: zonder versienummer is een kalibratie over een periode waarin
       een drempel verschoven is niet te interpreteren. Zie 4.2.
-- [ ] **Drempels kalibreren tegen de volledige historie (fase 0)** — hoe
+- [~] **Drempels kalibreren tegen de volledige historie (fase 0)** —
+      **[29-09] rapport gebouwd (`calibrate_triggers.py`, alleen lezen); de KEUZE van
+      de drempels is aan DD en nog niet gemaakt.** Hoe
       vaak zou elke regel gevuurd hebben? Vervangt de huidige
       illustratieve waarden. **[27-09]** Niet "≥5 jaar" maar alles wat
       de bron geeft: FRED levert 50+ jaar gratis, en vijf jaar (2021–2026)
