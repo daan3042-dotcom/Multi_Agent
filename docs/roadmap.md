@@ -1441,9 +1441,11 @@ kalibratie-deel van 5.2.
       per jaar is 5 van de 12 publicaties, en alle tien springen op dezelfde
       dag: de manager bundelt dat tot één deep-dive per dag. Severities
       ongewijzigd (koper `high`, de rest `medium`).
-      **Controle-run van v1 (29-09):** kolom `3j` staat op ~5 voor 27 van de
-      30 reeksen met historie. De rest is verklaard: currency 2,3-2,7 (doel
-      2), fed funds 2,3 (beweegt maar een paar keer per jaar), werkloosheid 2,3.
+      **Controle-run van v1 (29-09):** van de 30 reeksen met historie hebben
+      er 22 doel 5 en staan die op 3,3-6,0 in kolom `3j`. De andere 8 zijn
+      verklaard: currency (3 reeksen) 2,3-2,7 bij doel 2, fed funds 2,3 (beweegt
+      maar een paar keer per jaar), werkloosheid 2,3 (in twee domeinen), en CPI
+      en payrolls bewust ongewijzigd (0,7 en 0).
       Bij werkloosheid was het "5 per jaar" van het rapport een
       afrondingsartefact: de drempel 0,1 telde veranderingen van precies 0,1
       mee door float-ruis; de echte set (veranderingen van minstens 0,2) vuurt
