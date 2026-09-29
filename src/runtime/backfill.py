@@ -65,6 +65,7 @@ Mislukte reeksen kun je gewoon opnieuw draaien: alleen die worden opgehaald.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal
@@ -82,6 +83,15 @@ def _parse_date(raw: str) -> datetime:
     """FRED/Alpha Vantage geven allebei een kale 'YYYY-MM-DD'-datum terug
     voor een observatiepunt -- geen tijdcomponent, dus middernacht UTC."""
     return datetime.fromisoformat(raw).replace(tzinfo=timezone.utc)
+
+
+_SECRET_IN_URL = re.compile(r"(api_?key=)[^&\s)\"']+", re.IGNORECASE)
+
+
+def redact_secrets(tekst: str) -> str:
+    """Vervangt de waarde van elke `apikey=`/`api_key=`-parameter door een
+    plaatshouder. Voor foutmeldingen die een url bevatten."""
+    return _SECRET_IN_URL.sub(r"\1<verborgen>", tekst)
 
 
 class BackfillFetchError(Exception):
@@ -106,13 +116,17 @@ def _get_json(url: str, params: dict, timeout: int = 120) -> dict:
         resp.raise_for_status()
         payload = resp.json()
     except Exception as e:  # noqa: BLE001
-        raise BackfillFetchError(f"{type(e).__name__}: {e}") from e
+        # `requests` zet de VOLLEDIGE url in zijn foutmeldingen, query inclusief:
+        # "... for url: https://...&apikey=<KEY>". Zonder redactie belandt de
+        # API-key in de uitvoer van dit script, en dus in elk logbestand en elke
+        # chat waar je die uitvoer in plakt.
+        raise BackfillFetchError(f"{type(e).__name__}: {redact_secrets(str(e))}") from None
     if not isinstance(payload, dict):
         raise BackfillFetchError(f"onverwacht antwoord van de bron: {str(payload)[:200]}")
     return payload
 
 
-def _av_series(payload: dict, series_key: str) -> dict:
+def _av_series(payload: dict, series_key: str):
     """De tijdreeks uit een Alpha Vantage-antwoord, of een fout mét de tekst
     van de bron.
 
@@ -122,11 +136,30 @@ def _av_series(payload: dict, series_key: str) -> dict:
     tijdreeks, en dus stilletjes een lege reeks."""
     for veld in ("Error Message", "Information", "Note"):
         if veld in payload:
-            raise BackfillFetchError(f"Alpha Vantage: {str(payload[veld])[:300]}")
+            raise BackfillFetchError(f"Alpha Vantage: {redact_secrets(str(payload[veld]))[:300]}")
     series = payload.get(series_key)
     if not series:
         raise BackfillFetchError(f"Alpha Vantage: geen '{series_key}' in het antwoord")
     return series
+
+
+def fetch_av_commodity_full_history(function_name: str, api_key: str) -> list[dict]:
+    """Volledige maandelijkse historie voor één grondstof via Alpha Vantage
+    (WTI, BRENT, COPPER, ...), oudste of nieuwste eerst -- de volgorde doet er
+    niet toe, elke claim krijgt zijn eigen datum.
+
+    EIGEN FETCH IN PLAATS VAN `commodity_agent._fetch_commodity_data`, dat vóór
+    29-09 werd hergebruikt om een tweede fetch-helper te vermijden. Dat kostte
+    de reden: die functie geeft bij elke fout `None`, en de back-fill van 29-09
+    meldde voor alle tien grondstoffen alleen 'reden onbekend'. Bovendien heeft
+    hij een timeout van 15 s, terwijl Alpha Vantage op de VPS tot 30 s doet
+    over één call."""
+    payload = _get_json(AV_BASE_URL, {"function": function_name, "interval": "monthly", "apikey": api_key})
+    punten = _av_series(payload, "data")
+    geldig = [p for p in punten if isinstance(p, dict) and p.get("value") not in (None, ".", "")]
+    if not geldig:
+        raise BackfillFetchError(f"Alpha Vantage {function_name}: geen bruikbare waarnemingen in 'data'")
+    return [{"value": p["value"], "date": p["date"]} for p in geldig]
 
 
 def fetch_fred_full_history(series_id: str, api_key: str) -> list[dict]:
@@ -276,7 +309,7 @@ def _backfill_metric(
     atomair opslaan (één DomainOutput, één commit). `generated_at` staat op de
     oudste source_time -- zie de moduledocstring."""
     grens = now - timedelta(days=HISTORY_OLD_AFTER_DAYS)
-    bestaand = count_claims_before(conn, metric_key, grens)
+    bestaand = count_claims_before(conn, domain, metric_key, grens)
     if bestaand >= HISTORY_MIN_OLD_CLAIMS:
         return MetricOutcome(
             metric_key, "skipped", detail=f"al historie aanwezig ({bestaand} claims ouder dan {HISTORY_OLD_AFTER_DAYS} dagen)"
@@ -328,24 +361,8 @@ def backfill_currency(conn, domain: str, source_key: str, fx_pairs: dict, metric
 
 
 def backfill_commodity(conn, domain: str, source_key: str, commodities: dict, metric_specs: dict, api_key: str) -> BackfillResult:
-    """Back-fill voor commodity_agent.py -- hergebruikt die module se EIGEN
-    _fetch_commodity_data() (geeft al de volledige beschikbare historie terug,
-    precies wat deep_dive()'s voortschrijdend-gemiddelde-model ook al
-    gebruikt) in plaats van een tweede, functioneel identieke fetch-helper te
-    schrijven.
-
-    Die functie geeft bij elke fout `None`, dus hier is de REDEN niet te
-    achterhalen (limiet, premium, verkeerde key): de melding zegt dat eerlijk."""
-    from agents.commodity_agent import _fetch_commodity_data
-
-    def haal_op(function_name: str) -> list[dict]:
-        history = _fetch_commodity_data(function_name, api_key)
-        if not history:
-            raise BackfillFetchError(
-                f"Alpha Vantage {function_name}: geen data (reden onbekend -- limiet, premium of key; "
-                f"probeer de reeks los opnieuw)"
-            )
-        return history
-
-    jobs = {key: (lambda fn=fn: haal_op(fn)) for key, fn in commodities.items()}
+    """Back-fill voor commodity_agent.py -- de maandelijkse historie per
+    grondstof (10 calls), met de reden van Alpha Vantage als een call
+    mislukt."""
+    jobs = {key: (lambda fn=fn: fetch_av_commodity_full_history(fn, api_key)) for key, fn in commodities.items()}
     return _backfill_domain(conn, domain, source_key, metric_specs, jobs)

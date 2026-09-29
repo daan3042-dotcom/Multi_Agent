@@ -189,18 +189,23 @@ def test_backfill_currency_uses_fx_daily_not_exchange_rate(tmp_path, monkeypatch
     assert captured_params[0]["function"] == "FX_DAILY"
 
 
-def test_backfill_commodity_reuses_existing_historical_fetch(tmp_path, monkeypatch):
-    """commodity_agent._fetch_commodity_data() geeft al historie terug --
-    backfill_commodity() hergebruikt 'm i.p.v. een eigen fetch te schrijven."""
-    import agents.commodity_agent as commodity_agent
+def test_backfill_commodity_haalt_maandelijkse_historie_op(tmp_path, monkeypatch):
+    import runtime.backfill as bf
 
     conn = _db(tmp_path)
-    monkeypatch.setattr(
-        commodity_agent, "_fetch_commodity_data",
-        lambda function_name, api_key: [{"value": "70.00", "date": "2020-01-01"}, {"value": "72.00", "date": "2020-02-01"}],
-    )
+    captured = []
+
+    def fake_get(url, params, timeout):
+        captured.append((params, timeout))
+        return _av_json({"data": [{"value": "70.00", "date": "2020-01-01"}, {"value": "72.00", "date": "2020-02-01"}]})
+
+    monkeypatch.setattr(bf.requests, "get", fake_get)
     resultaat = backfill_commodity(conn, "commodity", "ALPHA_VANTAGE_COMMODITY:commodity", {"wti": "WTI"}, {}, "fake-key")
+
     assert resultaat.saved == 2
+    params, timeout = captured[0]
+    assert params["function"] == "WTI" and params["interval"] == "monthly"
+    assert timeout == 120, "eigen fetch met de lange back-fill-timeout, niet de 15 s van de dagelijkse agent"
 
 
 def test_backfill_saves_nothing_and_says_so_when_the_fetch_fails(tmp_path, monkeypatch):
@@ -369,18 +374,129 @@ def test_een_paar_claims_uit_de_dagelijkse_cyclus_telt_niet_als_historie(tmp_pat
     assert resultaat.outcomes[0].status == "saved"
 
 
-def test_commodity_zonder_data_is_een_fout_met_een_eerlijke_melding(tmp_path, monkeypatch):
-    """`_fetch_commodity_data` geeft bij elke fout None, dus de reden is hier
-    niet te achterhalen. De melding zegt dat, in plaats van iets te verzinnen."""
-    import agents.commodity_agent as commodity_agent
+@pytest.mark.parametrize("veld", ["Note", "Information"])
+def test_commodity_meldt_de_werkelijke_reden_van_alpha_vantage(tmp_path, monkeypatch, veld):
+    """Regressiegeval van 29-09: alle tien grondstoffen mislukten en de melding
+    zei alleen 'reden onbekend', omdat de back-fill de fetch van de dagelijkse
+    agent hergebruikte en die elke fout inslikt. Nu staat de tekst van Alpha
+    Vantage in de uitvoer."""
+    import runtime.backfill as bf
 
     conn = _db(tmp_path)
-    monkeypatch.setattr(commodity_agent, "_fetch_commodity_data", lambda function_name, api_key: None)
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({veld: "premium endpoint (test)"}))
 
     resultaat = backfill_commodity(conn, "commodity", "AV:commodity", {"wti": "WTI"}, {}, "fake-key")
 
     assert not resultaat.is_complete
-    assert "reden onbekend" in resultaat.failed[0].detail
+    assert "premium endpoint (test)" in resultaat.failed[0].detail
+
+
+def test_commodity_antwoord_zonder_data_is_een_fout(tmp_path, monkeypatch):
+    import runtime.backfill as bf
+
+    conn = _db(tmp_path)
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"name": "WTI", "data": []}))
+    resultaat = backfill_commodity(conn, "commodity", "AV:commodity", {"wti": "WTI"}, {}, "fake-key")
+    assert not resultaat.is_complete
+
+
+# --------------------------------------------------------------------------
+# De API-key mag nooit in een foutmelding staan (29-09)
+#
+# `requests` zet de volledige url, query inclusief, in zijn foutmeldingen. Zonder
+# redactie staat de key in de uitvoer van het script, en dus in elk logbestand en
+# elke chat waar die uitvoer in geplakt wordt.
+# --------------------------------------------------------------------------
+
+
+def test_netwerkfout_lekt_de_api_key_niet(monkeypatch):
+    import runtime.backfill as bf
+
+    def stuk(*a, **k):
+        raise ConnectionError(
+            "HTTPSConnectionPool(host='www.alphavantage.co', port=443): Max retries exceeded "
+            "with url: /query?function=WTI&interval=monthly&apikey=GEHEIME_KEY_123 (Caused by ...)"
+        )
+
+    monkeypatch.setattr(bf.requests, "get", stuk)
+    with pytest.raises(BackfillFetchError) as e:
+        fetch_av_time_series_daily_full_history("XLK", "GEHEIME_KEY_123")
+
+    assert "GEHEIME_KEY_123" not in str(e.value)
+    assert "<verborgen>" in str(e.value)
+
+
+def test_http_fout_lekt_de_api_key_niet(monkeypatch):
+    """`raise_for_status()` zet de url met de key in de foutmelding."""
+    import requests
+    import runtime.backfill as bf
+
+    def antwoord(url, params, timeout):
+        resp = requests.models.Response()
+        resp.status_code = 429
+        resp.reason = "Too Many Requests"
+        resp.url = "https://www.alphavantage.co/query?function=X&apikey=GEHEIME_KEY_123"
+        return resp
+
+    monkeypatch.setattr(bf.requests, "get", antwoord)
+    with pytest.raises(BackfillFetchError) as e:
+        fetch_av_time_series_daily_full_history("XLK", "GEHEIME_KEY_123")
+
+    assert "429" in str(e.value)
+    assert "GEHEIME_KEY_123" not in str(e.value)
+
+
+def test_de_key_staat_ook_niet_in_de_cli_uitvoer(tmp_path, monkeypatch, capsys):
+    """Het echte pad: wat de gebruiker op zijn scherm ziet en hier plakt."""
+    import runtime.backfill as bf
+
+    monkeypatch.setenv("ALPHAVANTAGE_API_KEY", "GEHEIME_KEY_123")
+
+    def stuk(*a, **k):
+        raise ConnectionError("Max retries exceeded with url: /query?function=FX_DAILY&apikey=GEHEIME_KEY_123")
+
+    monkeypatch.setattr(bf.requests, "get", stuk)
+    _cli().main(["--db", str(tmp_path / "t.db"), "--domain", "currency"])
+
+    assert "GEHEIME_KEY_123" not in capsys.readouterr().out
+
+
+def test_redactie_pakt_alle_varianten():
+    from runtime.backfill import redact_secrets
+
+    for tekst in (
+        "url: https://x/query?function=A&apikey=SECRET&z=1",
+        "url: https://x/query?api_key=SECRET",
+        "url: /query?function=A&APIKEY=SECRET (Caused by",
+        "url: 'https://x/query?apikey=SECRET'",
+    ):
+        assert "SECRET" not in redact_secrets(tekst)
+
+
+# --------------------------------------------------------------------------
+# Overslaan per (domein, reeks), niet per reeks alleen
+# --------------------------------------------------------------------------
+
+
+def test_reeks_in_een_ander_domein_telt_niet_als_historie(tmp_path, monkeypatch):
+    """`unemployment_rate` staat bij monetary_policy én economic, en elk domein
+    leest zijn EIGEN claims voor de delta-trigger. Historie in het ene domein
+    mag het andere niet laten overslaan."""
+    import runtime.backfill as bf
+
+    conn = _db(tmp_path)
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"observations": [
+        {"value": str(4.0 + i / 100), "date": f"{1990 + i // 12}-{i % 12 + 1:02d}-01"} for i in range(60)
+    ]}))
+    reeks = {"unemployment_rate": "UNRATE"}
+
+    eerste = backfill_fred_domain(conn, "economic", "FRED:economic", reeks, {}, "fake-key")
+    tweede = backfill_fred_domain(conn, "monetary_policy", "FRED:monetary_policy", reeks, {}, "fake-key")
+
+    assert eerste.outcomes[0].status == "saved"
+    assert tweede.outcomes[0].status == "saved", "monetary_policy had nog geen eigen historie"
+    assert len(load_latest_claims(conn, "monetary_policy", metric_key="unemployment_rate")) == 60
+    assert len(load_latest_claims(conn, "economic", metric_key="unemployment_rate")) == 60
 
 
 # --------------------------------------------------------------------------
