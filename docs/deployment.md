@@ -371,8 +371,10 @@ Drie tabellen:
    plus een kolom `3j,rel` met dezelfde drempel uitgedrukt als percentage van het huidige
    niveau. Verschillen `3j` en `3j,rel` sterk, dan schuift een vaste, absolute drempel niet
    mee met het niveau. Dat is het geval bij koersen (een ETF stond in 1999 op ~$25, nu op
-   ~$250) en niet bij rentes en spreads.
-2. **Welke drempel hoort bij 1%, 2% en 5% van de waarnemingen** (laatste 3 jaar).
+   ~$250). De gecorrigeerde kolom staat alleen bij reeksen die niet rond nul bewegen; bij een
+   spread of index die door nul gaat (10Y-2Y, NFCI) zegt een percentage niets.
+2. **Welke drempel hoort bij 2, 5 en 10 triggers per jaar** (laatste 3 jaar). Per jaar en niet als
+   percentage van de dagen: 2% is ~5 triggers per jaar bij een dagreeks maar ~0,24 bij een maandreeks.
 3. **Het verwachte aantal triggers per jaar** per domein bij de huidige drempels.
 
 De kolom `oordeel` noemt wat opvalt: `vuurt nooit`, `vuurt vaak`, `wisselt sterk per
