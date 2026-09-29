@@ -982,6 +982,49 @@ Met het oude gedrag terug falen drie tests.
 Alpha Vantage-call 28 seconden. De dagelijkse agents hebben nog 15 s; of dat te krap
 is, hangt van de latentiemeting op de VPS af (open).
 
+### De eerste echte back-fill (29-09) — 632 tests groen
+
+Gedraaid op de VPS met de betaalde Alpha Vantage-key. Resultaat, per domein:
+
+| Domein | Uitkomst |
+|---|---|
+| monetary_policy | 4 nieuwe reeksen gevuld (DGS2 12.577, T5YIE 5.939, T10YIE 5.939, WALCL 1.241 claims); de andere 4 overgeslagen |
+| financial, economic | alles al aanwezig, overgeslagen |
+| currency | 3 × 5.000 claims |
+| sector | 12 reeksen, 72.508 claims (9 ETF's sinds 1999, XLRE sinds 2015, XLC sinds 2018, SPY) |
+| commodity | **10 van 10 mislukt** (zie onder) |
+
+Het overslaan per reeks werkte zoals bedoeld: de FRED-domeinen zijn niet dubbel
+gevuld, en alleen de vier nieuwe monetary-reeksen zijn opgehaald.
+
+**Commodity mislukte, en de melding zei niet waarom.** De back-fill hergebruikte
+`commodity_agent._fetch_commodity_data`, en die geeft bij elke fout `None`. De
+melding was 'reden onbekend'. Alle tien faalden binnen 2 seconden, dus het was geen
+timeout. Nu heeft de back-fill een eigen fetch (`fetch_av_commodity_full_history`)
+met de tekst van Alpha Vantage in de uitvoer en de lange timeout. De werkelijke
+oorzaak is nog niet vastgesteld: eerst opnieuw draaien en de melding lezen.
+
+**Een beveiligingsprobleem dat ik zelf had geïntroduceerd, en vond vóór het
+gebeurde:** `requests` zet de VOLLEDIGE url, query inclusief, in zijn foutmeldingen
+(`... for url: https://...&apikey=<KEY>`). Mijn `BackfillFetchError` gaf die tekst
+ongefilterd door, dus bij een netwerk- of HTTP-fout had de uitvoer van het script
+je API-key bevat, en daarmee elk log en elke chat waar die uitvoer in geplakt werd.
+Nu vervangt `redact_secrets()` elke `apikey=`/`api_key=`-waarde door `<verborgen>`.
+Drie tests (netwerkfout, HTTP-fout, de echte CLI-uitvoer) falen zonder de redactie.
+
+**Overslaan is nu per (domein, reeks).** `unemployment_rate` staat bij zowel
+monetary_policy als economic, en elk domein leest zijn eigen claims voor de
+delta-trigger. Alleen op reeks kijken zou een domein zonder historie overslaan
+omdat het andere er wél een heeft.
+
+**Een gegeven om te kennen: `high_yield_credit_spread` heeft maar 768
+waarnemingen**, ongeveer precies drie jaar aan werkdagen. Alle andere dagreeksen
+hebben tientallen jaren. Ik heb niet kunnen verifiëren waarom; het lijkt een
+begrenzing van de bron (FRED beperkt de ICE BofA-reeksen tot een recent venster),
+maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks ziet
+alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
+voor deze reeks niet te halen via FRED. **Checkpoint 4.**
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
