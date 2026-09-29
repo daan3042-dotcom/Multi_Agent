@@ -1254,10 +1254,17 @@ def list_domain_metric_keys(conn: sqlite3.Connection, domain: str) -> list[str]:
     return [r[0] for r in rows]
 
 
-def count_claims_before(conn: sqlite3.Connection, metric_key: str, cutoff: datetime) -> int:
-    """Aantal claims voor deze reeks met een `source_time` vóór `cutoff`.
-    Gebruikt door de back-fill om te zien of een reeks al historie heeft."""
+def count_claims_before(conn: sqlite3.Connection, domain: str, metric_key: str, cutoff: datetime) -> int:
+    """Aantal claims voor deze reeks IN DIT DOMEIN met een `source_time` vóór
+    `cutoff`. Gebruikt door de back-fill om te zien of een reeks al historie
+    heeft.
+
+    Per domein en niet alleen per reeks: `unemployment_rate` staat zowel bij
+    monetary_policy als bij economic, en elk domein leest zijn EIGEN claims
+    voor de delta-trigger. Alleen op metric_key kijken zou een domein zonder
+    historie overslaan omdat het andere domein er wel een heeft."""
     return conn.execute(
-        "SELECT COUNT(*) FROM claims WHERE metric_key = ? AND source_time IS NOT NULL AND source_time < ?",
-        (metric_key, cutoff.isoformat()),
+        "SELECT COUNT(*) FROM claims WHERE domain = ? AND metric_key = ? "
+        "AND source_time IS NOT NULL AND source_time < ?",
+        (domain, metric_key, cutoff.isoformat()),
     ).fetchone()[0]

@@ -276,8 +276,12 @@ cd /opt/multi_agent
     check je tier.
   - *"premium endpoint"* → dit endpoint zit niet in je plan.
   - *"api_key is invalid"* / *"invalid API call"* → verkeerde of niet-actieve key.
-  - *"reden onbekend"* (alleen commodity) → dat endpoint geeft de reden niet
-    door; probeer het los opnieuw.
+  - *"ReadTimeout"* / *"timed out"* → Alpha Vantage was te traag (gemeten: tot 30 s
+    voor één call). Draai opnieuw; de timeout staat op 120 s.
+
+**De uitvoer bevat nooit je API-key.** `requests` zet de volledige url, query
+inclusief, in zijn foutmeldingen; het script vervangt `apikey=...` door
+`apikey=<verborgen>` voordat het iets toont.
 
 **Exit code 0** betekent: elke gevraagde reeks heeft nu historie. **Exit code 1**
 betekent: minstens één reeks is niet gevuld, en de laatste regels noemen welke.
