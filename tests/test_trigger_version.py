@@ -35,6 +35,7 @@ import pytest
 import contract.trigger_version as tv
 import runtime.trigger_guard as guard
 from agents import sector_agent
+from calibration.trigger_calibration import metric_registry
 from contract.prediction import HorizonKind, Prediction, PredictionKind
 from contract.resolution import ResolutionMethod
 from storage.schema import (
@@ -387,3 +388,37 @@ def test_run_daily_draait_gewoon_onder_dry_run_zonder_freeze(tmp_path, monkeypat
 
     monkeypatch.setattr(daily, "default_agents", lambda: [])
     assert _run_daily_main().main(["--db", str(tmp_path / "t.db")]) == 0
+
+
+# --------------------------------------------------------------------------
+# Consistentie van de v1-set
+# --------------------------------------------------------------------------
+
+
+def test_dezelfde_reeks_heeft_in_elk_domein_dezelfde_drempel():
+    """Regressie op een echte fout uit v0: `unemployment_rate` stond bij
+    monetary op 0,3 en bij economic op 0,2 voor dezelfde publicatie, waardoor
+    één UNRATE-print in het ene domein wel en in het andere geen trigger gaf
+    (en de ene regel in drie jaar nooit vuurde)."""
+    per_reeks: dict[str, set[float]] = {}
+    for dom, key, spec in metric_registry():
+        per_reeks.setdefault(key, set()).add(spec.tolerance)
+
+    afwijkend = {key: waarden for key, waarden in per_reeks.items() if len(waarden) > 1}
+    assert not afwijkend, f"zelfde reeks, verschillende drempels: {afwijkend}"
+
+
+def test_geen_drempel_ligt_op_een_stap_van_een_stapreeks():
+    """Reeksen die in stapjes bewegen krijgen een drempel HALVERWEGE twee
+    stapjes. Een drempel precies op een stap is een loterij: 4,3 min 4,1 is in
+    floats 0,2000000000000002 en vuurt dan wel of niet bij een drempel van 0,2."""
+    stap = {"unemployment_rate": 0.1, "inflation_expectations_5y": 0.01,
+            "inflation_expectations_10y": 0.01, "high_yield_credit_spread": 0.01,
+            "yield_curve_10y_2y": 0.01, "financial_conditions_index": 0.001}
+    for dom, key, spec in metric_registry():
+        if key not in stap:
+            continue
+        aantal_stappen = spec.tolerance / stap[key]
+        assert abs(aantal_stappen - round(aantal_stappen)) > 0.01, (
+            f"{dom}.{key}: tolerance {spec.tolerance} ligt op een stap van {stap[key]}"
+        )

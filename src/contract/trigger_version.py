@@ -41,13 +41,14 @@ beloven.
 
 from __future__ import annotations
 
-TRIGGER_VERSION = "v0"
+TRIGGER_VERSION = "v1"
 
 # versie -> vingerafdruk van de regels zoals die bij die versie golden.
 # Alleen de vingerafdruk van TRIGGER_VERSION wordt bewaakt; de oudere blijven
 # staan als vastgelegde historie.
 TRIGGER_FINGERPRINTS: dict[str, str] = {
     "v0": "d075e95a2b069acf",
+    "v1": "6d38e5eadaa613b3",
 }
 
 # De versie die bij de freeze vóór T₀ᵇ is bevestigd (CLAUDE.md, checkpoint 5).

@@ -306,7 +306,11 @@ def test_calibrate_all_gebruikt_de_echte_tolerance_en_markeert_wat_zonder_histor
     resultaten = {(r.domain, r.metric_key): r for r in calibrate_all(conn, NU)}
     tien_jaar = resultaten[("monetary_policy", "10y_treasury_yield")]
 
-    assert tien_jaar.tolerance == 0.25
+    # De echte tolerance uit de agent, niet een getal dat bij elke
+    # kalibratie moet meeveranderen: dit is wat de test bewaakt.
+    from agents import monetary_policy_agent
+
+    assert tien_jaar.tolerance == monetary_policy_agent.METRIC_SPECS["10y_treasury_yield"].tolerance
     assert tien_jaar.n_pairs == 399
     assert resultaten[("currency", "eur_usd")].flags == ("geen historie",)
 

@@ -299,22 +299,38 @@ de vorige observatie (geen vaste absolute drempel, zie hieronder bij
 
 | Metric | Afwijking die triggert | Severity |
 |---|---|---|
-| Fed funds rate | > 0,25 procentpunt | high |
-| 10-jaars Treasury yield | > 0,25 procentpunt | medium |
+| Fed funds rate | > 0,15 procentpunt | high |
+| 10-jaars Treasury yield | > 0,14 procentpunt | medium |
 | CPI-index | > 2,0 punten | medium |
-| Werkloosheidspercentage | > 0,3 procentpunt | high |
-| 2-jaars Treasury yield | > 0,25 procentpunt | medium |
-| 5-jaars break-even inflatie | > 0,10 procentpunt | medium |
-| 10-jaars break-even inflatie | > 0,10 procentpunt | medium |
-| Fed-balanstotaal | > 25.000 (miljoen USD, ≈ $25 mrd) | medium |
+| Werkloosheidspercentage | > 0,15 procentpunt | high |
+| 2-jaars Treasury yield | > 0,14 procentpunt | medium |
+| 5-jaars break-even inflatie | > 0,085 procentpunt | medium |
+| 10-jaars break-even inflatie | > 0,055 procentpunt | medium |
+| Fed-balanstotaal | > 33.000 (miljoen USD, ≈ $33 mrd) | medium |
 
-De break-even-drempels staan bewust lager (0,10) dan de rente-drempels:
-inflatieverwachtingen bewegen in honderdsten van procentpunten, dus 0,25
-zou daar vrijwel nooit vuren. **De WALCL-eenheid is op 28-09-2026
-geverifieerd** tegen de live API: de eerste run op de VPS leverde
-6.747.704, dus miljoenen USD (~$6,75 biljoen). Bij diezelfde meting ging
-de drempel van 100.000 naar 25.000 — $100 miljard in een week komt alleen
-bij crisis-QE voor, dus de oude waarde zou nooit gevuurd hebben.
+**Deze drempels zijn trigger-versie v1 (29-09-2026)**: gekozen met het
+kalibratierapport (`calibrate_triggers.py`) op de laatste drie jaar, met als
+doel ~5 triggers per jaar per reeks. Onder v0 stonden ze op 0,25 /
+0,25 / 2,0 / 0,3 / 0,25 / 0,10 / 0,10 / 25.000, en vuurden vijf ervan in
+drie jaar nooit. Twee uitzonderingen op "5 per jaar", met reden:
+
+- **Reeksen die in stapjes bewegen** (fed funds, werkloosheid,
+  break-evens) krijgen een drempel *halverwege twee stapjes*. Een
+  drempel precies op een stap (0,2 bij werkloosheid) is een loterij: 4,3
+  min 4,1 geeft in floats 0,2000000000000002 en vuurt dan soms wel en soms
+  niet. 0,15 vuurt bij een verandering van minstens 0,2 punt. Fed funds
+  beweegt maar een paar keer per jaar, dus daar is 5 per jaar niet te
+  halen; 0,15 is ~2 per jaar.
+- **CPI blijft 2,0.** De CPI-index heeft een groeitrend; "5 per jaar" zou
+  ongeveer de gewone maandgroei worden (~0,9 punt) en dus bij elke maand
+  met bovengemiddelde inflatie vuren, wat geen verrassing is. Een goede
+  regel vergelijkt met trend of verwachting; dat is een wijziging in de
+  trigger-engine en staat als open punt in `docs/roadmap.md`.
+
+De break-even-drempels staan bewust lager dan de rente-drempels:
+inflatieverwachtingen bewegen in honderdsten van procentpunten.
+**De WALCL-eenheid is op 28-09-2026 geverifieerd** tegen de live API: de
+eerste run op de VPS leverde 6.747.704, dus miljoenen USD (~$6,75 biljoen).
 
 **Waar de deep-dive over gaat:** duidt wat de cijfers betekenen in hun
 macro-context — bijv. een verkrappend of verruimend beleidssignaal, of een
@@ -360,9 +376,15 @@ verse data nodig dan macro-reeksen):
 
 | Metric | Afwijking die triggert | Severity |
 |---|---|---|
-| EUR/USD | > 0,01 | medium |
-| USD/JPY | > 1,0 | medium |
-| GBP/USD | > 0,01 | medium |
+| EUR/USD | > 0,016 | medium |
+| USD/JPY | > 3,0 | medium |
+| GBP/USD | > 0,016 | medium |
+
+**Trigger-versie v1 (29-09-2026): ~2 triggers per jaar per paar.** Currency
+is de controlegroep, niet de agent waar de meeste deep-dives van gewenst
+zijn. Voor v1 stonden de drempels op 0,01 / 1,0 / 0,01, en usd_jpy vuurde
+toen op 22% van de dagen (~57 keer per jaar): een normale dag, geen
+signaal. Currency gaf daarmee de helft van alle triggers van het systeem.
 
 **Waar de deep-dive over gaat:** duidt wat een significante beweging
 betekent, en mag een mogelijk verband met monetair beleid benoemen —
@@ -436,10 +458,18 @@ agent hierboven — zie die sectie voor waarom.
 
 | Metric | Afwijking die triggert | Severity |
 |---|---|---|
-| Financial Conditions Index | > 0,1 punt | high |
-| High-yield credit spread | > 0,5 procentpunt | high |
-| VIX | > 5 punten | medium |
-| 10Y-2Y yield curve | > 0,15 procentpunt | medium |
+| Financial Conditions Index | > 0,0125 punt | high |
+| High-yield credit spread | > 0,205 procentpunt | high |
+| VIX | > 4,805 punten | medium |
+| 10Y-2Y yield curve | > 0,105 procentpunt | medium |
+
+**Trigger-versie v1 (29-09-2026): ~5 per jaar per reeks.** De NFCI-drempel
+was 0,1 terwijl een uitzonderlijke wekelijkse beweging ~0,018 is: de
+regel vuurde in drie jaar nooit, dus de agent zou ook in een echte
+stressperiode gezwegen hebben. Zelfde voor de rentecurve (0,15 tegen 0,11).
+De HY-spread heeft maar ~3 jaar historie (waarschijnlijk een
+licentiebeperking van FRED op de ICE-data, niet geverifieerd) en is daarom
+voorlopig.
 
 **Waar de deep-dive over gaat:** duidt wat de cijfers betekenen voor
 marktstress/liquiditeit — bijv. verkrappende financiële condities of een
@@ -484,10 +514,14 @@ een weekend + feestdag):
 | XLC | Communication Services |
 
 **Wanneer het triggert:** op de RUWE PRIJS van elke ETF (zelfde
-delta-mechanisme als de andere agents), tolerances per ETF ruwweg
-gekalibreerd op ~3% van een typisch prijsniveau (ETF's hebben sterk
-verschillende prijsniveaus — XLK rond de $200, XLRE rond de $40 — een
-uniforme dollartolerantie zou niet kloppen). Belangrijker voorbehoud dan
+delta-mechanisme als de andere agents), tolerances per ETF, sinds
+trigger-versie v1 (29-09-2026) gekozen op ~5 triggers per jaar over de
+laatste drie jaar (XLK 8,9 · XLF 1,2 · XLE 2,6 · XLV 3,5 · XLY 6,2 · XLP 1,6 ·
+XLI 3,9 · XLB 2,0 · XLU 1,8 · XLRE 1,0 · XLC 2,9 · SPY 13,4 dollar). ETF's
+hebben sterk verschillende prijsniveaus — XLK rond de $200, XLRE rond de $40 —
+een uniforme dollartolerantie zou niet kloppen. De elf sectoren bewegen
+samen: één schokdag geeft snel meerdere triggers tegelijk, die de manager
+bundelt. Belangrijker voorbehoud dan
 bij de andere agents: een vast dollarbedrag veroudert sneller dan bijv.
 een rentepercentage, omdat ETF-prijsniveaus over maanden kunnen wegdriften
 — een goede kandidaat voor jouw eigen latere finetuning.
@@ -595,9 +629,19 @@ zie `docs/roadmap.md` deel A, "De agents van cohort 0".
 
 | Metric | Afwijking die triggert | Severity |
 |---|---|---|
-| Wekelijkse WW-aanvragen | > 25.000 aanvragen | medium |
-| Werkloosheidspercentage | > 0,2 procentpunt | high |
+| Wekelijkse WW-aanvragen | > 16.000 aanvragen | medium |
+| Werkloosheidspercentage | > 0,15 procentpunt | high |
 | Banen buiten de landbouw | > 250 (duizend) | high |
+
+**Trigger-versie v1 (29-09-2026).** WW-aanvragen ~5 per jaar (was 25.000,
+~1 per jaar); werkloosheid gelijkgetrokken met de monetary agent (0,15, zie
+daar). **PAYEMS blijft 250, bewust niet gekalibreerd:** het is een niveau met
+groeitrend, dus "5 per jaar" zou 130 duizend worden, ongeveer de gewone
+maandgroei. De regel vuurt daardoor in drie jaar nooit; een trigger die met
+trend of verwachting vergelijkt is een wijziging in de trigger-engine en
+staat als open punt in `docs/roadmap.md`. De economic agent heeft dus
+voorlopig maar twee levende triggers; de wekelijkse voorspelronde draait
+onafhankelijk daarvan.
 
 PAYEMS is een **niveau** in duizenden personen, dus het verschil tussen
 twee waarnemingen ís de maandelijkse banengroei. Een normale maand is +100
@@ -641,15 +685,19 @@ een vastgelegde grens, geen vergeten reeks.
 kopieerfout: de monetary agent leest werkloosheid als input voor de
 beleidsreactie (dual mandate), deze agent schat er de toestand
 `labor_tightness` uit. Gevolg dat je moet kennen: bij een
-werkloosheidscijfer dat beide drempels haalt vuren er **twee** triggers en
+werkloosheidscijfer dat de drempel haalt vuren er (sinds v1 hebben beide
+agents dezelfde drempel) altijd **twee** triggers en
 kunnen er twee deep-dives volgen over dezelfde publicatie, elk met een
 andere invalshoek. Of dat wenselijk is, staat als open vraag in
 `docs/project-state.md`.
 
 ## Belangrijk voorbehoud, voor alle zes agents
 
-Alle tolerances in de tabellen hierboven zijn **illustratieve
-plaatshouders** — geen door DD gevalideerde drempels. Welk absoluut niveau
-of welke afwijking "significant genoeg" is, staat bewust nog open (zie
-`docs/roadmap.md` sectie H). Pas ze aan zodra daar een onderbouwd antwoord
-op is.
+De tolerances in de tabellen hierboven zijn sinds **29-09-2026
+trigger-versie v1**: gekozen met het kalibratierapport en niet langer
+plaatshouders, behalve **commodity** (geen historie, blijft v0-waarden tot de
+back-fill werkt) en de hoogste onzekerheid bij de HY-spread (3 jaar data).
+Elke wijziging van een drempel, ouderdomsgrens of trigger-gedrag verandert de
+vingerafdruk in `runtime/trigger_guard.py` en laat een test falen totdat
+`TRIGGER_VERSION` omhoog gaat (`contract/trigger_version.py`). Na T₀ᵇ start
+zo'n wijziging een nieuw cohort.
