@@ -128,7 +128,7 @@ class Unresolvable(Exception):
     gevuld wordt. Opnieuw proberen heeft geen zin."""
 
 
-def _eerste_prints(observations: list[Observation]) -> list[Observation]:
+def eerste_prints(observations: list[Observation]) -> list[Observation]:
     """Per `source_time` de waarneming die wij als eerste zagen, oplopend
     gesorteerd op periode. Dit IS de vintage-regel; elke functie hieronder
     begint hiermee."""
@@ -153,7 +153,7 @@ def level_at_or_after(observations: list[Observation], resolves_at: datetime) ->
 
     Dat is precies het soort fout dat nergens zichtbaar is -- de scores
     komen binnen, ze zijn alleen van de verkeerde dag."""
-    prints = _eerste_prints(observations)
+    prints = eerste_prints(observations)
     if not prints:
         raise NotYetResolvable("geen enkele waarneming voor deze reeks")
     doeldatum = resolves_at.date()
@@ -176,7 +176,7 @@ def nth_release(observations: list[Observation], created_at: datetime, n: int) -
     de telling laten verschuiven."""
     if n <= 0:
         raise Unresolvable(f"horizon_n moet positief zijn, was {n}")
-    prints = _eerste_prints(observations)
+    prints = eerste_prints(observations)
     if not prints:
         raise NotYetResolvable("geen enkele waarneming voor deze reeks")
 
@@ -216,8 +216,8 @@ def relative_return(
     de ETF een dag mist die SPY wel heeft -- dan zit er marktbeweging in
     het verschil die niets met rotatie te maken heeft. Dan meet je ruis en
     noemt het relatieve sterkte."""
-    reeks = {o.source_time: o for o in _eerste_prints(observations)}
-    bench = {o.source_time: o for o in _eerste_prints(benchmark)}
+    reeks = {o.source_time: o for o in eerste_prints(observations)}
+    bench = {o.source_time: o for o in eerste_prints(benchmark)}
     if not reeks:
         raise NotYetResolvable("geen enkele waarneming voor deze reeks")
     if not bench:
@@ -304,7 +304,7 @@ def direction_after_fomc(
         )
     vergadering = komende[n - 1]
 
-    prints = _eerste_prints(observations)
+    prints = eerste_prints(observations)
     bij_voorspellen = [o for o in prints if o.first_seen <= created_at]
     if not bij_voorspellen:
         raise Unresolvable(

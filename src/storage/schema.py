@@ -801,8 +801,10 @@ def archive_qc_case(conn: sqlite3.Connection, case_id: int, now: datetime) -> No
 # (4.5), zodat het resolveren de voorspelling zelf nooit aanraakt.
 
 
-def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
-    """Slaat één voorspelling op en geeft zijn id terug. De vormcheck is al
+def _insert_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
+    """De insert zonder commit -- zie save_predictions_with_run().
+
+    Slaat één voorspelling op en geeft zijn id terug. De vormcheck is al
     gebeurd bij constructie (contract/prediction.py::Prediction.__post_init__);
     het schema herhaalt dezelfde eisen als CHECK-constraints, zodat een bug
     in het contract niet stilzwijgend ongeldige data oplevert."""
@@ -832,8 +834,54 @@ def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
             prediction.resolution_method.value, prediction.benchmark_metric_key,
         ),
     )
-    conn.commit()
     return cur.lastrowid
+
+
+def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
+    """Slaat één voorspelling op en commit meteen. Voor losse voorspellingen
+    (menselijke invoer, 4.8); een RONDE hoort `save_predictions_with_run()`
+    te gebruiken, zodat hij niet half kan slagen."""
+    prediction_id = _insert_prediction(conn, prediction)
+    conn.commit()
+    return prediction_id
+
+
+def save_predictions_with_run(
+    conn: sqlite3.Connection,
+    predictions: list[Prediction] | tuple[Prediction, ...],
+    run_domain: str,
+    run_at: datetime,
+    success: bool,
+    event_id: str | None = None,
+    error: str | None = None,
+) -> list[int]:
+    """Alle voorspellingen van een ronde PLUS de agent_runs-regel in één
+    transactie: alles of niets.
+
+    WAAROM. Vóór dit bestond bewaarde de forecast-ronde elke voorspelling
+    met een eigen commit en schreef daarna pas de agent_runs-regel. Crasht
+    het proces ertussen (of faalt die laatste insert), dan staat de ronde
+    niet als geslaagd geregistreerd terwijl de voorspellingen er wél staan,
+    en levert de herhaling van morgen dezelfde voorspellingen een tweede
+    keer op. In een track record is dat geen ruis: de week telt dubbel mee
+    in kalibratie en skill-posterior, en het is achteraf niet te zien welke
+    van de twee 'echt' was. Zelfde faalpatroon en zelfde oplossing als
+    `save_output_with_run()` voor claims.
+
+    Een dubbele succes-run voor dezelfde `event_id` (de partial unique
+    index) laat de HELE transactie terugrollen, voorspellingen inbegrepen --
+    precies wat je wilt bij twee gelijktijdige runs."""
+    try:
+        ids = [_insert_prediction(conn, p) for p in predictions]
+        _insert_agent_run(
+            conn, run_domain, "forecast", run_at, success,
+            trigger_count=len(predictions), error=error, event_id=event_id,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return ids
 
 
 def _row_to_prediction(row: tuple) -> Prediction:

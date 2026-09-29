@@ -148,6 +148,16 @@ def build_notification(result, health: SystemHealthReport | None) -> Notificatio
         lines.append("Forecast-ronde met problemen (de week is pas verloren na zondag):")
         lines.extend(f"  - {i}" for i in forecast_issues)
 
+    baseline_issues = list(getattr(result, "baseline_issues", []) or [])
+    if baseline_issues:
+        # Een baseline die ontbreekt is een agent zonder meetlat: die week is
+        # niet te scoren tegen 'het blijft zoals het is', en dat is achteraf
+        # niet te vullen. Meestal is de oorzaak een onvolledige back-fill --
+        # dan is dit ook de enige plek waar dat zichtbaar wordt.
+        escalate("warning")
+        lines.append("Baseline-ronde met problemen (agents worden die week met niets vergeleken):")
+        lines.extend(f"  - {i}" for i in baseline_issues)
+
     resolver = getattr(result, "resolver", None)
     if resolver is not None and resolver.has_problems:
         # Een onafwikkelbare voorspelling is een voorspelling die nooit

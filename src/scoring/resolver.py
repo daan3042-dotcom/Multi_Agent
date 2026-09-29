@@ -98,7 +98,7 @@ class ResolverResult:
         )
 
 
-def _observations(conn, metric_key: str) -> list[Observation]:
+def observations_for(conn, metric_key: str) -> list[Observation]:
     return [
         Observation(
             source_time=datetime.fromisoformat(source_time),
@@ -117,7 +117,7 @@ def resolve_one(conn, prediction: Prediction) -> Resolution:
     Losse functie zodat hij zonder database-schrijfacties te testen is, en
     zodat de back-fill hem straks kan hergebruiken voor de pseudo-OOS-run
     (4.4)."""
-    obs = _observations(conn, prediction.target_metric_key)
+    obs = observations_for(conn, prediction.target_metric_key)
     methode = prediction.resolution_method
 
     if methode is ResolutionMethod.LEVEL_AT_OR_AFTER:
@@ -131,7 +131,7 @@ def resolve_one(conn, prediction: Prediction) -> Resolution:
             raise Unresolvable("relatief rendement zonder benchmark_metric_key")
         return relative_return(
             obs,
-            _observations(conn, prediction.benchmark_metric_key),
+            observations_for(conn, prediction.benchmark_metric_key),
             prediction.created_at,
             prediction.resolves_at,
         )

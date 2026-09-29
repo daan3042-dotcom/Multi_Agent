@@ -251,3 +251,25 @@ def test_binair_doel_zonder_event_rule_wordt_geweigerd():
             cadence=ReleaseCadence.FOMC, resolution_rule="regel",
             resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         )
+
+
+def test_mislukte_run_regel_rolt_de_voorspellingen_terug(tmp_path, monkeypatch):
+    """Regressiegeval (29-09): voorspellingen en run-regel zitten in ÉÉN
+    transactie. Vóór die fix bewaarde de ronde elke voorspelling met een eigen
+    commit en schreef daarna pas de agent_runs-regel. Crasht het ertussen,
+    dan staat de ronde niet als geslaagd geregistreerd terwijl de
+    voorspellingen er wél staan -- de herhaling van morgen schrijft ze een
+    tweede keer, en de week telt dubbel mee in het track record."""
+    import storage.schema as schema
+
+    conn = init_db(str(tmp_path / "t.db"))
+
+    def stuk(*a, **kw):
+        raise RuntimeError("schijf vol")
+
+    monkeypatch.setattr(schema, "_insert_agent_run", stuk)
+
+    with pytest.raises(RuntimeError):
+        _ronde(conn, _volledig_antwoord(), event_id="2026-W41")
+
+    assert list_predictions(conn) == []

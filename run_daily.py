@@ -149,6 +149,11 @@ def main(argv=None) -> int:
         log.info(result.resolver.summary())
         for fout in result.resolver.errors:
             log.error("Resolver-fout: %s", fout)
+    if result.baseline_results:
+        aantal = sum(len(r.predictions) for r in result.baseline_results)
+        log.info("Baseline-ronde: %d voorspellingen opgeslagen", aantal)
+    for probleem in result.baseline_issues:
+        log.warning("Baseline-probleem: %s", probleem)
     for probleem in result.forecast_issues:
         # Niet stil: een onvolledige ronde is een gat in de meting, en de
         # ronde haalt zichzelf alleen in binnen dezelfde ISO-week.
