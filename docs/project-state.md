@@ -1025,6 +1025,37 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Controle-run van v1 en commodity als v2 (1.5, 29-09) — 714 tests groen
+
+**De controle-run van v1 klopt.** DD draaide `calibrate_triggers.py` na de merge
+van PR #17. Kolom `3j` staat per reeks op ~5: monetary 4,0-5,3 (fed funds 2,3,
+werkloosheid 2,3, CPI onveranderd), financial 3,3-5,0, sector 4,3-6,0, economic
+ICSA 5,0, currency 2,3-2,7. Totaal zonder commodity 124 per jaar tegen de
+voorspelde ~125. Twee afwijkingen zijn verklaard en geen fout: fed funds beweegt
+maar een paar keer per jaar, en het "5 per jaar" van het rapport voor werkloosheid
+was een float-artefact (zie roadmap), dus de echte 2,3 is juist.
+
+**Commodity-back-fill geslaagd.** 4.221 claims, alle tien de reeksen, geen
+mislukking, geen key in het log. Daarmee kon commodity voor het eerst worden
+gekalibreerd, als **trigger-versie v2** (alleen die tien drempels veranderen).
+
+**Een eenhedenfout uit v0 ontdekt.** De koper-tolerantie was 0,20, gebaseerd op
+dollar per pond; de bron levert dollar per metrische ton (~13.500). Die regel
+vuurde bij 100% van de publicaties: geen drempel maar een constante. Nieuwe
+waarde 356. Een bestaande test gebruikte ook prijzen per pond (4,10 naar 4,45) en
+is aangepast op realistische eenheden, met de reden erbij.
+
+**Bewust niet aangepast:** `3j,rel` liet zien dat de sectordrempels per reeks
+anders zullen uitpakken dan `3j` suggereert (SPY 12,7 tegen 5,0; XLY, XLB en XLU
+rond 1). Het sectortotaal blijft gelijk. Dat is het bekende open punt over
+niveau-afhankelijke drempels en vraagt een wijziging in de trigger-engine
+(checkpoint 2).
+
+**Ongetest / onzeker.** De v2-aantallen voor commodity komen uit het rapport
+(Tabel 2), niet uit een tweede run. De commodity-reeksen zijn maandgemiddelden;
+of de cron-run van elke dag exact dezelfde maandwaarde blijft opleveren tot de
+bron publiceert, is uit de data af te leiden maar niet apart gemeten.
+
 ### Trigger-versioning en drempelset v1 (1.5, 29-09) — 712 tests groen
 
 **Twee stappen, in deze volgorde, zodat de geschiedenis het toont.** Eerst de

@@ -567,11 +567,33 @@ zelfde keuze als `analyst_agent.ai` voor dit endpoint):
 | Coffee | Koffie |
 
 **Wanneer het triggert:** op de ruwe prijs (zelfde delta-mechanisme als de
-andere agents). Tolerances zijn hier **minder zeker** dan bij sector_agent
-— grondstofprijzen/eenheden (dollar/vat, dollar/pond, dollar/bushel, ...)
-zijn hier niet met zekerheid geverifieerd tegen actuele marktdata. Nog
-sterker een kandidaat voor jouw eigen latere finetuning dan de andere
-agents.
+andere agents). Sinds **trigger-versie v2 (29-09-2026)** zijn de drempels
+gekalibreerd op 35 jaar back-fill, ~5 triggers per jaar per reeks:
+
+| Metric | Afwijking die triggert | Severity |
+|---|---|---|
+| WTI | > 4,1 | medium |
+| Brent | > 4,4 | medium |
+| Natural gas | > 0,3 | medium |
+| Copper | > 356 (dollar per metrische ton) | high |
+| Aluminum | > 73 | medium |
+| Wheat | > 11,7 | medium |
+| Corn | > 9,6 | medium |
+| Cotton | > 1,9 | medium |
+| Sugar | > 0,9 | medium |
+| Coffee | > 14,6 | medium |
+
+De bron is **maandelijks**: een reeks kan dus hooguit twaalf keer per jaar
+vuren, en 5 per jaar is 5 van de 12 publicaties. Alle tien de reeksen
+veranderen op dezelfde dag, dus dat wordt in de praktijk één deep-dive per
+maand-dag (de manager bundelt per domein).
+
+**Waarom het veranderde.** Onder v0 gaven deze tien samen 46 triggers per
+jaar, heel ongelijk verdeeld. Koper stond op 0,20 omdat de eerste versie
+dollar per pond aannam; de bron levert dollar per **metrische ton** (niveau
+~13.500), dus koper vuurde bij elke publicatie en gaf geen informatie. Tarwe
+(30) en maïs (25) vuurden daarentegen bijna nooit. De eenheden zijn nu
+geverifieerd tegen de opgeslagen data, niet meer aangenomen.
 
 **Waar de deep-dive over gaat:** duidt wat een significante prijsbeweging
 betekent — alleen als de cijfers dat rechtvaardigen.
@@ -694,10 +716,10 @@ andere invalshoek. Of dat wenselijk is, staat als open vraag in
 ## Belangrijk voorbehoud, voor alle zes agents
 
 De tolerances in de tabellen hierboven zijn sinds **29-09-2026
-trigger-versie v1**: gekozen met het kalibratierapport en niet langer
-plaatshouders, behalve **commodity** (geen historie, blijft v0-waarden tot de
-back-fill werkt) en de hoogste onzekerheid bij de HY-spread (3 jaar data).
-Elke wijziging van een drempel, ouderdomsgrens of trigger-gedrag verandert de
+trigger-versie v2**: gekozen met het kalibratierapport op de back-fill en niet
+langer plaatshouders. Uitzonderingen: de HY-spread (maar 3 jaar data), en
+CPI en payrolls, die bewust niet gekalibreerd zijn (groeitrend, zie
+`docs/roadmap.md`, open beslissingen). Elke wijziging van een drempel, ouderdomsgrens of trigger-gedrag verandert de
 vingerafdruk in `runtime/trigger_guard.py` en laat een test falen totdat
 `TRIGGER_VERSION` omhoog gaat (`contract/trigger_version.py`). Na T₀ᵇ start
 zo'n wijziging een nieuw cohort.

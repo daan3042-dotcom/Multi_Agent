@@ -77,10 +77,12 @@ def test_monitor_triggers_on_significant_price_move(tmp_path, monkeypatch):
     t1 = datetime.now(timezone.utc)
     t2 = t1 + timedelta(days=30)
 
-    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"copper": {"value": "4.10", "date": "x"}})
+    # Koper staat in dollar per metrische ton (niveau ~13.500), niet per pond:
+    # zie de opmerking bij METRIC_SPECS. +450 is meer dan de tolerantie (356).
+    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"copper": {"value": "13500", "date": "x"}})
     ca.monitor(conn, now=t1)
 
-    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"copper": {"value": "4.45", "date": "y"}})
+    monkeypatch.setattr(ca, "fetch_snapshot", lambda: {"copper": {"value": "13950", "date": "y"}})
     output, triggers = ca.monitor(conn, now=t2)
 
     # Deze test gaat over het delta-mechanisme, niet over completeness.

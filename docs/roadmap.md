@@ -239,7 +239,7 @@ Secties 4.5, 4.6.
   seizoenscomponent hoort hier), en een deterministisch model op de
   agent's eigen inputs (ridge/logistisch op dezelfde z-scores).
 - Synthesizer als gescoorde agent.
-- Trigger-versioning (1.5) **[29-09: gebouwd]** en drempelkalibratie tegen de back-fill **[29-09: v1 gekozen]**.
+- Trigger-versioning (1.5) **[29-09: gebouwd]** en drempelkalibratie tegen de back-fill **[29-09: v2 gekozen en gecontroleerd]**.
 
 ## Fase 3b — Pseudo-out-of-sample en dry-run (27 okt – 9 nov)
 
@@ -279,7 +279,7 @@ Secties 4.5, 4.6.
       repareert. Reden dat dit punt er pas op 28-09 bij kwam: de freeze
       bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
       de monitoring-scope waaruit die doelen gekozen worden
-- [~] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2) **[29-09: v1 gekozen; controle-run door DD en commodity-back-fill open]**
+- [x] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2) **[29-09: back-fill van alle domeinen, trigger-versie v2 (v1 gecontroleerd met het rapport); HY-spread heeft maar drie jaar, CPI en payrolls zijn bewust niet gekalibreerd, zie "Open beslissingen"]**
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
 - [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
 - [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
@@ -544,10 +544,11 @@ gebouwd wordt staat in deel A, niet hier.
       `FROZEN_TRIGGER_VERSION`; tot dan weigert cohort_0 te starten.
 - [~] **Drempels kalibreren tegen de volledige historie (fase 0)** —
       **[29-09] rapport gebouwd (`calibrate_triggers.py`, alleen lezen);
-      drempels gekozen en als trigger-versie v1 vastgelegd (5 per jaar per
-      reeks, currency 2). Nog te doen: DD draait het rapport opnieuw en
-      controleert per reeks dat Tabel 1 (kolom `3j`) op ~5 uitkomt; commodity
-      blijft voorlopig (geen historie).** Hoe
+      drempels gekozen en vastgelegd als trigger-versie v1 (5 per jaar per
+      reeks, currency 2) en v2 (commodity erbij, na de back-fill). DD's
+      controle-run van 29-09 bevestigt v1: kolom `3j` staat per reeks op
+      ~5 (currency 2,3-2,7, fed funds 2,3, werkloosheid 2,3). Alleen HY-spread
+      (drie jaar) blijft voorlopig.** Hoe
       vaak zou elke regel gevuurd hebben? Vervangt de huidige
       illustratieve waarden. **[27-09]** Niet "≥5 jaar" maar alles wat
       de bron geeft: FRED levert 50+ jaar gratis, en vijf jaar (2021–2026)
@@ -1423,6 +1424,41 @@ kalibratie-deel van 5.2.
       reeksen bewegen samen: de manager bundelt gelijktijdige triggers);
       monetary, financial en economic stijgen omdat hun v0-drempels te hoog
       waren. Alleen een controle-run van het rapport bevestigt de aantallen.
+      **Gecontroleerd op 29-09** (zie de v2-regel hieronder): zonder commodity
+      124 triggers per jaar, onder het voorspelde ~125.
+
+- [x] **Trigger-versie v2: commodity gekalibreerd na de back-fill (29-09).**
+      De commodity-back-fill slaagde (4.221 claims, alle tien de reeksen, ~35
+      jaar maandcijfers). Het rapport liet zien dat de v0-drempels van de tien
+      reeksen tot v2 samen 46 triggers per jaar gaven, maar heel ongelijk:
+      koper 12 per jaar (100% van de waarnemingen), aardgas 7,7, koffie 6,3,
+      WTI en Brent 5,7, tarwe en maïs 0,3. **Koper was een eenhedenfout:** de
+      v0-tolerantie van 0,20 nam dollar per pond aan, de bron levert dollar
+      per metrische ton (niveau ~13.500). Die regel was geen drempel maar een
+      constante. Nu ~5 per jaar per reeks over de laatste drie jaar (WTI 4,1 ·
+      Brent 4,4 · aardgas 0,3 · koper 356 · aluminium 73 · tarwe 11,7 · maïs 9,6
+      · katoen 1,9 · suiker 0,9 · koffie 14,6). De bron is maandelijks, dus 5
+      per jaar is 5 van de 12 publicaties, en alle tien springen op dezelfde
+      dag: de manager bundelt dat tot één deep-dive per dag. Severities
+      ongewijzigd (koper `high`, de rest `medium`).
+      **Controle-run van v1 (29-09):** van de 30 reeksen met historie hebben
+      er 22 doel 5 en staan die op 3,3-6,0 in kolom `3j`. De andere 8 zijn
+      verklaard: currency (3 reeksen) 2,3-2,7 bij doel 2, fed funds 2,3 (beweegt
+      maar een paar keer per jaar), werkloosheid 2,3 (in twee domeinen), en CPI
+      en payrolls bewust ongewijzigd (0,7 en 0).
+      Bij werkloosheid was het "5 per jaar" van het rapport een
+      afrondingsartefact: de drempel 0,1 telde veranderingen van precies 0,1
+      mee door float-ruis; de echte set (veranderingen van minstens 0,2) vuurt
+      2,3 keer per jaar. Bevestigt de keuze voor een drempel halverwege twee
+      stapjes.
+      **Wat het rapport ook liet zien, en niet is opgelost:** de kolom `3j,rel`
+      (dezelfde drempel als percentage van het huidige niveau) wijkt bij de
+      sectoren sterk af van `3j`: SPY 12,7 tegen 5,0, XLV 10,3 tegen 5,7, XLF
+      en XLRE 7,0, maar XLY, XLB en XLU rond 1. Omdat de ETF-koersen in drie
+      jaar flink stegen, is een vast dollarbedrag nu een kleiner percentage dan
+      toen, en zal het per reeks anders uitpakken dan `3j` suggereert
+      (het sectortotaal blijft gelijk: 62 tegen 65). Zelfde open punt als
+      hierboven (niveau-afhankelijke drempels), niet pre-T₀ᵇ opgepakt.
 
 - [x] **Extra databronnen: niets vóór T₀ᵃ, kandidaten vastgelegd.** DD
       inventariseerde ALFRED, NY Fed Markets, Treasury FiscalData, BLS/BEA,
