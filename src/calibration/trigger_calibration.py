@@ -46,12 +46,26 @@ WINDOWS: tuple[tuple[str, float | None], ...] = (("alles", None), ("10j", 10.0),
 """Terugkijkvensters in jaren, gerekend vanaf de LAATSTE waarneming van de reeks
 (niet vanaf 'nu', zodat een reeks die even stilligt geen leeg venster krijgt)."""
 
-TARGET_FRACTIONS = (0.01, 0.02, 0.05)
-"""Doelfrequenties voor de tabel 'welke drempel hoort bij X% van de waarnemingen'.
-Een keuze, geen berekening: 1% is zeldzaam (grofweg twee tot drie keer per jaar bij
-een dagreeks), 5% is regelmatig (ongeveer één keer per maand)."""
+TARGET_PER_YEAR = (2, 5, 10)
+"""Doelfrequenties voor de tabel 'welke drempel hoort bij X triggers per jaar'.
+
+PER JAAR EN NIET ALS PERCENTAGE VAN DE DAGEN. Een percentage betekent heel iets anders
+per reeks: 2% van de waarnemingen is ~5 triggers per jaar bij een dagreeks, maar ~0,24 bij
+een maandreeks. Daardoor gaf een eerste versie voor `unemployment_rate` bij elk percentage
+dezelfde drempel (0,2): maandwaarden bewegen in stapjes van 0,1 en het 98e percentiel
+valt dan altijd op dezelfde stap. Wat DD wil weten is 'hoe vaak wil ik dat deze regel een
+deep-dive start', en dat is een aantal per jaar. Een keuze van mij, geen berekening."""
 
 MIN_PAIRS = 30
+NIVEAU_MIN_VERHOUDING = 0.05
+"""De kleinste waarde in de laatste drie jaar mag niet kleiner zijn dan 5% van het huidige niveau,
+anders is een percentage-van-het-niveau geen stabiele maat (zie calibrate_series). Een tekenwisseling
+of nul sluit de correctie sowieso uit; deze 5% is een keuze, geen berekening."""
+MIN_FIRES_FOR_STABILITY = 5
+"""Een venster telt pas mee bij de vraag 'wisselt dit sterk per periode' als de regel er minstens
+vijf keer in vuurde, OF als je er op basis van het hoogste tempo minstens vijf verwachtte. Met één of
+twee triggers is een verschil van factor drie gewoon toeval, en de eerste versie zette die vlag
+daardoor op 25 van de 40 regels."""
 SHORT_HISTORY_YEARS = 5.0
 UNSTABLE_FACTOR = 3.0
 OFTEN_FRACTION = 0.10
@@ -68,6 +82,7 @@ class WindowStat:
     fires: int
     per_year: float | None      # None als het venster korter dan een kwartaal beslaat
     fraction: float | None      # aandeel waarnemingen dat vuurt
+    years: float = 0.0          # hoeveel jaar het venster werkelijk beslaat
 
     @property
     def is_empty(self) -> bool:
@@ -128,6 +143,7 @@ def _window_stat(
         fires=n_fire,
         per_year=(n_fire / years) if years >= 0.25 else None,
         fraction=(n_fire / len(subset)) if subset else None,
+        years=max(years, 0.0),
     )
 
 
@@ -149,20 +165,55 @@ def calibrate_series(
         stats[naam] = _window_stat(changes, tolerance, since, ref, first)
 
     drie_jaar = ref - timedelta(days=3 * DAYS_PER_YEAR)
-    adjusted = _window_stat(changes, tolerance, drie_jaar, ref, first, relative_to=last_value) if last_value else None
+    # De niveau-gecorrigeerde telling heeft alleen zin voor een reeks die niet rond nul
+    # beweegt (koersen, indexniveaus). Een spread of index die door nul gaat (10Y-2Y, de
+    # NFCI) geeft 'verandering als percentage van het niveau' een noemer rond nul, en dan
+    # explodeert het getal: een eerste versie meldde daar 'niveau-afhankelijk' voor een
+    # reeks waarvan de absolute drempel gewoon nooit vuurde.
+    recente_waarden = [v for d, v in values if d >= drie_jaar]
+    betekenisvol = (
+        bool(last_value)
+        and len(recente_waarden) >= 2
+        and all(v * last_value > 0 for v in recente_waarden)          # zelfde teken, nooit nul
+        and min(abs(v) for v in recente_waarden) >= NIVEAU_MIN_VERHOUDING * abs(last_value)
+    )
+    adjusted = (
+        _window_stat(changes, tolerance, drie_jaar, ref, first, relative_to=last_value) if betekenisvol else None
+    )
 
-    # Drempels bij doelfrequenties, op de laatste drie jaar (of alles als dat te weinig is).
+    # Drempels bij doelfrequenties per jaar, op de laatste drie jaar (of alles als dat te weinig is).
     recent = [dev for d, dev, _ in changes if d >= drie_jaar]
-    bron = recent if len(recent) >= MIN_PAIRS else [dev for _, dev, _ in changes]
+    if len(recent) >= MIN_PAIRS:
+        bron, jaren_bron = recent, min(3.0, years)
+    else:
+        bron, jaren_bron = [dev for _, dev, _ in changes], years
     quantiles: dict[float, float] = {}
-    if len(bron) >= MIN_PAIRS:
+    if len(bron) >= MIN_PAIRS and jaren_bron > 0:
         gesorteerd = sorted(bron)
-        quantiles = {f: empirical_quantile(gesorteerd, 1 - f) for f in TARGET_FRACTIONS}
+        per_jaar = len(bron) / jaren_bron
+        for doel in TARGET_PER_YEAR:
+            drempel = threshold_for_events_per_year(gesorteerd, per_jaar, doel)
+            if drempel is not None:
+                quantiles[doel] = drempel
 
     return MetricCalibration(
         domain, metric_key, tolerance, last_value, len(changes), years, stats, adjusted, quantiles,
         tuple(_flags(stats, adjusted, years, len(changes))),
     )
+
+
+def threshold_for_events_per_year(
+    sorted_devs: list[float], obs_per_year: float, target_per_year: float
+) -> float | None:
+    """De absolute drempel waarbij de regel ongeveer `target_per_year` keer per jaar
+    vuurt: het kwantiel 1 - target/obs_per_year van de veranderingen. None als het doel
+    niet haalbaar is (evenveel of meer triggers per jaar dan waarnemingen)."""
+    if obs_per_year <= 0:
+        return None
+    fractie = target_per_year / obs_per_year
+    if fractie >= 1:
+        return None
+    return empirical_quantile(sorted_devs, 1 - fractie)
 
 
 def _flags(stats: dict[str, WindowStat], adjusted: WindowStat | None, years: float, n_pairs: int) -> list[str]:
@@ -179,14 +230,20 @@ def _flags(stats: dict[str, WindowStat], adjusted: WindowStat | None, years: flo
     elif drie.fraction is not None and drie.fraction < SELDOM_FRACTION and drie.fires > 0:
         flags.append("vuurt zelden")
 
-    snelheden = [s.per_year for s in stats.values() if s.per_year is not None and s.pairs >= MIN_PAIRS]
-    if len(snelheden) >= 2 and max(snelheden) >= 1.0:
-        laagste = min(snelheden)
-        if laagste == 0 or max(snelheden) / laagste >= UNSTABLE_FACTOR:
+    kandidaten = [s for s in stats.values() if s.per_year is not None and s.pairs >= MIN_PAIRS]
+    sterke = [s for s in kandidaten if s.fires >= MIN_FIRES_FOR_STABILITY]
+    if sterke:
+        hoogste = max(s.per_year for s in sterke)
+        # Een venster telt mee als het zelf genoeg triggers had, OF als je er op basis van
+        # het hoogste tempo minstens vijf verwachtte: nul triggers in een jaar waarin je er
+        # driehonderd verwachtte is juist het teken waar het om gaat.
+        meetellend = [s for s in kandidaten if s.fires >= MIN_FIRES_FOR_STABILITY or hoogste * s.years >= MIN_FIRES_FOR_STABILITY]
+        snelheden = [s.per_year for s in meetellend]
+        if len(snelheden) >= 2 and (min(snelheden) == 0 or max(snelheden) / min(snelheden) >= UNSTABLE_FACTOR):
             flags.append("wisselt sterk per periode")
     if adjusted and adjusted.per_year is not None and drie.per_year is not None:
         hoog, laag = max(adjusted.per_year, drie.per_year), min(adjusted.per_year, drie.per_year)
-        if hoog >= 1.0 and (laag == 0 or hoog / laag >= UNSTABLE_FACTOR):
+        if hoog >= 3.0 and (laag == 0 or hoog / laag >= UNSTABLE_FACTOR):
             flags.append("niveau-afhankelijk")
     return flags
 
@@ -244,7 +301,7 @@ def render_report(resultaten: list[MetricCalibration]) -> str:
     )
     for r in resultaten:
         s = r.stats
-        pct = "-" if r.tolerance_pct_of_level is None else f"{r.tolerance_pct_of_level:.2g}"
+        pct = "-" if (r.tolerance_pct_of_level is None or r.level_adjusted_3y is None) else f"{r.tolerance_pct_of_level:.2g}"
         regels.append(
             f"{r.domain:<16}{r.metric_key:<28}{_g(r.tolerance, 10)}{_g(r.last_value, 10)}{pct:>7}{r.years:>7.1f}"
             f"{_rate(s.get('alles'))}{_rate(s.get('10j'))}{_rate(s.get('3j'))}{_rate(s.get('1j'))}"
@@ -252,25 +309,26 @@ def render_report(resultaten: list[MetricCalibration]) -> str:
         )
 
     regels.append("")
-    regels.append("TABEL 2 -- Welke drempel hoort bij een doelfrequentie? (laatste 3 jaar, absoluut)")
+    regels.append("TABEL 2 -- Welke drempel hoort bij een aantal triggers per JAAR? (laatste 3 jaar, absoluut)")
     regels.append(
-        f"{'domein':<16}{'reeks':<28}{'huidig':>10}   {'1% van de dagen':>16}{'2%':>10}{'5%':>10}     "
-        f"{'idem als % van niveau (1% / 2% / 5%)'}"
+        f"{'domein':<16}{'reeks':<28}{'huidig':>10}   {'2 per jaar':>12}{'5 per jaar':>12}{'10 per jaar':>12}     "
+        f"{'idem als % van niveau (2 / 5 / 10)'}"
     )
     for r in resultaten:
         if not r.quantile_thresholds:
             regels.append(f"{r.domain:<16}{r.metric_key:<28}{'(te weinig historie)':>30}")
             continue
         q = r.quantile_thresholds
-        if r.last_value:
-            pcts = " / ".join(f"{abs(q[f] / r.last_value) * 100:.2g}" for f in TARGET_FRACTIONS)
+        if r.last_value and r.level_adjusted_3y is not None:
+            pcts = " / ".join(f"{abs(q[f] / r.last_value) * 100:.2g}" if f in q else "-" for f in TARGET_PER_YEAR)
         else:
             pcts = "-"
         regels.append(
-            f"{r.domain:<16}{r.metric_key:<28}{_g(r.tolerance, 10)}   {_g(q[0.01], 16)}{_g(q[0.02], 10)}{_g(q[0.05], 10)}     {pcts}"
+            f"{r.domain:<16}{r.metric_key:<28}{_g(r.tolerance, 10)}   "
+            + "".join(_g(q.get(f), 12) for f in TARGET_PER_YEAR)
+            + f"     {pcts}"
         )
 
-    regels.append("")
     regels.append("TABEL 3 -- Verwacht aantal triggers per jaar bij de huidige drempels (laatste 3 jaar)")
     per_domein: dict[str, float] = {}
     for r in resultaten:
@@ -288,9 +346,13 @@ def render_report(resultaten: list[MetricCalibration]) -> str:
 
 LEESWIJZER = """HOE TE LEZEN
 - tolerance: de huidige drempel, in de eenheid van de reeks. niveau: de laatste waarde. tol%: tolerance als % daarvan.
+- tol% en '% van niveau' zijn alleen ingevuld bij reeksen die niet rond nul bewegen (koersen, indexniveaus); bij een
+  spread of index die door nul gaat (10Y-2Y, NFCI) zegt een percentage niets.
 - alles / 10j / 3j / 1j: hoe vaak de huidige drempel per jaar gevuurd ZOU hebben in dat terugkijkvenster.
 - 3j,rel: dezelfde drempel, maar uitgedrukt als % van het HUIDIGE niveau en toegepast op de relatieve verandering
-  per waarneming. Verschilt dit sterk van '3j', dan schuift een vaste, absolute drempel niet mee met het niveau.
+  per waarneming (alleen bij reeksen die niet rond nul bewegen). Verschilt dit sterk van '3j', dan schuift een vaste,
+  absolute drempel niet mee met het niveau.
+- 'wisselt sterk per periode' telt alleen vensters met minstens vijf triggers; bij minder is een verschil toeval.
 - Strikt groter dan telt: een verandering precies gelijk aan de tolerance vuurt niet (zoals in het echte systeem).
 - Een weekreeks of maandreeks vuurt hooguit een keer per nieuwe publicatie, want op de tussenliggende dagen is de waarde ongewijzigd.
 - Dit rapport wijzigt niets. Drempels wijzigen na T0b start een nieuw cohort: kies dus nu, met deze tabellen erbij."""

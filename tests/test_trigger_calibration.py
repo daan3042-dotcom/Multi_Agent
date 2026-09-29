@@ -21,13 +21,14 @@ import pytest
 
 from calibration.trigger_calibration import (
     MIN_PAIRS,
-    TARGET_FRACTIONS,
+    TARGET_PER_YEAR,
     abs_changes,
     calibrate_all,
     calibrate_series,
     fires,
     metric_registry,
     render_report,
+    threshold_for_events_per_year,
 )
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode
 from storage.schema import init_db, save_domain_output
@@ -146,6 +147,24 @@ def test_een_absolute_drempel_schuift_niet_mee_met_het_niveau():
     assert "niveau-afhankelijk" in cal.flags
 
 
+def test_een_reeks_die_door_nul_gaat_krijgt_geen_niveau_gecorrigeerde_telling():
+    """Regressiegeval uit de eerste echte run: `yield_curve_10y_2y` (niveau 0,32, in de
+    afgelopen jaren negatief) gaf een absolute telling van 0 per jaar en een
+    'gecorrigeerde' van 11,7, met de vlag niveau-afhankelijk. Een percentage van een
+    niveau rond nul is geen maat. De gecorrigeerde telling ontbreekt dan, en dus de vlag."""
+    golf = [0.3 * ((i % 40) - 20) / 20 for i in range(1000)]      # beweegt tussen -0,3 en +0,3
+    cal = calibrate_series("d", "m", 0.5, _dagen(golf + [0.32]))
+
+    assert cal.level_adjusted_3y is None
+    assert "niveau-afhankelijk" not in cal.flags
+    assert cal.tolerance_pct_of_level is not None       # de breuk zelf bestaat wel; de weergave verbergt hem
+
+
+def test_een_koers_krijgt_wel_een_niveau_gecorrigeerde_telling():
+    cal = calibrate_series("d", "m", 2.0, _dagen([100.0 + (i % 2) for i in range(400)]))
+    assert cal.level_adjusted_3y is not None
+
+
 def test_tolerance_als_percentage_van_het_niveau():
     cal = calibrate_series("d", "m", 6.0, _dagen([100.0 + (i % 2) for i in range(100)]))
     assert cal.tolerance_pct_of_level == pytest.approx(6.0 / 101.0 * 100)
@@ -156,20 +175,50 @@ def test_tolerance_als_percentage_van_het_niveau():
 # --------------------------------------------------------------------------
 
 
-def test_drempel_bij_een_doelfrequentie_met_de_hand():
-    """Verschillen 1, 2, ..., 100 (v0=0, v1=1, v2=-1, v3=2, ...). Een empirisch kwantiel
-    met lineaire interpolatie: 99% -> positie 0,99 * 99 = 98,01 -> 99 + 0,01 = 99,01;
-    98% -> 98,02; 95% -> 95,05. Dus een drempel van 99,01 laat ~1% van de paren vuren."""
-    waarden, v = [0.0], 0.0
-    for i in range(1, 101):
-        v += i if i % 2 else -i
-        waarden.append(v)
-    cal = calibrate_series("d", "m", 10.0, _dagen(waarden))
+def test_drempel_bij_een_aantal_triggers_per_jaar_met_de_hand():
+    """Verschillen 1, 2, ..., 100 bij 100 waarnemingen per jaar. Eén trigger per jaar =
+    1% van de waarnemingen = het 99e percentiel; een empirisch kwantiel met lineaire
+    interpolatie: positie 0,99 * 99 = 98,01, dus 99 + 0,01 = 99,01. Twee per jaar: 98,02.
+    Vijf per jaar: 95,05."""
+    devs = [float(i) for i in range(1, 101)]
+    assert threshold_for_events_per_year(devs, 100.0, 1) == pytest.approx(99.01)
+    assert threshold_for_events_per_year(devs, 100.0, 2) == pytest.approx(98.02)
+    assert threshold_for_events_per_year(devs, 100.0, 5) == pytest.approx(95.05)
 
-    assert [abs(waarden[i] - waarden[i - 1]) for i in range(1, 6)] == [1, 2, 3, 4, 5]
-    assert cal.quantile_thresholds[0.01] == pytest.approx(99.01)
-    assert cal.quantile_thresholds[0.02] == pytest.approx(98.02)
-    assert cal.quantile_thresholds[0.05] == pytest.approx(95.05)
+
+def test_een_maandreeks_heeft_een_veel_lagere_drempel_bij_hetzelfde_aantal_per_jaar():
+    """DE reden dat de tabel per jaar telt en niet als percentage van de dagen. Bij 12
+    waarnemingen per jaar betekent '2 per jaar' een zesde van de waarnemingen (het 83e
+    percentiel), bij 252 per jaar minder dan 1%."""
+    devs = [float(i) for i in range(1, 101)]
+    maand = threshold_for_events_per_year(devs, 12.0, 2)      # 2/12 = 16,7% -> 83e percentiel
+    dag = threshold_for_events_per_year(devs, 252.0, 2)       # 2/252 = 0,79% -> 99,2e percentiel
+    assert maand == pytest.approx(1 + 0.8333333 * 99, abs=1e-3)
+    assert dag > maand + 10
+
+
+def test_een_doel_dat_niet_haalbaar_is_geeft_geen_drempel():
+    """Twee triggers per jaar bij een reeks met maar twee waarnemingen per jaar is
+    'altijd vuren', dus geen drempel."""
+    assert threshold_for_events_per_year([1.0, 2.0, 3.0], 2.0, 2) is None
+    assert threshold_for_events_per_year([1.0, 2.0, 3.0], 0.0, 2) is None
+
+
+def test_de_gekozen_drempel_vuurt_daadwerkelijk_ongeveer_zo_vaak():
+    """Terugrekenen: drie jaar dagelijkse, willekeurige (geseede) veranderingen. De
+    drempel bij 5 per jaar moet, toegepast op diezelfde reeks, ongeveer 5 keer per jaar
+    vuren."""
+    rng = random.Random(11)
+    waarden, v = [0.0], 0.0
+    for _ in range(3 * 365):
+        v += rng.gauss(0, 1)
+        waarden.append(v)
+    cal = calibrate_series("d", "m", 1.0, _dagen(waarden))
+
+    assert set(cal.quantile_thresholds) == set(TARGET_PER_YEAR)
+    assert cal.quantile_thresholds[2] >= cal.quantile_thresholds[5] >= cal.quantile_thresholds[10]
+    teruggerekend = calibrate_series("d", "m", cal.quantile_thresholds[5], _dagen(waarden)).stats["3j"].per_year
+    assert teruggerekend == pytest.approx(5.0, abs=2.0)
 
 
 def test_te_weinig_paren_geeft_geen_drempelvoorstel():
@@ -181,6 +230,16 @@ def test_te_weinig_paren_geeft_geen_drempelvoorstel():
 # --------------------------------------------------------------------------
 # De oordeel-kolom
 # --------------------------------------------------------------------------
+
+
+def test_een_verschil_tussen_vensters_met_bijna_geen_triggers_is_geen_teken():
+    """De eerste versie zette 'wisselt sterk per periode' op 25 van de 40 regels, ook
+    als er in een venster maar één of twee triggers waren: een factor drie tussen 1 en 3
+    triggers is toeval. Nu tellen alleen vensters met minstens vijf triggers mee."""
+    # Eén enkele uitschieter in de laatste maand van een verder rustige reeks.
+    rustig = [0.0] * 900 + [5.0] + [0.0] * 100
+    cal = calibrate_series("d", "m", 1.0, _dagen(rustig))
+    assert "wisselt sterk per periode" not in cal.flags
 
 
 def test_geen_waarnemingen_is_geen_historie():

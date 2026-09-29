@@ -838,6 +838,10 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - **Finetune (post-T₀):** Wu-Xia shadow rate, ACM term premium-model,
   MOVE-index, FOMC dot-plot-dispersie, Fed-balansveranderingen
   (QT/QE-tempo)
+- **Kandidaat-bronnen (29-09, post-T₀, zie "Beslist op 29-09-2026"):**
+  NY Fed Markets API (SOFR, repo, SOMA-holdings; controleer eerst of FRED
+  SOFR/RRPONTSYD al dekt), Treasury FiscalData (dagelijkse TGA, schuld,
+  veilingen; FRED heeft alleen het weekcijfer `WTREGEN`)
 
 ### 2.2 Currency Agent
 - [x] Monitoring mode + deep-dive mode (`src/agents/currency_agent.py`)
@@ -847,6 +851,10 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - [ ] Carry-to-vol ratio
 - **Finetune (post-T₀):** PPP-afwijking, reëel renteverschil,
   terms-of-trade-index, CFTC COT-positionering, risk reversal-skew
+- **Kandidaat-bron (29-09, post-T₀):** ECB Data Portal (SDMX): Europese
+  rentes voor het renteverschil, de kandidaat-knoop 18 uit
+  `docs/causal-graph.md`. Raakt de graaf, dus alleen als bewuste nieuwe versie
+  (nieuw cohort). Eurostat/OECD hebben vergelijkbare SDMX-API's.
 
 ### 2.3 Equity Agent (adapter)
 - [x] Dunne adapter: `analyst_agent.ai`'s output in het contract
@@ -865,6 +873,10 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - [ ] SOFR-OIS-spread
 - **Finetune (post-T₀):** Senior Loan Officer Survey, VIX-termstructuur,
   Absorption Ratio (Kritzman)
+- **Kandidaat-bron (29-09, post-T₀):** OFR Financial Stress Index en
+  Short-term Funding Monitor. Dagelijks, waar NFCI wekelijks is; NFCI haalt
+  zijn drempel in drie jaar nooit (kalibratierapport 1.5), dus dit kan het
+  dode NFCI-signaal vervangen of aanvullen. Nieuwe reeks = nieuwe versie.
 
 ### 2.5 Sector Agent
 - [x] Monitoring mode + deep-dive mode (`src/agents/sector_agent.py`)
@@ -889,6 +901,9 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - [ ] WTI-Brent-spread & term-structure-slope
 - **Finetune (post-T₀):** CFTC COT-positionering, inventory
   days-of-supply, seizoensindex, copper/gold-ratio
+- **Kandidaat-bron (29-09, post-T₀):** CFTC Commitments of Traders (Socrata
+  API, gratis, wekelijks): positionering voor currency, commodity en later
+  eventueel een NQ-bias-agent. Zie ook 2.2.
 
 ### 2.7 Economic Agent — **[27-09]** lean vóór T₀, uitbreiden in fase 4
 De graaf (1.10) krijgt groei-knopen die door geen enkele bestaande agent
@@ -1128,6 +1143,13 @@ pad is. Maar ná de cutoff van het gebruikte model weet het model niets,
 en dat window is nu al beschikbaar.
 - [ ] Point-in-time-correcte snapshots per databron (FRED via ALFRED-
       vintages; de eigen claims-historie is al point-in-time)
+      **[29-09]** Geen probleem voor de forward test zelf (resolutie tegen
+      de eerste print uit de eigen claims-historie). Wel relevant voor (a) de
+      pseudo-OOS-run, waar agents nu herziene waarden zien, en (b) de
+      ridge-baseline, die op herziene back-fill traint maar op eerste prints
+      wordt afgerekend (licht in het voordeel van de baseline). Beperkt tot
+      reeksen die achteraf veranderen: PAYEMS, ICSA, BBP. Zelfde
+      FRED-sleutel, geen nieuwe afhankelijkheid.
 - [ ] Systeem laten draaien alsof het een historische datum is
 - [ ] Look-ahead/hindsight bias structureel voorkomen (voor de
       deterministische lagen)
@@ -1349,6 +1371,18 @@ kalibratie-deel van 5.2.
       andere agents voedt.
 
 ## Beslist op 29-09-2026
+
+- [x] **Extra databronnen: niets vóór T₀ᵃ, kandidaten vastgelegd.** DD
+      inventariseerde ALFRED, NY Fed Markets, Treasury FiscalData, BLS/BEA,
+      ECB/Eurostat/OECD, OFR-FSI en CFTC COT. Oordeel: geen ervan ligt op het
+      kritieke pad, en elke extra bron is een extra faalplek in de week dat de
+      ingestieklok zeven schone dagen nodig heeft (Alpha Vantage gaf die dag
+      lege antwoorden). De kandidaten staan bij de betreffende agent (2.1,
+      2.2, 2.4, 2.6) en bij 4.4 (ALFRED). **BLS/BEA:** niet nodig, want
+      payrolls, werkloosheid en CPI komen via FRED van dezelfde bron en de
+      extra detail gebruikt geen enkel doel. **Eerst na T₀:** OFR-FSI en
+      ECB-rentes. Beide raken de evidence-sheet of de graaf en zijn dus een
+      bewuste versie, geen stille toevoeging.
 
 - [x] **Cohort vóór T₀ᵇ: `MI_COHORT`, default `dry_run`.** `Prediction.cohort`
       stond hard op `cohort_0`; zodra de wekelijkse ronde op de VPS draaide,

@@ -1055,6 +1055,19 @@ reeksen), zodat een wijziging in de code het rapport meeverandert.
 eerste print). `high_yield_credit_spread` heeft ~3 jaar, dus daar zegt "alles" niets.
 De commodity-reeksen hebben nog geen historie.
 
+**Drie fouten in mijn eigen eerste versie, gevonden in de eerste echte run (29-09):**
+(1) `yield_curve_10y_2y` toonde een absolute telling van 0 per jaar maar een
+"gecorrigeerde" van 11,7 met de vlag `niveau-afhankelijk`. Dat is een artefact: de
+reeks staat op 0,32 en is de afgelopen jaren negatief geweest, en een percentage van
+een niveau rond nul is geen maat. De gecorrigeerde telling ontbreekt nu bij een reeks
+die van teken wisselt. (2) Tabel 2 gaf drempels bij "1% van de dagen", wat per reeks
+iets heel anders betekent: bij `unemployment_rate` stond overal 0,2, want maandwaarden
+bewegen in stapjes van 0,1. Nu per jaar (2, 5 en 10 triggers). (3) De vlag `wisselt
+sterk per periode` stond op 25 van de 40 regels, ook bij één trigger in een venster.
+Nu tellen alleen vensters met minstens vijf triggers, of vensters waarin je er op basis
+van het hoogste tempo vijf verwachtte (nul triggers in een jaar waarin je er
+driehonderd verwachtte blijft dus een signaal).
+
 ### De eerste droge run van de ridge op echte data (29-09) — 653 tests groen
 
 Voor het eerst tegen de echte back-fill. Alle 55 doelen zijn gefit, zonder
