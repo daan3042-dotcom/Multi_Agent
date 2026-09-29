@@ -60,10 +60,16 @@ from scoring.ridge import (  # noqa: E402
     fit_ridge_model,
     freeze_ridge_model,
 )
+from runtime.env import load_env_file  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db, load_baseline_model  # noqa: E402
+
+ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
 
 def main(argv: list[str] | None = None) -> int:
+    # `.env` naast dit script inlezen als je het niet zelf hebt gesourced: zie
+    # runtime/env.py. Bestaande omgevingsvariabelen winnen altijd.
+    load_env_file(ENV_PATH)
     parser = argparse.ArgumentParser(description="Fit en bevries de ridge-baseline (roadmap 4.6)")
     parser.add_argument("--db", default=os.environ.get("MI_DB_PATH", DEFAULT_DB_PATH))
     parser.add_argument(
