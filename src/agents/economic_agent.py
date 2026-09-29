@@ -90,16 +90,27 @@ UNRATE_SERIES_ID = FRED_SERIES["unemployment_rate"]
 
 METRIC_SPECS = {
     # ICSA staat in aantallen aanvragen (niveau in de orde van 200.000-250.000);
-    # 25.000 is ruwweg een beweging die boven de normale weekruis uitkomt.
-    "initial_claims": MetricSpec(label="Wekelijkse WW-aanvragen (ICSA)", tolerance=25_000.0, severity="medium"),
-    # Strakker dan monetary_policy_agent.py's 0,3 voor dezelfde reeks: die
-    # agent kijkt naar werkloosheid als beleidsinput, deze agent bezit de
-    # knoop labor_tightness en hoort dus eerder wakker te worden.
-    "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.2, severity="high"),
+    # 16.000 (v1, 29-09-2026) = ~5 keer per jaar over de laatste drie jaar,
+    # volgens het kalibratierapport (voor v1: 25.000, dat 1 keer per jaar
+    # vuurde).
+    "initial_claims": MetricSpec(label="Wekelijkse WW-aanvragen (ICSA)", tolerance=16_000.0, severity="medium"),
+    # Zelfde drempel als monetary_policy_agent.py voor dezelfde reeks (v1,
+    # 29-09-2026). Voor v1 stonden ze op 0,3 en 0,2, terwijl het dezelfde
+    # publicatie is: één UNRATE-print gaf dan in het ene domein wel en in het
+    # andere geen trigger. 0,15 ligt halverwege twee stapjes van 0,1 (0,2 en
+    # 0,1 zijn door afrondingsruis in floats een loterij) en vuurt dus bij
+    # een verandering van minstens 0,2 punt.
+    "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.15, severity="high"),
     # PAYEMS is een NIVEAU in duizenden personen (orde 155.000-160.000), dus
     # de delta tussen twee observaties IS de maandelijkse banengroei. Een
     # normale maand is +100 tot +200 (duizend); 250 vangt de uitzonderlijke
     # maanden en de banenverliezen.
+    # BLIJFT 250 IN v1, bewust niet gekalibreerd (29-09-2026): PAYEMS heeft
+    # een groeitrend, dus "5 keer per jaar" zou hier 130 duizend worden, en dat
+    # is ongeveer de gewone maandgroei -- de regel zou bij elke bovengemiddelde
+    # maand vuren en zegt niets over verrassing. Een goede trigger vergelijkt
+    # met de trend of de verwachting; dat raakt de trigger-engine (checkpoint 2)
+    # en staat in docs/roadmap.md als open punt. Vuurt in drie jaar nooit.
     "nonfarm_payrolls": MetricSpec(label="Banen buiten de landbouw (PAYEMS)", tolerance=250.0, severity="high"),
 }
 """GEVERIFIEERD TEGEN DE LIVE API op 28-09-2026. De eerste run op de VPS

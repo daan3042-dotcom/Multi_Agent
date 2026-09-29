@@ -336,11 +336,19 @@ Vóór T₀ᵇ verwacht je hier **alleen `dry_run`**. Staat er `cohort_0`, dan i
 **De overgang op T₀ᵇ (één handeling, na de freeze):**
 
 1. Freeze bevestigd met versienummers (CLAUDE.md checkpoint 5).
+1b. **Trigger-versie vastleggen.** Zet in `src/contract/trigger_version.py`
+   `FROZEN_TRIGGER_VERSION = "v1"` (of welke versie de freeze bevestigde),
+   laat de tests draaien, merge en werk de VPS bij. Zonder deze stap
+   weigert `run_daily.py` onder `MI_COHORT=cohort_0` te starten (exit 2,
+   met de reden in de log): een drempel die na de klokstart verschuift start
+   een nieuw cohort, en dat hoort een bewuste stap te zijn.
 2. In `.env` op de VPS: `MI_COHORT=cohort_0`. Geen aanhalingstekens, geen
    spatie rond het `=`.
 3. Draai `./run_daily.sh` (of wacht op de cron) en lees de eerste regels van
    het log. Er hoort te staan:
    `Cohort voor nieuwe voorspellingen: cohort_0 (ECHT COHORT -- telt mee in het track record)`
+   gevolgd door `Trigger-versie: v1`. Onder `dry_run` staat die laatste regel er
+   ook: zo zie je met welke regels er gedraaid is.
 4. Na de eerstvolgende wekelijkse ronde: dezelfde SQL als hierboven. Er
    hoort nu een `cohort_0`-groep te staan die groeit.
 

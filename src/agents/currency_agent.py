@@ -63,9 +63,9 @@ een tweede databron in deze agent zou vragen -- zie docs/project-state.md.
 """
 
 METRIC_SPECS = {
-    "eur_usd": MetricSpec(label="EUR/USD", tolerance=0.01, severity="medium"),
-    "usd_jpy": MetricSpec(label="USD/JPY", tolerance=1.0, severity="medium"),
-    "gbp_usd": MetricSpec(label="GBP/USD", tolerance=0.01, severity="medium"),
+    "eur_usd": MetricSpec(label="EUR/USD", tolerance=0.016, severity="medium"),
+    "usd_jpy": MetricSpec(label="USD/JPY", tolerance=3.0, severity="medium"),
+    "gbp_usd": MetricSpec(label="GBP/USD", tolerance=0.016, severity="medium"),
 }
 
 FORECAST_TARGETS = tuple(

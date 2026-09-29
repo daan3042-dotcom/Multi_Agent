@@ -76,6 +76,7 @@ en `docs/project-state.md`.
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
+| **Trigger-versienummer + vingerafdruk-waakhond (1.5)** | `src/contract/trigger_version.py`, `src/runtime/trigger_guard.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)
@@ -161,6 +162,14 @@ van dubbel werk.
   synthesizer) hoeft niets te doen: `Prediction.cohort` volgt de omgeving
   vanzelf. Geef alleen expliciet een cohort mee als het bewust afwijkt
   (`pseudo_oos` in de pseudo-OOS-run).
+- **Trigger-regels dragen een versienummer (29-09-2026).** Elke opgeslagen
+  trigger en elke voorspelling draagt `trigger_version`. Verander je een
+  drempel, ouderdomsgrens of trigger-gedrag, dan faalt
+  `tests/test_trigger_version.py` totdat je `TRIGGER_VERSION` in
+  `contract/trigger_version.py` ophoogt en de nieuwe vingerafdruk toevoegt.
+  Dat is geen bug in de test. Onder `MI_COHORT=cohort_0` weigert
+  `run_daily.py` te starten als de versie niet bevroren (checkpoint 5) of niet
+  ongewijzigd is.
 - **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
   (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
   trigger-drempels zonder versienummer.** Elke zo'n wijziging start

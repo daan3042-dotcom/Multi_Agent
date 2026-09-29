@@ -83,24 +83,24 @@ SECTOR_ETFS = {
 }
 
 METRIC_SPECS = {
-    "xlk_technology": MetricSpec(label="XLK (Technology)", tolerance=6.0, severity="medium"),
-    "xlf_financials": MetricSpec(label="XLF (Financials)", tolerance=1.5, severity="medium"),
-    "xle_energy": MetricSpec(label="XLE (Energy)", tolerance=3.0, severity="medium"),
-    "xlv_health_care": MetricSpec(label="XLV (Health Care)", tolerance=4.0, severity="medium"),
-    "xly_consumer_discretionary": MetricSpec(label="XLY (Consumer Discretionary)", tolerance=5.0, severity="medium"),
-    "xlp_consumer_staples": MetricSpec(label="XLP (Consumer Staples)", tolerance=2.0, severity="medium"),
-    "xli_industrials": MetricSpec(label="XLI (Industrials)", tolerance=4.0, severity="medium"),
-    "xlb_materials": MetricSpec(label="XLB (Materials)", tolerance=2.5, severity="medium"),
-    "xlu_utilities": MetricSpec(label="XLU (Utilities)", tolerance=2.0, severity="medium"),
-    "xlre_real_estate": MetricSpec(label="XLRE (Real Estate)", tolerance=1.5, severity="medium"),
-    "xlc_communication_services": MetricSpec(label="XLC (Communication Services)", tolerance=3.0, severity="medium"),
+    "xlk_technology": MetricSpec(label="XLK (Technology)", tolerance=8.9, severity="medium"),
+    "xlf_financials": MetricSpec(label="XLF (Financials)", tolerance=1.2, severity="medium"),
+    "xle_energy": MetricSpec(label="XLE (Energy)", tolerance=2.6, severity="medium"),
+    "xlv_health_care": MetricSpec(label="XLV (Health Care)", tolerance=3.5, severity="medium"),
+    "xly_consumer_discretionary": MetricSpec(label="XLY (Consumer Discretionary)", tolerance=6.2, severity="medium"),
+    "xlp_consumer_staples": MetricSpec(label="XLP (Consumer Staples)", tolerance=1.6, severity="medium"),
+    "xli_industrials": MetricSpec(label="XLI (Industrials)", tolerance=3.9, severity="medium"),
+    "xlb_materials": MetricSpec(label="XLB (Materials)", tolerance=2.0, severity="medium"),
+    "xlu_utilities": MetricSpec(label="XLU (Utilities)", tolerance=1.8, severity="medium"),
+    "xlre_real_estate": MetricSpec(label="XLRE (Real Estate)", tolerance=1.0, severity="medium"),
+    "xlc_communication_services": MetricSpec(label="XLC (Communication Services)", tolerance=2.9, severity="medium"),
     # Toegevoegd 28-09-2026. SPY werd tot dan alleen op deep-dive-tijd
     # opgehaald, waardoor relatieve sterkte nergens in de database stond en
     # dus niet te resolven was -- en daarmee kon de rijkste testbron van het
     # cohort (11 onafhankelijke doelen) geen voorspellingen doen. Nu elke
     # cyclus opgeslagen, zodat de relatieve rendementen achteraf uit de
     # claims-historie te berekenen zijn.
-    "spy_benchmark": MetricSpec(label="SPY (S&P 500-benchmark)", tolerance=15.0, severity="medium"),
+    "spy_benchmark": MetricSpec(label="SPY (S&P 500-benchmark)", tolerance=13.4, severity="medium"),
 }
 
 

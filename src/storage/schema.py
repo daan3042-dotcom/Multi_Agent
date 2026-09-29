@@ -30,6 +30,7 @@ from typing import Iterator
 from contract.graph import Node
 from contract.prediction import HorizonKind, Prediction, PredictionKind
 from contract.resolution import ResolutionMethod
+from contract.trigger_version import current_trigger_version
 from contract.output_contract import Claim, DomainOutput, Mode
 from health.data_health import QualityStatus
 from qc.qc import QCCase, QCCaseStatus, validate_qc_transition
@@ -85,7 +86,8 @@ CREATE TABLE IF NOT EXISTS trigger_events (
     observed_value_json TEXT,
     threshold_json TEXT,
     dispatch_batch_id TEXT,
-    resolved INTEGER NOT NULL DEFAULT 0
+    resolved INTEGER NOT NULL DEFAULT 0,
+    trigger_version TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_trigger_events_domain ON trigger_events(domain);
 CREATE INDEX IF NOT EXISTS idx_trigger_events_batch ON trigger_events(dispatch_batch_id);
@@ -268,6 +270,7 @@ def init_db(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn.executescript(_SCHEMA)
     conn.commit()
     _migreer_agent_runs_mode(conn)
+    _migreer_trigger_events_versie(conn)
     return conn
 
 
@@ -433,6 +436,10 @@ def load_trigger_events_for_day(conn: sqlite3.Connection, day: date, domain: str
     return events
 
 
+# Onderscheidt "geen versie meegegeven" (dan de huidige) van "bewust None".
+_HUIDIGE_VERSIE: str = object()  # type: ignore[assignment]
+
+
 def record_trigger_event(
     conn: sqlite3.Connection,
     domain: str,
@@ -443,10 +450,18 @@ def record_trigger_event(
     observed_value=None,
     threshold=None,
     dispatch_batch_id: str | None = None,
+    trigger_version: str | None = _HUIDIGE_VERSIE,
 ) -> int:
+    """Het ENIGE punt waar een trigger wordt vastgelegd, en dus de plek waar
+    hij zijn regelversie krijgt (roadmap 1.5, `contract/trigger_version.py`).
+    Standaard de versie waarmee de code nu draait; expliciet `None` alleen
+    voor een trigger waarvan de versie echt onbekend is."""
+    if trigger_version is _HUIDIGE_VERSIE:
+        trigger_version = current_trigger_version()
     cur = conn.execute(
         "INSERT INTO trigger_events (domain, triggered_at, reason, severity, metric_key, "
-        "observed_value_json, threshold_json, dispatch_batch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "observed_value_json, threshold_json, dispatch_batch_id, trigger_version) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             domain,
             triggered_at.isoformat(),
@@ -456,6 +471,7 @@ def record_trigger_event(
             json.dumps(observed_value, ensure_ascii=False, default=str) if observed_value is not None else None,
             json.dumps(threshold, ensure_ascii=False, default=str) if threshold is not None else None,
             dispatch_batch_id,
+            trigger_version,
         ),
     )
     conn.commit()
@@ -1016,6 +1032,25 @@ def _migreer_predictions_resolution_method(conn: sqlite3.Connection) -> bool:
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
     return True
+
+def _migreer_trigger_events_versie(conn: sqlite3.Connection) -> bool:
+    """Voegt `trigger_events.trigger_version` toe aan een bestaande database
+    (roadmap 1.5). Geeft True terug als er daadwerkelijk gemigreerd is.
+
+    `CREATE TABLE IF NOT EXISTS` raakt een bestaande tabel niet aan, dus op
+    de VPS zou de kolom anders ontbreken en zou elke trigger-insert falen.
+    ALTER TABLE ADD COLUMN volstaat hier (geen CHECK, geen herbouw).
+
+    OUDE RIJEN BLIJVEN NULL, bewust. Die triggers zijn gemaakt met drempels
+    die ondertussen zijn veranderd (WALCL, sector); `v0` zou beloven dat ze
+    bij de v0-regels horen, en dat is niet te bewijzen."""
+    kolommen = {rij[1] for rij in conn.execute("PRAGMA table_info(trigger_events)")}
+    if "trigger_version" in kolommen:
+        return False
+    conn.execute("ALTER TABLE trigger_events ADD COLUMN trigger_version TEXT")
+    conn.commit()
+    return True
+
 
 def _migreer_agent_runs_mode(conn: sqlite3.Connection) -> bool:
     """Voegt 'forecast' toe aan de toegestane modes van `agent_runs`.

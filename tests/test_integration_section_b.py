@@ -40,7 +40,7 @@ def test_full_monitoring_trigger_escalation_synthesis_database_pipeline(tmp_path
     ca_original = ca.fetch_snapshot
     try:
         mpa.fetch_snapshot = lambda: {"fed_funds_rate": {"value": "5.25", "date": "2026-01-01"}}
-        ca.fetch_snapshot = lambda: {"eur_usd": {"value": "1.0800", "date": "2026-01-01"}}
+        ca.fetch_snapshot = lambda: {"eur_usd": {"value": "1.0900", "date": "2026-01-01"}}
 
         baseline_mpa_output, baseline_mpa_triggers = mpa.monitor(conn, now=t_baseline)
         baseline_ca_output, baseline_ca_triggers = ca.monitor(conn, now=t_baseline)
@@ -54,8 +54,8 @@ def test_full_monitoring_trigger_escalation_synthesis_database_pipeline(tmp_path
 
         # -- Fed-besluit: raakt monetary policy EN currency tegelijk (het
         # voorbeeld dat het stappenplan zelf noemt voor de manager, A.6) --
-        mpa.fetch_snapshot = lambda: {"fed_funds_rate": {"value": "5.75", "date": "2026-01-31"}}  # +0.50pp, > tolerance 0.25
-        ca.fetch_snapshot = lambda: {"eur_usd": {"value": "1.0650", "date": "2026-01-31"}}  # -0.015, > tolerance 0.01
+        mpa.fetch_snapshot = lambda: {"fed_funds_rate": {"value": "5.75", "date": "2026-01-31"}}  # +0.50pp, > tolerance 0.15 (v1)
+        ca.fetch_snapshot = lambda: {"eur_usd": {"value": "1.0650", "date": "2026-01-31"}}  # -0.025, > tolerance 0.016 (v1)
 
         mpa_output, mpa_triggers = mpa.monitor(conn, now=t_fed_decision)
         ca_output, ca_triggers = ca.monitor(conn, now=t_fed_decision)

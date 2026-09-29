@@ -113,25 +113,25 @@ POTENTIAL_GDP_SERIES_ID = "GDPPOT"
 CPI_YOY_LAG_OBSERVATIONS = 12  # maandelijkse reeks: 12 observaties terug = ~1 jaar
 
 METRIC_SPECS = {
-    "fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.25, severity="high"),
-    "10y_treasury_yield": MetricSpec(label="10-jaars Treasury yield", tolerance=0.25, severity="medium"),
+    "fed_funds_rate": MetricSpec(label="Fed funds rate", tolerance=0.15, severity="high"),
+    "10y_treasury_yield": MetricSpec(label="10-jaars Treasury yield", tolerance=0.14, severity="medium"),
     "cpi_inflation_index": MetricSpec(label="CPI-index", tolerance=2.0, severity="medium"),
-    "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.3, severity="high"),
+    "unemployment_rate": MetricSpec(label="Werkloosheidspercentage", tolerance=0.15, severity="high"),
     # Zelfde status als de vier hierboven: illustratieve plaatshouders, geen
     # door DD gevalideerde drempels (docs/roadmap.md sectie H). De eerste
     # drie zijn percentagepunten en liggen in dezelfde orde van grootte als
     # de bestaande rente-tolerances; fed_balance_sheet is de MINST ZEKERE
     # van alle tolerances in dit project -- zie de moduledocstring.
-    "2y_treasury_yield": MetricSpec(label="2-jaars Treasury yield", tolerance=0.25, severity="medium"),
-    "inflation_expectations_5y": MetricSpec(label="5-jaars break-even inflatie", tolerance=0.10, severity="medium"),
-    "inflation_expectations_10y": MetricSpec(label="10-jaars break-even inflatie", tolerance=0.10, severity="medium"),
+    "2y_treasury_yield": MetricSpec(label="2-jaars Treasury yield", tolerance=0.14, severity="medium"),
+    "inflation_expectations_5y": MetricSpec(label="5-jaars break-even inflatie", tolerance=0.085, severity="medium"),
+    "inflation_expectations_10y": MetricSpec(label="10-jaars break-even inflatie", tolerance=0.055, severity="medium"),
     # 25.000 = ~$25 miljard balansverandering. Verlaagd van 100.000 op
     # 28-09-2026, nadat de eerste live run het niveau bevestigde op
     # 6.747.704 (miljoenen USD, dus ~$6,75 biljoen). Een normale week is
     # $5-30 miljard; $100 miljard zie je alleen bij crisis-QE, dus de oude
     # drempel zou in de praktijk nooit gevuurd hebben en liet de knoop
     # `liquidity` blind voor het tempo van de balansafbouw.
-    "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=25_000.0, severity="medium"),
+    "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=33_000.0, severity="medium"),
 }
 
 GRAPH_MAPPING: dict[str, Node | None] = {

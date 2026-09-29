@@ -53,6 +53,7 @@ from typing import Mapping
 
 from contract.graph import GRAPH_VERSION, Node
 from contract.resolution import ResolutionMethod
+from contract.trigger_version import current_trigger_version
 
 CONTRACT_VERSION = "v0"
 """Versie van DIT contract. Een wijziging hieraan start een nieuw cohort in
@@ -161,7 +162,7 @@ class Prediction:
     graph_node: Node | None = None
     causal_chain: tuple[str, ...] = ()
     evidence_claim_ids: tuple[int, ...] = ()
-    trigger_version: str | None = None
+    trigger_version: str | None = field(default_factory=current_trigger_version)
     trigger_conditioned: bool = False
     regime_at_creation: str | None = None
     market_implied_ref: float | None = None

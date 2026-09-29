@@ -239,7 +239,7 @@ Secties 4.5, 4.6.
   seizoenscomponent hoort hier), en een deterministisch model op de
   agent's eigen inputs (ridge/logistisch op dezelfde z-scores).
 - Synthesizer als gescoorde agent.
-- Trigger-versioning (1.5) en drempelkalibratie tegen de back-fill.
+- Trigger-versioning (1.5) **[29-09: gebouwd]** en drempelkalibratie tegen de back-fill **[29-09: v1 gekozen]**.
 
 ## Fase 3b — Pseudo-out-of-sample en dry-run (27 okt – 9 nov)
 
@@ -279,7 +279,7 @@ Secties 4.5, 4.6.
       repareert. Reden dat dit punt er pas op 28-09 bij kwam: de freeze
       bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
       de monitoring-scope waaruit die doelen gekozen worden
-- [ ] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2)
+- [~] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2) **[29-09: v1 gekozen; controle-run door DD en commodity-back-fill open]**
 - [ ] Economic agent lean gebouwd en gekoppeld (2.7)
 - [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
 - [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
@@ -527,13 +527,27 @@ gebouwd wordt staat in deel A, niet hier.
 
 ### 1.5 Trigger Engine
 - [x] Deterministische thresholds, geen LLM (`src/triggers/trigger_engine.py`)
-- [ ] **Trigger-versioning (welke regel-versie was actief toen dit
-      triggerde) — T₀-BLOKKADE.** Dit stond hier al, maar is nu kritiek
+- [x] **Trigger-versioning (welke regel-versie was actief toen dit
+      triggerde) — T₀-BLOKKADE.** **[29-09] gebouwd.** Dit stond hier al, maar is nu kritiek
       pad: zonder versienummer is een kalibratie over een periode waarin
       een drempel verschoven is niet te interpreteren. Zie 4.2.
+      `TRIGGER_VERSION` (`src/contract/trigger_version.py`) staat op elke
+      opgeslagen trigger (`trigger_events.trigger_version`, migratie;
+      oude rijen `NULL`, bewust niet `v0`) en op elke voorspelling
+      (`Prediction.trigger_version`, volgt de code zoals het cohort). Een
+      vingerafdruk (`runtime/trigger_guard.py`) over drempels,
+      ouderdomsgrenzen én het gedrag van de trigger-laag (probes, zonder
+      `src/triggers/` aan te raken) laat een test falen zodra een regel
+      verandert zonder versie. `run_daily.py` weigert
+      `MI_COHORT=cohort_0` zonder bevroren en ongewijzigde regelset
+      (exit 2). **De pin is een onderdeel van de freeze:** op T₀ᵇ zet DD
+      `FROZEN_TRIGGER_VERSION`; tot dan weigert cohort_0 te starten.
 - [~] **Drempels kalibreren tegen de volledige historie (fase 0)** —
-      **[29-09] rapport gebouwd (`calibrate_triggers.py`, alleen lezen); de KEUZE van
-      de drempels is aan DD en nog niet gemaakt.** Hoe
+      **[29-09] rapport gebouwd (`calibrate_triggers.py`, alleen lezen);
+      drempels gekozen en als trigger-versie v1 vastgelegd (5 per jaar per
+      reeks, currency 2). Nog te doen: DD draait het rapport opnieuw en
+      controleert per reeks dat Tabel 1 (kolom `3j`) op ~5 uitkomt; commodity
+      blijft voorlopig (geen historie).** Hoe
       vaak zou elke regel gevuurd hebben? Vervangt de huidige
       illustratieve waarden. **[27-09]** Niet "≥5 jaar" maar alles wat
       de bron geeft: FRED levert 50+ jaar gratis, en vijf jaar (2021–2026)
@@ -1347,6 +1361,17 @@ kalibratie-deel van 5.2.
 
 ## Open beslissingen (bewust nog niet dichtgetimmerd)
 
+- [ ] **Triggers voor reeksen met een groeitrend (CPI, payrolls) en
+      niveau-afhankelijke drempels (sector, prijzen).** [29-09] Een absolute
+      afwijking van de vorige waarde is voor een trendreeks geen verrassing
+      (CPI stijgt ~0,9 punt per maand, PAYEMS groeit ~100-150 duizend), en een
+      vast dollarbedrag voor een ETF die in drie jaar verdubbeld is, betekent nu
+      een kleiner percentage dan toen. Een regel die met trend of verwachting
+      vergelijkt, of met een percentage van het niveau, is een wijziging in de
+      trigger-engine (checkpoint 2) en dus een nieuwe trigger-versie. Niet
+      pre-T₀ᵇ opgepakt: v1 laat deze twee reeksen op hun v0-waarde en de
+      sector op absolute bedragen.
+
 - [ ] **Welke VPS-provider?** Richting (VPS) is beslist; provider en
       instance nog niet. De code veronderstelt niets over de machine.
       Blokkeert T₀ᵃ — eerstvolgende beslissing.
@@ -1371,6 +1396,33 @@ kalibratie-deel van 5.2.
       andere agents voedt.
 
 ## Beslist op 29-09-2026
+
+- [x] **Trigger-versioning en drempelset v1.** Versioning gebouwd volgens
+      DD's akkoord op alle vier de vragen: (1) waakhond met vingerafdruk in
+      plaats van een handmatig nummer, (2) oude triggers op `NULL`, (3) harde
+      pin bij de freeze, (4) drempels gekozen vóór de dry-run-week. Set **v1**
+      volgens "5 per jaar, currency 2", met uitzonderingen die DD aan mij
+      overliet ("stel maar in wat jij het beste vindt"):
+      - **Stapreeksen** (fed funds, werkloosheid, break-evens, NFCI, HY-spread,
+        curve) krijgen een drempel halverwege twee stapjes: een drempel precies
+        op een stap is door float-afronding (4,3 − 4,1 = 0,2000000000000002)
+        een loterij. Fed funds beweegt maar een paar keer per jaar, dus daar
+        ~2 per jaar.
+      - **`unemployment_rate` heeft nu één drempel (0,15) in beide domeinen**;
+        voor v1 waren dat 0,3 (monetary) en 0,2 (economic) voor dezelfde
+        publicatie.
+      - **CPI en payrolls blijven op hun v0-waarde** (2,0 en 250): een niveau
+        met groeitrend geeft bij "5 per jaar" een drempel ≈ de gewone
+        maandgroei, die bij elke bovengemiddelde maand vuurt en niets zegt over
+        verrassing. Payrolls vuurt daardoor in drie jaar nooit. Zie het open
+        punt hieronder.
+      - **Commodity en de HY-spread blijven voorlopig** (geen resp. drie jaar
+        historie).
+      Verwachting: ~125 triggers per jaar tegen 161 onder v0, maar anders
+      verdeeld: currency 86 → ~6; sector ~53 → ~60 (de grootste, en de elf
+      reeksen bewegen samen: de manager bundelt gelijktijdige triggers);
+      monetary, financial en economic stijgen omdat hun v0-drempels te hoog
+      waren. Alleen een controle-run van het rapport bevestigt de aantallen.
 
 - [x] **Extra databronnen: niets vóór T₀ᵃ, kandidaten vastgelegd.** DD
       inventariseerde ALFRED, NY Fed Markets, Treasury FiscalData, BLS/BEA,

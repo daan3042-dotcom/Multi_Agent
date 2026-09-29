@@ -1025,6 +1025,54 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Trigger-versioning en drempelset v1 (1.5, 29-09) — 712 tests groen
+
+**Twee stappen, in deze volgorde, zodat de geschiedenis het toont.** Eerst de
+versioning met `v0` als de huidige plaatshouders (commit 74d5872), daarna de
+nieuwe drempels als `v1`. Tussen die twee commits liet de waakhond de test falen
+op het moment dat de eerste drempel veranderde: precies wat hij moet doen.
+
+**Wat er is.** `contract/trigger_version.py` heeft `TRIGGER_VERSION`, een
+registratie `TRIGGER_FINGERPRINTS` (v0 en v1, oude blijven als historie) en
+`FROZEN_TRIGGER_VERSION` (nu `None`). `runtime/trigger_guard.py` rekent de
+vingerafdruk uit over (1) de configuratie: `tolerance` + `severity` per reeks en
+`MAX_AGE` per agent, en (2) het gedrag: vaste invoer door de echte
+trigger-functies (strikt groter dan, de verhouding waarbij een onvolledige pull
+`high` wordt, de staleness-grens, vergelijking met de LAATSTE claim, revisie,
+manager-dispatch). Dat staat bewust buiten `src/triggers/`: checkpoint 2
+verbiedt het verzwakken van de engine, en de probes lezen hem alleen. Labels en
+redenteksten tellen niet mee. `trigger_events.trigger_version` is een nieuwe
+kolom (ALTER TABLE-migratie); `record_trigger_event` is het enige punt waar
+triggers worden opgeslagen en stempelt de huidige versie.
+`Prediction.trigger_version` volgt de code via `default_factory`, zoals het
+cohort, dus baselines en (later) mensen doen niets.
+
+**De pin.** `run_daily.py` stopt met exit 2 als `MI_COHORT=cohort_0` staat en
+(a) `FROZEN_TRIGGER_VERSION` niet gezet is, (b) die anders is dan
+`TRIGGER_VERSION`, of (c) de vingerafdruk niet bij die versie past (ook op de
+VPS, waar niemand pytest draait als iemand een bestand aanpast). Voor `dry_run`
+en `pseudo_oos` doet hij niets.
+
+**Bewijs dat de tests iets bewaken.** Vier mutaties, alle gevangen: de stempel
+uit `record_trigger_event` (4 tests falen), de migratie niet aanroepen (de
+oude-database-test faalt met een OperationalError), de pin niet aanroepen in
+`run_daily.py`, `Prediction.trigger_version` op `None`. Daarnaast verschuiven
+drie tests een grens in de trigger-laag zelf (`>` → `>=`, high vanaf 40% in
+plaats van 50%, stale vanaf de grens) en eisen dat de vingerafdruk meebeweegt.
+
+**v1.** 5 triggers per jaar per reeks, currency 2, gekozen met het
+kalibratierapport op de laatste drie jaar, zie "Beslist op 29-09-2026" in
+`docs/roadmap.md` voor de uitzonderingen (stapreeksen halverwege twee stapjes,
+één UNRATE-drempel, CPI en payrolls ongewijzigd, commodity voorlopig). Twee
+bestaande tests hardcodeerden oude drempels en zijn aangepast op hun bedoeling,
+niet versoepeld: de integratietest (EUR/USD-beweging groter dan 0,016) en de
+kalibratietest (leest de tolerance uit de agent).
+
+**Ongetest.** De aantallen per jaar onder v1 zijn afgeleid uit het rapport, niet
+gemeten: alleen een nieuwe run van `calibrate_triggers.py` op de VPS
+bevestigt of Tabel 1 (kolom `3j`) nu ~5 toont. Bij een afrondingsverschil of
+een tie op een stapreeks is bijsturen een nieuwe versie, geen correctie.
+
 ### Trigger-kalibratierapport (1.5) — 676 tests groen
 
 Een rapport dat alleen leest: hoe vaak zou elke drempel gevuurd hebben over de
