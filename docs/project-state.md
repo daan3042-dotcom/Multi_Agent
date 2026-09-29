@@ -1025,6 +1025,23 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### `.env` voor de handmatige scripts (29-09) — 641 tests groen
+
+`run_daily.sh` laadt `.env` (cron kent geen shell-profile), maar `backfill.py` en
+`fit_baselines.py` worden met de hand gestart en verwachtten dat je eerst
+`source .env` deed. Vergeten kostte vandaag een ronde ("API-key niet gevonden"
+terwijl hij gewoon in `.env` staat), en bij `fit_baselines.py`, dat geen key nodig
+heeft, was het gevaarlijker: `MI_DB_PATH` viel stil terug op een database in de
+huidige map, een lege waarin alles "mislukt" zonder aanwijzing waarom.
+
+Beide scripts lezen nu het `.env` naast het script zelf in (`runtime/env.py`, een
+eigen mini-parser, geen nieuwe dependency). Bestaande omgevingsvariabelen worden
+nooit overschreven en waarden worden nooit getoond of gelogd. Een lege waarde
+(`MI_COHORT=`) telt als "niet ingesteld", zoals `.env.example` bedoelt.
+
+`run_daily.py` is bewust niet aangepast: dat draait via `run_daily.sh`, dat `.env`
+al inlaadt, en het is de onbeheerde kant (checkpoint 3).
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

@@ -258,6 +258,13 @@ er ontstaan nooit dubbele claims. Vóór 29-09 slikte het script elke fout stil
 in (ook Alpha Vantage's "limiet bereikt", dat als HTTP 200 met alleen tekst
 komt) en telde een domein als geslaagd zodra één reeks data gaf.
 
+**Je hoeft `.env` niet zelf in te laden.** `backfill.py` en `fit_baselines.py`
+lezen het `.env` naast het script zelf in (`runtime/env.py`); een variabele die je
+expliciet zet wint altijd, en waarden worden nooit getoond. Vóór 29-09 moest je
+eerst `set -a; source .env; set +a` doen, en vergeten gaf een "API-key niet
+gevonden" (bij `fit_baselines.py` ergens anders: een stille terugval op een
+database in de huidige map).
+
 ```bash
 cd /opt/multi_agent
 
