@@ -408,3 +408,92 @@ def test_de_ronde_schrijft_alle_drie_de_baselines(tmp_path):
 
     assert resultaat.is_complete
     assert sorted(p.agent for p in list_predictions(conn)) == [CLIMATOLOGY, PERSISTENCE, RIDGE]
+
+
+# --------------------------------------------------------------------------
+# Nooit slechter dan 'geen verandering' (droge run op echte data, 29-09)
+#
+# De eerste droge run op de VPS gaf bij een aantal doelen een oos/rw BOVEN 1
+# (gbp_usd h=63: 1,175). Oorzaken: een geschatte trend (intercept) die uit-de-
+# steekproef niet klopt, en een lambda-raster dat bij 100 stopte terwijl de CV
+# bijna overal die bovengrens koos. Bevriezen zou een baseline hebben vastgelegd
+# die verliest van niets doen.
+# --------------------------------------------------------------------------
+
+
+def _random_walk_db(tmp_path, stappen):
+    conn = _db(tmp_path)
+    waarden = [100.0]
+    for s in stappen:
+        waarden.append(waarden[-1] + s)
+    _reeks(conn, "x", waarden)
+    rng = random.Random(3)
+    _reeks(conn, "f", [rng.gauss(0, 1) for _ in range(len(waarden))])
+    return conn
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_model_is_nooit_slechter_dan_geen_verandering(tmp_path, seed):
+    """De eigenschap zelf, over meerdere soorten reeksen: een trend die van
+    regime wisselt (de valuta-situatie), pure ruis, en een stabiele trend. De
+    cross-validatie kiest uit een raster dat het 'niets doen'-model bevat, dus
+    het resultaat kan dat model niet met meer dan afrondingsverschil verliezen."""
+    rng = random.Random(seed)
+    n = 700
+    soorten = [
+        [rng.gauss(0, 1) + (0.5 if i < n // 2 else -0.5) for i in range(n)],   # trend wisselt van teken
+        [rng.gauss(0, 1) for _ in range(n)],                                    # ruis zonder trend
+        [rng.gauss(0, 1) + 0.3 for _ in range(n)],                              # stabiele trend
+    ]
+    for stappen in soorten:
+        conn = _random_walk_db(tmp_path / f"s{seed}_{id(stappen)}", stappen)
+        fit = fit_ridge_model(conn, "d", _doel(), 5, MAANDAG)
+        assert fit.mse_oos <= fit.mse_random_walk * 1.0005, (
+            f"oos/rw = {fit.mse_oos / fit.mse_random_walk:.4f}: het model verliest van 'geen verandering'"
+        )
+
+
+def test_een_stabiele_trend_wordt_wel_meegenomen(tmp_path):
+    """De keerzijde. Banen en prijzen hebben een echte, stabiele trend, en daar
+    is 'geen verandering' een strohalm. Het model moet dan ruim winnen. Of dat via
+    de drift-vlag gaat of via de z-score van de eigen (stijgende) reeks, dat de
+    trend zelf al draagt, maakt niet uit: het resultaat telt, niet de route."""
+    rng = random.Random(4)
+    conn = _random_walk_db(tmp_path, [1.0 + 0.3 * rng.gauss(0, 1) for _ in range(600)])
+
+    fit = fit_ridge_model(conn, "d", _doel(), 1, MAANDAG)
+
+    assert fit.mse_oos < 0.3 * fit.mse_random_walk
+
+
+def test_op_ruis_claimt_het_model_geen_echte_winst(tmp_path):
+    """Zonder enig signaal mag het model niet verliezen (bovengrens) en hoort het
+    ook niet veel te winnen (ondergrens).
+
+    Dat het model iets onder 1,0 uitkomt (hier ~0,98) is winst uit TOEVAL: de
+    cross-validatie kiest uit 14 combinaties van drift en lambda en pakt dus de
+    toevallig beste (winner's curse). Consequentie voor het lezen van de echte
+    uitvoer: een oos/rw van 0,98 is GEEN bewijs van voorspelkracht. Echte
+    structuur zie je aan duidelijk lagere waarden (VIX h=63: 0,884)."""
+    rng = random.Random(5)
+    conn = _random_walk_db(tmp_path, [rng.gauss(0, 1) for _ in range(600)])
+
+    fit = fit_ridge_model(conn, "d", _doel(), 5, MAANDAG)
+
+    verhouding = fit.mse_oos / fit.mse_random_walk
+    assert 0.95 <= verhouding <= 1.0005
+
+
+def test_het_raster_bevat_het_nulmodel():
+    """Het eerste raster stopte bij 100 en de CV koos bijna overal die grens: dat
+    is het teken van een te klein raster. Bij lambda = 10.000 zijn alle
+    coefficienten praktisch nul."""
+    assert max(LAMBDA_GRID) >= 10_000
+
+
+def test_fit_zonder_drift_heeft_geen_intercept():
+    rng = random.Random(6)
+    x = [[rng.gauss(0, 1)] for _ in range(200)]
+    y = [5.0 + 2.0 * a for (a,) in x]
+    intercept, _ = fit_ridge(x, y, lam=1e-9, drift=False)
+    assert intercept == 0.0

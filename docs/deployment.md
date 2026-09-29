@@ -373,15 +373,17 @@ cd /opt/multi_agent
 
 - **Geen regels met `MISLUKT`.** Staat er wel een, dan is de back-fill niet
   klaar voor dat doel (de reden staat erachter). Bevries pas als alles fit.
-- **`weggelaten`** achter een doel: een input met te korte historie is uit
-  het model gelaten. Staat daar een reeks die je WEL verwacht, dan is de
-  back-fill van die reeks niet compleet.
-- **`oos/rw`**: de uit-de-steekproef-fout gedeeld door die van "geen
-  verandering". Onder 1,0 zeggen de inputs iets. Rond 1,0 is ook prima voor
-  een baseline — het model regelt zichzelf dan naar niets toe — maar dan
-  verwacht je van het taalmodel ook niet dat de inputs alleen het werk doen.
-  Een waarde ruim **boven** 1,0 zou een bug zijn (het model hoort daar
-  nooit slechter dan niets doen te zijn): meld dat, bevries niet.
+- **`weggelaten`** achter een doel: een input met minder dan 80% van de
+  trainingsrijen is uit het model gelaten. Dat zijn ook reeksen die het LLM wél
+  ziet (bijvoorbeeld de balans van de Fed bij de 10-jaars rente); zie de
+  freeze-punten in `docs/project-state.md`.
+- **`oos/rw`**: de uit-de-steekproef-fout gedeeld door die van "geen verandering".
+  Het model kiest uit een raster dat "geen verandering" bevat, dus deze waarde kan
+  **niet meer ruim boven 1,000 uitkomen**. Staat er toch iets als 1,01 of hoger, dan
+  is dat een bug: meld het, bevries niet. **Waarden net onder 1 (0,97 tot 1,00) zijn
+  geen bewijs van voorspelkracht**: de cross-validatie kiest de toevallig beste uit
+  14 combinaties (winner's curse). Echte structuur zie je aan duidelijk lagere
+  waarden, zoals VIX h=63 op 0,88.
 - **`rijen`**: de trainingsrijen. Ze overlappen (vensters van 21 of 63
   dagen), dus de effectieve n ligt er ver onder; kijk alleen naar de orde
   van grootte.
