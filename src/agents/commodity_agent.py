@@ -32,13 +32,13 @@ prijs ligt boven het recente gemiddelde, negatief = eronder. Zelfde
 modellen in analysis/.
 
 TOLERANCES: grondstoffen hebben zeer verschillende prijsniveaus EN
-eenheden (dollar/vat, dollar/pond, dollar/bushel, ...) -- de waarden
-hieronder zijn ruwe schattingen (~5% van een TYPISCH niveau), met MINDER
-zekerheid dan bijv. sector_agent.py's ETF-tolerances (prijsniveaus en
-eenheden voor bijv. WHEAT/COTTON zijn hier niet met zekerheid geverifieerd
-tegen actuele marktdata). Nog sterker een kandidaat voor DD's eigen
-latere finetuning dan de andere agents -- zie CLAUDE.md, "Werkwijze met
-DD".
+eenheden (dollar/vat, dollar/ton, dollar/mmbtu, cent/pond, ...). Tot
+29-09-2026 waren de waarden ruwe schattingen; sinds trigger-versie v2 zijn ze
+gekalibreerd op 35 jaar back-fill (`calibrate_triggers.py`), zie de opmerking
+bij METRIC_SPECS hieronder. Kwaliteitsvoorbehoud dat blijft: de bron geeft
+maandgemiddelden, en een vast bedrag veroudert als het prijsniveau
+wegdrijft (zie docs/roadmap.md, open beslissing over niveau-afhankelijke
+drempels).
 """
 
 from __future__ import annotations
@@ -76,17 +76,28 @@ COMMODITIES = {
     "coffee": "COFFEE",
 }
 
+# Trigger-versie v2 (29-09-2026): gekalibreerd op de back-fill, ~5 keer per jaar
+# over de laatste drie jaar (kalibratierapport, Tabel 2). De bron is MAANDELIJKS,
+# dus 5 per jaar is 5 van de 12 publicaties, en alle tien de reeksen springen op
+# dezelfde dag: de manager bundelt dat tot een deep-dive per dag.
+#
+# EENHEDEN, nu geverifieerd tegen de opgeslagen data (voorheen een aanname):
+# koper staat in dollar per METRISCHE TON (niveau ~13.500), niet per pond zoals
+# de v0-tolerantie van 0,20 aannam. Die regel vuurde daardoor bij ELKE
+# publicatie (100% van de waarnemingen) en was dus geen drempel maar een
+# constante. Tarwe en maïs (v0: 30 en 25) vuurden in drie jaar bijna nooit
+# (0,3 per jaar).
 METRIC_SPECS = {
-    "wti": MetricSpec(label="WTI ruwe olie", tolerance=4.0, severity="medium"),
-    "brent": MetricSpec(label="Brent ruwe olie", tolerance=4.0, severity="medium"),
-    "natural_gas": MetricSpec(label="Aardgas", tolerance=0.20, severity="medium"),
-    "copper": MetricSpec(label="Koper", tolerance=0.20, severity="high"),
-    "aluminum": MetricSpec(label="Aluminium", tolerance=120.0, severity="medium"),
-    "wheat": MetricSpec(label="Tarwe", tolerance=30.0, severity="medium"),
-    "corn": MetricSpec(label="Maïs", tolerance=25.0, severity="medium"),
-    "cotton": MetricSpec(label="Katoen", tolerance=4.0, severity="medium"),
-    "sugar": MetricSpec(label="Suiker", tolerance=1.5, severity="medium"),
-    "coffee": MetricSpec(label="Koffie", tolerance=10.0, severity="medium"),
+    "wti": MetricSpec(label="WTI ruwe olie", tolerance=4.1, severity="medium"),
+    "brent": MetricSpec(label="Brent ruwe olie", tolerance=4.4, severity="medium"),
+    "natural_gas": MetricSpec(label="Aardgas", tolerance=0.3, severity="medium"),
+    "copper": MetricSpec(label="Koper", tolerance=356.0, severity="high"),
+    "aluminum": MetricSpec(label="Aluminium", tolerance=73.0, severity="medium"),
+    "wheat": MetricSpec(label="Tarwe", tolerance=11.7, severity="medium"),
+    "corn": MetricSpec(label="Maïs", tolerance=9.6, severity="medium"),
+    "cotton": MetricSpec(label="Katoen", tolerance=1.9, severity="medium"),
+    "sugar": MetricSpec(label="Suiker", tolerance=0.9, severity="medium"),
+    "coffee": MetricSpec(label="Koffie", tolerance=14.6, severity="medium"),
 }
 
 

@@ -31,7 +31,10 @@ docs/roadmap.md wat er veranderd is en waarom.
 VERSIES.
   v0  de illustratieve plaatshouders waarmee het systeem is opgezet.
   v1  de gekalibreerde set (29-09-2026, 5 triggers/jaar, currency 2), zie
-      docs/roadmap.md "Beslist op 29-09-2026".
+      docs/roadmap.md "Beslist op 29-09-2026". Commodity bleef op v0-waarden
+      omdat er nog geen historie was.
+  v2  v1 + commodity gekalibreerd op de back-fill (29-09-2026, dezelfde dag,
+      ~5 per jaar). Alleen de tien commodity-drempels zijn veranderd.
 
 ONBEKEND IS GEEN v0. Triggers van vóór deze module hebben `NULL` in
 `trigger_events.trigger_version`: ze zijn gemaakt met drempels die
@@ -41,7 +44,7 @@ beloven.
 
 from __future__ import annotations
 
-TRIGGER_VERSION = "v1"
+TRIGGER_VERSION = "v2"
 
 # versie -> vingerafdruk van de regels zoals die bij die versie golden.
 # Alleen de vingerafdruk van TRIGGER_VERSION wordt bewaakt; de oudere blijven
@@ -49,6 +52,7 @@ TRIGGER_VERSION = "v1"
 TRIGGER_FINGERPRINTS: dict[str, str] = {
     "v0": "d075e95a2b069acf",
     "v1": "6d38e5eadaa613b3",
+    "v2": "f80c151df5175293",
 }
 
 # De versie die bij de freeze vóór T₀ᵇ is bevestigd (CLAUDE.md, checkpoint 5).
