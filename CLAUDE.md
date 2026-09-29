@@ -73,6 +73,8 @@ en `docs/project-state.md`.
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |
 | Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
+| **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
+| Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)

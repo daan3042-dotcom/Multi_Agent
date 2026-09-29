@@ -144,7 +144,7 @@ intraday (buiten scope, zie Scope-afbakening).
 | 3 | ~~`predictions` bestaat niet~~ **[28-09 opgelost]** | Er is niets te scoren | 1.2 / 4.1 |
 | 4 | Geen resolver, geen baselines | Een ongescoorde voorspelling is een mening | 4.5 / 4.6 |
 | | └ resolver + scores **[28-09 opgelost]** | | 4.5 |
-| | └ drie baselines — **open** | Zonder baseline is niet vast te stellen of we iets gebouwd hebben of alleen kosten gemaakt | 4.6 |
+| | └ baselines **[29-09]**: persistence + climatology af; ridge gebouwd, wacht op fit na de back-fill | Zonder baseline is niet vast te stellen of we iets gebouwd hebben of alleen kosten gemaakt | 4.6 |
 
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
@@ -234,7 +234,7 @@ Secties 4.5, 4.6.
 - Scores: pinball loss + CRPS (kwantielen), Brier + log loss (binair),
   kalibratiecurve, discriminatie (AUC), en **effectieve n** via
   block-bootstrap over overlappende horizonnen — naast de nominale n.
-- **Drie baselines**, alle als agent gescoord: persistence,
+- **Drie baselines** **[29-09: 2 af, ridge wacht op fit]**, alle als agent gescoord: persistence,
   climatology (onvoorwaardelijke basisrate uit de volledige historie;
   seizoenscomponent hoort hier), en een deterministisch model op de
   agent's eigen inputs (ridge/logistisch op dezelfde z-scores).
@@ -284,7 +284,7 @@ Secties 4.5, 4.6.
 - [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
 - [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
 - [~] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5) **[28-09: gebouwd en getest; nog niet tegen echte afgelopen voorspellingen gedraaid — dat kan pas als de eerste horizon verstrijkt]**
-- [ ] Drie baselines draaien mee (4.6)
+- [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
 - [ ] Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1 (1.10)
@@ -1198,19 +1198,41 @@ Zonder baseline is niet vast te stellen of we iets gebouwd hebben of
 alleen kosten gemaakt. **[27-09] Drie** baselines draaien vanaf T₀ mee als
 volwaardige "agents" in de scoring, met dezelfde kwantielvorm.
 
-- [ ] **Random walk / persistence** — "het blijft zoals het is";
-      kwantielen uit de historische verdeling van veranderingen over de
-      horizon. Verrassend moeilijk te verslaan
-- [ ] **Climatology** — de onvoorwaardelijke historische verdeling uit de
-      volledige back-fill. **[27-09]** Seizoenscomponent hoort hier
-      (climatology conditioneel op kalender), niet in een aparte
-      "seasonals agent"
-- [ ] **[27-09] Deterministisch model op de agent's eigen inputs** —
-      ridge/logistische regressie op precies de z-scores en
-      `src/analysis/`-uitkomsten die het LLM in de forecast-ronde ziet,
-      gefit op de back-fill vóór T₀ᵇ en daarna bevroren. Als het LLM dít
-      niet verslaat, voegt het niets toe boven zijn inputs, en zit de
-      winst in tekst (2.8) — dat is een uitkomst, geen mislukking.
+- [x] **[29-09] Random walk / persistence** (`src/scoring/baselines.py`)
+      — "het blijft zoals het is"; kwantielen uit de historische verdeling
+      van veranderingen over de horizon. Verrassend moeilijk te verslaan.
+      De veranderingen worden gecentreerd op hun eigen mediaan, zodat de
+      historische drift niet meeloopt: een baseline mét ingebouwde trend
+      verslaat een agent die dat niet weet, om de verkeerde reden.
+- [x] **[29-09] Climatology** — de historische verdeling uit de
+      back-fill, **conditioneel op de kalendermaand van `resolves_at`**
+      zodra daar ≥60 waarnemingen voor zijn (**[27-09]** seizoenscomponent
+      hoort hier, niet in een aparte agent). Eronder valt hij terug op
+      onvoorwaardelijk, en dat staat in de `note` van elke voorspelling.
+      Maandreeksen (UNRATE, PAYEMS) halen die drempel nooit en zijn dus
+      altijd onvoorwaardelijk — bedoeld.
+- [~] **[27-09] Deterministisch model op de agent's eigen inputs**
+      (`src/scoring/ridge.py`) — ridge op de z-scores van alle reeksen van
+      het domein, gefit op de back-fill en daarna bevroren.
+      **[29-09] Machinerie gebouwd en getest; het daadwerkelijke fitten
+      wacht op de volledige back-fill (VPS) en is een freeze-beslissing.**
+      `fit_baselines.py` is standaard droog; `--freeze` is onomkeerbaar.
+      Kwantielen komen uit de residuen van een expanding-window
+      cross-validatie, niet uit de fit zelf (anders is de baseline
+      overmoedig). Point-in-time via een conservatieve publicatievertraging
+      per cadans (dagelijks 1, wekelijks 7, maandelijks 50 dagen) —
+      **niet per reeks geverifieerd, checkpoint 4**. **Bekende beperking,
+      te bevestigen bij de freeze:** voor week- en maanddoelen ziet de
+      ridge de inputs zoals ze waren op de laatste waarneming van het
+      doel, tot ~5 weken ouder dan wat het LLM ziet. Als het LLM dít niet
+      verslaat, voegt het niets toe boven zijn inputs, en zit de winst in
+      tekst (2.8) — dat is een uitkomst, geen mislukking.
+- [x] **[29-09] De FEDFUNDS-richting wordt door geen enkele baseline
+      voorspeld**, bewust en zichtbaar (`skipped`, niet `issues`): de
+      gebeurtenis ligt op FOMC-vergaderingen, een basisrate uit maandelijkse
+      FEDFUNDS-vensters zou een ándere gebeurtenis scoren. Zelfde reden als
+      de lege FOMC-kalender in 4.5. Gevolg: die twee doelen worden alleen
+      tegen de agent zelf gescoord, niet tegen een baseline.
 - [ ] **[27-09] Afspraak herzien:** een agent gaat er na zes maanden
       alleen uit bij *bewijs van geen skill* — skill-posterior (4.5)
       < 0,2 onder de vooraf vastgelegde prior — niet bij *ontbreken van
@@ -1300,6 +1322,21 @@ kalibratie-deel van 5.2.
 
 ## Open beslissingen (bewust nog niet dichtgetimmerd)
 
+- [ ] **[29-09] BLOKKEREND VÓÓR `--deep-dives` AAN GAAT: welk cohort
+      krijgen voorspellingen vóór T₀ᵇ?** `Prediction.cohort` staat hard op
+      `"cohort_0"` (`contract/prediction.py::COHORT_0`) en niets schakelt dat
+      om. Zodra de wekelijkse ronde op de VPS draait, zouden de
+      voorspellingen van 5, 12, 19, 26 okt en 2, 9 nov als het ECHTE cohort
+      worden opgeslagen — vóór de freeze van contract, prompts en drempels.
+      De roadmap zegt het tegenovergestelde: dry-run en pseudo-OOS horen
+      `pseudo_oos` te zijn en nooit met het echte cohort gemengd te worden.
+      **Waarom dit niet achteraf te herstellen is:** `predictions` heeft
+      bewust geen update-pad, dus een verkeerd label is definitief.
+      **Voorstel (nog niet gebouwd, raakt onbeheerd draaien = checkpoint
+      3):** het cohort komt uit de environment (`MI_COHORT`) met als
+      veilige default `dry_run`. Op T₀ᵇ zet DD `MI_COHORT=cohort_0` in
+      `.env`; alles daarvóór is per definitie geen cohort 0. Eén plek die
+      zowel de agents als de drie baselines volgt.
 - [ ] **Welke VPS-provider?** Richting (VPS) is beslist; provider en
       instance nog niet. De code veronderstelt niets over de machine.
       Blokkeert T₀ᵃ — eerstvolgende beslissing.

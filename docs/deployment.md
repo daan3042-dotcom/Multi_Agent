@@ -214,15 +214,67 @@ Anthropic-client is. Er is dus GEEN aparte cron-regel voor; de bestaande
 
 ```bash
 sqlite3 market_intelligence.db \
-  "SELECT domain, COUNT(*) FROM predictions GROUP BY domain;"
+  "SELECT agent, COUNT(*) FROM predictions GROUP BY agent ORDER BY agent;"
 ```
 
-Verwacht: vijf domeinen, samen 57 rijen (sector 22, financial 12,
-currency 9, monetary_policy 8, economic 6). Staat er een domein op nul of
-op een te laag aantal, kijk dan in het log naar regels die beginnen met
-`Forecast-probleem:` — een deels mislukte ronde gooit de geldige
+Groepeer op `agent` en niet op `domain`: de baselines schrijven onder het
+domein van de agent waarmee ze vergeleken worden, dus per domein tellen ze
+mee en klopt het getal niet meer. Verwacht per week bij volledige historie
+en een bevroren ridge: **de vijf agents samen 57 rijen** (sector 22,
+financial 12, currency 9, monetary_policy 8, economic 6) en elk van de drie
+`baseline:*` **55 rijen** (57 minus de twee FEDFUNDS-doelen, die geen
+baseline krijgen). Staat er een agent op nul of op een te laag aantal, kijk
+dan in het log naar regels die beginnen met `Forecast-probleem:` of
+`Baseline-probleem:` — een deels mislukte ronde gooit de geldige
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
 gat.
+
+### De ridge-baseline fitten en bevriezen (roadmap 4.6) — eenmalig, na de back-fill
+
+De derde baseline moet gefit worden op de historie, en daarna staat hij
+vast. Dat is een **freeze-beslissing** (CLAUDE.md checkpoint 5): doe het
+pas als de volledige back-fill erin zit, ook de Alpha Vantage-helft. Anders
+hebben currency en sector te weinig historie en worden ze overgeslagen —
+en een ridge die je later moet vervangen is een nieuwe specversie.
+
+```bash
+cd /opt/multi_agent
+
+# 1. Droog: fit alles, toon de diagnostiek, schrijf NIETS.
+.venv/bin/python fit_baselines.py
+
+# 2. Pas als je tevreden bent: bevries. ONOMKEERBAAR.
+.venv/bin/python fit_baselines.py --freeze
+```
+
+**Wat je in de uitvoer bekijkt:**
+
+- **Geen regels met `MISLUKT`.** Staat er wel een, dan is de back-fill niet
+  klaar voor dat doel (de reden staat erachter). Bevries pas als alles fit.
+- **`weggelaten`** achter een doel: een input met te korte historie is uit
+  het model gelaten. Staat daar een reeks die je WEL verwacht, dan is de
+  back-fill van die reeks niet compleet.
+- **`oos/rw`**: de uit-de-steekproef-fout gedeeld door die van "geen
+  verandering". Onder 1,0 zeggen de inputs iets. Rond 1,0 is ook prima voor
+  een baseline — het model regelt zichzelf dan naar niets toe — maar dan
+  verwacht je van het taalmodel ook niet dat de inputs alleen het werk doen.
+  Een waarde ruim **boven** 1,0 zou een bug zijn (het model hoort daar
+  nooit slechter dan niets doen te zijn): meld dat, bevries niet.
+- **`rijen`**: de trainingsrijen. Ze overlappen (vensters van 21 of 63
+  dagen), dus de effectieve n ligt er ver onder; kijk alleen naar de orde
+  van grootte.
+
+Controle achteraf:
+
+```bash
+sqlite3 market_intelligence.db \
+  "SELECT domain, COUNT(*) FROM baseline_models GROUP BY domain;"
+```
+
+Verwacht **55** in totaal (sector 22, financial 12, currency 9,
+monetary_policy 6, economic 6). Tot dit gedaan is, meldt de wekelijkse
+ronde elke maandag "nog geen enkel bevroren ridge-model" en draaien
+persistence en climatology gewoon door.
 
 **De resolver draait elke dag mee** en kost niets (geen API-calls, geen
 LLM). Vanaf het moment dat de eerste voorspellingen aflopen — vijf

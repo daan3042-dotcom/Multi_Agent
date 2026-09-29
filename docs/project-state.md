@@ -811,6 +811,90 @@ voorspelling beschrijft. Zolang de tuple leeg is, blijven de twee
 FEDFUNDS-doelen onafwikkelbaar en zegt de resolver per stuk waarom.
 **Checkpoint 4 — DD vult de kalender vóór T₀ᵇ.**
 
+### Baselines (4.6) — 590 tests groen
+
+De meetlat. Zonder baseline zegt een score niets: een agent met een
+pinball loss van 0,8 is goed of slecht afhankelijk van wat "het blijft zoals
+het is" haalt. De baselines schrijven voorspellingen in EXACT hetzelfde
+contract als de agents (zelfde doelen, horizonnen, afloopdatum, regel en
+methode) en worden door dezelfde resolver met dezelfde scoringsregels
+gescoord. Er is geen aparte evaluatiepijplijn.
+
+**Persistence** (`src/scoring/baselines.py`): mediaan = het laatste niveau,
+spreiding uit de historische veranderingen over de horizon. De
+veranderingen zijn gecentreerd op hun eigen mediaan; zonder dat loopt de
+historische drift mee en is het geen random walk meer maar een random walk
+mét trend.
+
+**Climatology**: de historische verdeling, conditioneel op de kalendermaand
+van `resolves_at` als daar ≥60 waarnemingen voor zijn, anders
+onvoorwaardelijk. De `note` van elke voorspelling zegt welke van de twee
+het werd — een stille terugval zou twee methoden onder één label zetten.
+
+**Ridge** (`src/scoring/ridge.py`): een lineair model op de z-scores van
+alle reeksen van het domein. Puur Python, geen numpy (CLAUDE.md regel 2).
+Kwantielen zijn anker + voorspelling + de residuen uit een expanding-window
+cross-validatie, NIET uit de fit zelf: residuen van de trainingsdata zijn te
+klein, en een overmoedige baseline is te verslaan door alleen breder te
+voorspellen. Tussen trainings- en validatieblok zit een gat van `horizon_n`
+rijen, want de vensters overlappen.
+
+**Een baseline die niets weet, zegt niets.** Met minder dan 30 vensters, of
+een laatste waarneming die te oud is, komt er GEEN voorspelling maar een
+melding. Een baseline die met te weinig historie toch iets uitspreekt is een
+strohalm, en die laat elke agent er beter uitzien dan hij is. Ridge-inputs
+worden op ±5 afgekapt: een eenheidswijziging (WALCL bleek op 28-09 in
+miljoenen te staan) geeft anders een z van tientallen die een lineair model
+gedwee extrapoleert.
+
+**Point-in-time, en waarom dat hier zwaarder weegt dan elders.** Een
+maandcijfer heeft als `source_time` de eerste van de referentiemaand maar is
+pas ~5 weken later bekend. Wie dat als "beschikbaar op de eerste"
+behandelt, laat het model in de trainingsdata de toekomst zien — en dat is
+onzichtbaar, want de scores zien er alleen beter uit. Elke reeks krijgt
+daarom een conservatieve publicatievertraging per cadans, afgeleid uit de
+reeks zelf. Er staat een lek-test: data waarin de toekomst afhangt van een
+nog-niet-gepubliceerde waarde; het model hoort dat NIET te vinden. Bewezen
+gevoelig: met het lek opzettelijk aan vindt het model de relatie
+(coëfficiënt 2,013 bij een geplante 2) en faalt de test.
+
+**Bevroren, en waarom de fit nog niet gedraaid is.** De ridge is "gefit op de
+back-fill vóór T₀ᵇ en daarna bevroren" (roadmap 4.6). De historie staat op
+de VPS, en de Alpha Vantage-helft ontbreekt nog — currency en sector hebben
+zonder die back-fill te weinig historie. `fit_baselines.py` is standaard
+droog; `--freeze` schrijft naar `baseline_models`, een tabel zonder
+update-pad met een UNIQUE per specversie: opnieuw fitten is een nieuwe
+`RIDGE_SPEC_VERSION` en dus zichtbaar. Tot dan meldt de ronde één regel per
+domein ("nog geen enkel bevroren ridge-model") en draaien de andere twee
+baselines gewoon door.
+
+**Bewust niet voorspeld door een baseline:** de FEDFUNDS-richting. Zelfde
+reden als de lege FOMC-kalender in 4.5: de gebeurtenis ligt op
+FOMC-vergaderingen, en een basisrate uit maandelijkse FEDFUNDS-vensters zou
+een andere gebeurtenis scoren. Die twee doelen worden alleen tegen de agent
+zelf gescoord.
+
+**Per wekelijkse ronde met volledige historie:** 55 kwantieldoelen × 3
+baselines = **165 baseline-voorspellingen** naast de 57 van de agents.
+
+**Ook gefixt in dezelfde ronde, en dat raakte de bestaande forecast-ronde:**
+`run_forecast_round` bewaarde voorspellingen één voor één en schreef daarna
+pas de `agent_runs`-regel. Crasht het proces ertussen, dan staat de ronde
+niet als geslaagd geregistreerd terwijl de voorspellingen er wél staan, en
+levert de herhaling van morgen dezelfde voorspellingen een tweede keer op.
+In een track record is dat geen ruis: de week telt dubbel mee in kalibratie
+en skill-posterior. Nu één transactie (`save_predictions_with_run`), met een
+regressietest die op de oude code aantoonbaar faalt.
+
+**Openstaand na dit werk:**
+1. Ridge fitten en bevriezen (na de volledige back-fill, freeze-beslissing).
+2. De publicatievertragingen per cadans (1/7/50 dagen) zijn conservatief
+   maar niet per reeks geverifieerd — checkpoint 4.
+3. Voor week- en maanddoelen ziet de ridge oudere inputs dan het LLM (tot
+   ~5 weken). Te bevestigen bij de freeze.
+4. De drempels `MIN_SAMPLES=30`, `MIN_SEASONAL_SAMPLES=60` en de
+   ankerleeftijden zijn keuzes, geen berekeningen. Bij de freeze bevestigen.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
@@ -1029,6 +1113,11 @@ zijn output naar `AnalystAgentReport` vertaald krijgt) blijft zonder
 concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
+
+- **[29-09] BLOKKEREND vóór `--deep-dives` aan gaat: cohort vóór T₀ᵇ.**
+  Zie `docs/roadmap.md`, "Open beslissingen". `Prediction.cohort` staat hard
+  op `cohort_0`; zonder ingreep worden de dry-run-voorspellingen van oktober
+  het echte cohort, en dat is niet te herstellen (geen update-pad).
 
 - **[28-09] `DTWEXBGS` → knoop `dollar`: uitgesteld tot na T₀ᵃ** (optie 3,
   besloten 28-09). Vraagt multi-provider-ondersteuning in
