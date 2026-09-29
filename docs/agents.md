@@ -79,6 +79,41 @@ Zonder API-key (dus zonder `--deep-dives`) draait de ronde niet. Dat is
 prima tijdens een dry-run, maar na T₀ᵇ is elke zo'n week een gat in de
 meting.
 
+## De baselines: waar de agents mee vergeleken worden (roadmap 4.6)
+
+Een score zegt niets zonder iets om hem tegen af te zetten. Naast de agents
+voorspellen daarom **drie deterministische baselines** mee, elke week, op
+exact dezelfde doelen, horizonnen en afloopdata. Ze gebruiken geen
+taalmodel — alles is rekenwerk uit de opgeslagen historie, en de `note` van
+elke voorspelling zegt waarop hij rust.
+
+| Baseline | Wat hij zegt | In gewone taal |
+|---|---|---|
+| `baseline:persistence` | mediaan = het laatste niveau; spreiding uit historische veranderingen | "Het blijft zoals het is." Verrassend moeilijk te verslaan. |
+| `baseline:climatology` | de historische verdeling, indien mogelijk voor dezelfde kalendermaand | "Zo ziet dit cijfer er normaal uit." |
+| `baseline:ridge` | een lineair model op de z-scores van alle reeksen van het domein | "Wat zou een simpel model doen met precies de cijfers die de agent ziet?" |
+
+**De ridge beantwoordt een andere vraag dan de andere twee.** Persistence en
+climatology zeggen of een agent iets weet dat een simpele regel niet weet.
+De ridge zegt of het taalmodel iets toevoegt BOVEN zijn eigen inputs. Als het
+LLM dat model niet verslaat, zit de meerwaarde niet in het redeneren maar
+hooguit in de tekst — dat is een uitkomst, geen mislukking.
+
+**Wanneer een baseline NIETS voorspelt.** Bij te weinig historie (minder dan
+30 vensters) of een verouderd laatste cijfer komt er geen voorspelling maar
+een melding. Een baseline die met te weinig data toch iets zegt, laat elke
+agent er beter uitzien dan hij is.
+
+**Wat geen baseline voorspelt:** de FEDFUNDS-richting van de monetary agent
+(kans dat de Fed verhoogt). Dat is een gebeurtenis op FOMC-vergaderingen, en
+een basisrate uit maandelijkse rentecijfers zou een andere gebeurtenis
+scoren. Die twee voorspellingen worden alleen tegen de agent zelf gescoord.
+
+**De ridge moet nog gefit worden.** Dat kan pas na de volledige back-fill en
+is een freeze-beslissing: `fit_baselines.py` toont eerst alleen wat er zou
+gebeuren, `--freeze` legt het onomkeerbaar vast. Tot dan meldt de wekelijkse
+ronde dat de derde baseline ontbreekt.
+
 ## Hoe een voorspelling wordt afgewikkeld (roadmap 4.5)
 
 De resolver draait **dagelijks** mee in dezelfde cyclus — voorspellingen

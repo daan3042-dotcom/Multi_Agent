@@ -234,6 +234,24 @@ CREATE TABLE IF NOT EXISTS evaluations (
     )
 );
 CREATE INDEX IF NOT EXISTS idx_evaluations_status ON evaluations(status);
+
+CREATE TABLE IF NOT EXISTS baseline_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_name TEXT NOT NULL,
+    spec_version TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    target_metric_key TEXT NOT NULL,
+    horizon_n INTEGER NOT NULL,
+    fitted_at TEXT NOT NULL,
+    train_end TEXT NOT NULL,
+    n_rows INTEGER NOT NULL,
+    model_json TEXT NOT NULL,
+    -- Eén model per (naam, specversie, doel, horizon), voor altijd. Een
+    -- tweede fit onder dezelfde versie botst hier, en dat is de bedoeling:
+    -- "gefit op de back-fill en daarna bevroren" (roadmap 4.6) betekent dat
+    -- opnieuw fitten een NIEUWE specversie is, en dus zichtbaar.
+    UNIQUE (model_name, spec_version, domain, target_metric_key, horizon_n)
+);
 """
 
 
@@ -801,8 +819,10 @@ def archive_qc_case(conn: sqlite3.Connection, case_id: int, now: datetime) -> No
 # (4.5), zodat het resolveren de voorspelling zelf nooit aanraakt.
 
 
-def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
-    """Slaat één voorspelling op en geeft zijn id terug. De vormcheck is al
+def _insert_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
+    """De insert zonder commit -- zie save_predictions_with_run().
+
+    Slaat één voorspelling op en geeft zijn id terug. De vormcheck is al
     gebeurd bij constructie (contract/prediction.py::Prediction.__post_init__);
     het schema herhaalt dezelfde eisen als CHECK-constraints, zodat een bug
     in het contract niet stilzwijgend ongeldige data oplevert."""
@@ -832,8 +852,54 @@ def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
             prediction.resolution_method.value, prediction.benchmark_metric_key,
         ),
     )
-    conn.commit()
     return cur.lastrowid
+
+
+def save_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
+    """Slaat één voorspelling op en commit meteen. Voor losse voorspellingen
+    (menselijke invoer, 4.8); een RONDE hoort `save_predictions_with_run()`
+    te gebruiken, zodat hij niet half kan slagen."""
+    prediction_id = _insert_prediction(conn, prediction)
+    conn.commit()
+    return prediction_id
+
+
+def save_predictions_with_run(
+    conn: sqlite3.Connection,
+    predictions: list[Prediction] | tuple[Prediction, ...],
+    run_domain: str,
+    run_at: datetime,
+    success: bool,
+    event_id: str | None = None,
+    error: str | None = None,
+) -> list[int]:
+    """Alle voorspellingen van een ronde PLUS de agent_runs-regel in één
+    transactie: alles of niets.
+
+    WAAROM. Vóór dit bestond bewaarde de forecast-ronde elke voorspelling
+    met een eigen commit en schreef daarna pas de agent_runs-regel. Crasht
+    het proces ertussen (of faalt die laatste insert), dan staat de ronde
+    niet als geslaagd geregistreerd terwijl de voorspellingen er wél staan,
+    en levert de herhaling van morgen dezelfde voorspellingen een tweede
+    keer op. In een track record is dat geen ruis: de week telt dubbel mee
+    in kalibratie en skill-posterior, en het is achteraf niet te zien welke
+    van de twee 'echt' was. Zelfde faalpatroon en zelfde oplossing als
+    `save_output_with_run()` voor claims.
+
+    Een dubbele succes-run voor dezelfde `event_id` (de partial unique
+    index) laat de HELE transactie terugrollen, voorspellingen inbegrepen --
+    precies wat je wilt bij twee gelijktijdige runs."""
+    try:
+        ids = [_insert_prediction(conn, p) for p in predictions]
+        _insert_agent_run(
+            conn, run_domain, "forecast", run_at, success,
+            trigger_count=len(predictions), error=error, event_id=event_id,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return ids
 
 
 def _row_to_prediction(row: tuple) -> Prediction:
@@ -1128,3 +1194,61 @@ def load_observations(
             continue
         resultaat.append((claim_id, source_time, waarde, analysis_time))
     return resultaat
+
+
+# ---------------------------------------------------------------------------
+# Bevroren baseline-modellen (roadmap 4.6)
+# ---------------------------------------------------------------------------
+
+
+def save_baseline_model(
+    conn: sqlite3.Connection, model_name: str, spec_version: str, domain: str,
+    target_metric_key: str, horizon_n: int, fitted_at: datetime, train_end: datetime,
+    n_rows: int, model: dict,
+) -> int:
+    """Bevriest één gefit model. Onveranderlijk: geen update- of delete-pad,
+    net als predictions en evaluations. Een tweede fit onder dezelfde
+    specversie geeft een IntegrityError -- opnieuw fitten is een nieuwe
+    versie, en dat hoort zichtbaar te zijn in het cohort."""
+    cur = conn.execute(
+        "INSERT INTO baseline_models (model_name, spec_version, domain, target_metric_key, "
+        "horizon_n, fitted_at, train_end, n_rows, model_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            model_name, spec_version, domain, target_metric_key, horizon_n,
+            fitted_at.isoformat(), train_end.isoformat(), n_rows,
+            json.dumps(model, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def load_baseline_model(
+    conn: sqlite3.Connection, model_name: str, spec_version: str, domain: str,
+    target_metric_key: str, horizon_n: int,
+) -> dict | None:
+    row = conn.execute(
+        "SELECT model_json FROM baseline_models WHERE model_name = ? AND spec_version = ? "
+        "AND domain = ? AND target_metric_key = ? AND horizon_n = ?",
+        (model_name, spec_version, domain, target_metric_key, horizon_n),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def count_baseline_models(conn: sqlite3.Connection, model_name: str, spec_version: str, domain: str) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM baseline_models WHERE model_name = ? AND spec_version = ? AND domain = ?",
+        (model_name, spec_version, domain),
+    ).fetchone()[0]
+
+
+def list_domain_metric_keys(conn: sqlite3.Connection, domain: str) -> list[str]:
+    """Alle metric_keys met tijdgebonden claims voor dit domein -- de
+    kandidaat-inputs van het ridge-model. Alfabetisch, zodat de volgorde van
+    features niet van de rijvolgorde in de database afhangt."""
+    rows = conn.execute(
+        "SELECT DISTINCT metric_key FROM claims WHERE domain = ? "
+        "AND metric_key IS NOT NULL AND source_time IS NOT NULL ORDER BY metric_key",
+        (domain,),
+    ).fetchall()
+    return [r[0] for r in rows]

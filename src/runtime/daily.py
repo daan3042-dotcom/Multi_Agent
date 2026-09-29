@@ -62,6 +62,8 @@ from contract.output_contract import DomainOutput
 from health.system_health import SystemHealthReport, sources_from_registry, system_health
 from manager.manager import DispatchPlan, dispatch
 from runtime.notifications import Notification, Notifier, build_notification, log_notifier
+from scoring.baseline_round import baseline_run_domain, run_baseline_round
+from scoring.baselines import BaselineRoundResult
 from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
@@ -139,6 +141,7 @@ class DailyRunResult:
     notification: Notification | None = None
     missed_days: list[str] = field(default_factory=list)
     forecast_results: list[ForecastRoundResult] = field(default_factory=list)
+    baseline_results: list[BaselineRoundResult] = field(default_factory=list)
     resolver: ResolverResult | None = None
 
     @property
@@ -147,6 +150,13 @@ class DailyRunResult:
         heen. Een ontbrekende voorspelling is een gat in de meting dat niet
         achteraf te vullen is, dus dit hoort in de melding terecht te komen."""
         return [f"{r.domain}: {i}" for r in self.forecast_results for i in r.issues]
+
+    @property
+    def baseline_issues(self) -> list[str]:
+        """Problemen in de baseline-ronde (te weinig historie, verouderd
+        anker). Een ontbrekende baseline is een gat in de meetlat: de agent
+        wordt die week met niets vergeleken."""
+        return [f"{r.domain}: {i}" for r in self.baseline_results for i in r.issues]
 
     @property
     def all_triggers(self) -> list[TriggerEvent]:
@@ -167,6 +177,8 @@ class DailyRunResult:
         if any(o.deep_dive_error for o in self.outcomes):
             return True
         if self.forecast_issues:
+            return True
+        if self.baseline_issues:
             return True
         if self.resolver is not None and self.resolver.has_problems:
             return True
@@ -398,6 +410,16 @@ def run_daily(
         except Exception as e:  # noqa: BLE001
             logger.error("Forecast-fase afgebroken: %s: %s", type(e).__name__, e)
 
+        # De baselines horen bij de meting en niet bij de LLM: ze kosten niets,
+        # maar ze staan achter dezelfde schakelaar (`client`), zodat er één
+        # vlag is voor "de voorspelmeting loopt" -- en een dry-run zonder API-key
+        # dus ook geen baselines zonder agents oplevert. Eigen try/except: een
+        # gecrashte LLM-fase mag de baselines niet kosten, en andersom.
+        try:
+            _run_baseline_rounds(conn, agents, result, now, weekly_event_id(now))
+        except Exception as e:  # noqa: BLE001
+            logger.error("Baseline-fase afgebroken: %s: %s", type(e).__name__, e)
+
     # De resolver draait DAGELIJKS en niet wekelijks: voorspellingen lopen
     # af op hun eigen moment (5, 21, 63 handelsdagen; 1/2/3 publicaties),
     # niet op maandag. Hij kost geen API-calls en geen LLM -- alles wat hij
@@ -522,6 +544,38 @@ def _run_forecast_round(conn, agents, result, client, now, week_id) -> None:
             logger.error("Forecast-ronde %s mislukt: %s: %s", spec.domain, type(e).__name__, e)
             result.forecast_results.append(
                 ForecastRoundResult(spec.domain, (), (f"ronde afgebroken: {e}",))
+            )
+
+
+def _run_baseline_rounds(conn, agents, result, now, week_id) -> None:
+    """De wekelijkse baseline-ronde (roadmap 4.6) voor elke voorspellende
+    agent, met dezelfde `now` en dezelfde week als de LLM-ronde -- zodat een
+    baseline en een agent op dezelfde dag met dezelfde kennis voorspellen.
+
+    Eigen idempotentie (`baseline:<domein>` in agent_runs), los van de
+    LLM-ronde: een baseline die vandaag slaagt terwijl de LLM faalde, hoeft
+    morgen niet opnieuw. Elke agent in zijn eigen try/except."""
+    for spec in agents:
+        if not spec.forecasts:
+            continue
+        if has_successful_run(conn, baseline_run_domain(spec.domain), "forecast", week_id):
+            continue
+        try:
+            uitkomst = run_baseline_round(
+                conn, spec.domain, spec.forecast_targets, now, event_id=week_id
+            )
+            result.baseline_results.append(uitkomst)
+            logger.info(
+                "%s: baseline-ronde %s -- %d voorspellingen, %d bewust overgeslagen%s",
+                spec.domain, week_id, len(uitkomst.predictions), len(uitkomst.skipped),
+                "" if uitkomst.is_complete else f", {len(uitkomst.issues)} probleem(en)",
+            )
+        except AlreadyProcessedError:
+            continue
+        except Exception as e:  # noqa: BLE001
+            logger.error("Baseline-ronde %s mislukt: %s: %s", spec.domain, type(e).__name__, e)
+            result.baseline_results.append(
+                BaselineRoundResult(spec.domain, (), (), (f"ronde afgebroken: {e}",))
             )
 
 

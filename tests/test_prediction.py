@@ -66,7 +66,10 @@ def test_kwantielvoorspelling_is_geldig():
     p = _kwantiel()
     assert p.kind is PredictionKind.QUANTILE
     assert (p.q10, p.q50, p.q90) == (3.9, 4.1, 4.4)
-    assert p.cohort == "cohort_0"
+    # Sinds 29-09 is de default `dry_run` en niet `cohort_0`: een voorspelling
+    # van vóór de freeze mag nooit per ongeluk het echte cohort in glippen.
+    # Zie tests/test_cohort.py.
+    assert p.cohort == "dry_run"
     assert p.contract_version == CONTRACT_VERSION
     assert p.graph_version == GRAPH_VERSION
 

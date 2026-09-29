@@ -118,7 +118,7 @@ from storage.schema import (
     record_agent_run,
     record_data_health,
     save_output_with_run,
-    save_prediction,
+    save_predictions_with_run,
 )
 from triggers.trigger_engine import (
     Severity,
@@ -800,14 +800,12 @@ def run_forecast_round(
     resultaat = _parse_forecast_response(
         tekst, domain, targets, now, model, prompt_version, trigger_conditioned
     )
-    for p in resultaat.predictions:
-        save_prediction(conn, p)
-
-    record_agent_run(
-        conn, domain, "forecast", now,
+    # Voorspellingen en run-regel in ÉÉN transactie: zie
+    # save_predictions_with_run() voor waarom dat niet los mag.
+    save_predictions_with_run(
+        conn, resultaat.predictions, domain, now,
         success=bool(resultaat.predictions),
-        trigger_count=len(resultaat.predictions),
-        error="; ".join(resultaat.issues) or None,
         event_id=event_id,
+        error="; ".join(resultaat.issues) or None,
     )
     return resultaat

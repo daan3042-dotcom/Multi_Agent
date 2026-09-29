@@ -73,6 +73,8 @@ en `docs/project-state.md`.
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |
 | Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
+| **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
+| Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)
@@ -150,6 +152,14 @@ van dubbel werk.
   wél. Pin het model per cohort; Anthropic deprecateert modellen binnen
   de cohortduur van zes maanden, dus plan de migratie in plaats van 'm
   te ondergaan.
+- **Nooit `cohort_0` hardcoderen.** Het cohort van nieuwe voorspellingen
+  komt uit `MI_COHORT` via `contract/prediction.py::current_cohort()`, met
+  `dry_run` als default (29-09-2026). Reden: `predictions` heeft geen
+  update-pad, dus een voorspelling van vóór de freeze die als `cohort_0`
+  wordt opgeslagen is definitief vervuild. Een nieuwe voorspeller (mensen,
+  synthesizer) hoeft niets te doen: `Prediction.cohort` volgt de omgeving
+  vanzelf. Geef alleen expliciet een cohort mee als het bewust afwijkt
+  (`pseudo_oos` in de pseudo-OOS-run).
 - **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
   (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
   trigger-drempels zonder versienummer.** Elke zo'n wijziging start

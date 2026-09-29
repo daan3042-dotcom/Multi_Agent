@@ -23,6 +23,8 @@ Vereiste environment-variabelen (zie .env.example):
     FRED_API_KEY            -- monetary_policy + financial + economic agent
     ALPHAVANTAGE_API_KEY    -- currency + sector + commodity agent
     MI_DB_PATH              -- pad naar de SQLite (default: ./market_intelligence.db)
+    MI_COHORT               -- cohort voor nieuwe voorspellingen: dry_run (default),
+                               pseudo_oos of cohort_0. ZET cohort_0 pas op T₀ᵇ.
     MI_WEBHOOK_URL          -- optioneel; zonder deze gaat een melding
                                ALLEEN naar de log, en een log op een VPS
                                die niemand leest is geen fail-loud.
@@ -38,7 +40,7 @@ deep-dive mist niets.
 EXIT CODES (cron/monitoring kan hierop sturen):
     0 -- cyclus voltooid, niets mis
     1 -- cyclus voltooid, maar minstens één agent faalde of crashte
-    2 -- de cyclus zelf kon niet draaien (database onbereikbaar e.d.)
+    2 -- de cyclus zelf kon niet draaien (database onbereikbaar, onbekende MI_COHORT e.d.)
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
+from contract.prediction import COHORT_0, current_cohort  # noqa: E402
 from runtime.daily import daily_event_id, run_daily  # noqa: E402
 from runtime.notifications import log_notifier, webhook_notifier  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db  # noqa: E402
@@ -111,6 +114,23 @@ def main(argv=None) -> int:
 
     event_id = args.event_id or daily_event_id()
 
+    # Het cohort VOOR er iets gebeurt, en hard falen bij een typefout. Een
+    # onbekende MI_COHORT (`cohort0`) zou anders pas bij de eerste
+    # voorspelling opvallen, midden in de wekelijkse ronde, en dan is een
+    # week verloren. Exit 2 = de cyclus kon niet starten zoals bedoeld.
+    try:
+        cohort = current_cohort()
+    except ValueError as e:
+        log.critical("%s", e)
+        return 2
+    # Elke run zegt onder welk cohort hij voorspelt. Dit is de plek waar je op
+    # T₀ᵇ ziet dat de schakelaar om is -- en waar je ziet dat hij NIET om is
+    # als je hem vergeten bent.
+    if cohort == COHORT_0:
+        log.info("Cohort voor nieuwe voorspellingen: %s (ECHT COHORT -- telt mee in het track record)", cohort)
+    else:
+        log.info("Cohort voor nieuwe voorspellingen: %s (telt NIET mee; zet MI_COHORT=cohort_0 op T₀ᵇ)", cohort)
+
     try:
         conn = init_db(args.db)
     except (sqlite3.Error, OSError) as e:
@@ -149,6 +169,11 @@ def main(argv=None) -> int:
         log.info(result.resolver.summary())
         for fout in result.resolver.errors:
             log.error("Resolver-fout: %s", fout)
+    if result.baseline_results:
+        aantal = sum(len(r.predictions) for r in result.baseline_results)
+        log.info("Baseline-ronde: %d voorspellingen opgeslagen", aantal)
+    for probleem in result.baseline_issues:
+        log.warning("Baseline-probleem: %s", probleem)
     for probleem in result.forecast_issues:
         # Niet stil: een onvolledige ronde is een gat in de meting, en de
         # ronde haalt zichzelf alleen in binnen dezelfde ISO-week.
