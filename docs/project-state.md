@@ -938,6 +938,50 @@ voorspellingen onder het echte cohort kunnen wegschrijven.
 **Op T₀ᵇ is er één handeling van DD:** `MI_COHORT=cohort_0` in `.env`, na
 de freeze, plus controle. Staat op de T₀ᵇ-checklist in de roadmap.
 
+### Back-fill: gedeeltelijk mislukken kon stil (29-09) — 622 tests groen
+
+Ontdekt vlak voordat de Alpha Vantage-helft zou draaien. De fetchers gaven bij
+elke fout `[]`, ook bij Alpha Vantage's "limiet bereikt" of "premium endpoint" —
+die komen als HTTP 200 met alleen een `Note`/`Information`-veld en zijn dus
+gewoon een antwoord zonder tijdreeks. Een domein telde als geslaagd (exit 0)
+zodra ÉÉN reeks data gaf, en omdat het script geen dedup had, was een
+gedeeltelijke run niet bij te vullen zonder de gelukte reeksen dubbel op te
+slaan. Zelfde patroon als 28-09, waar alle agents `success=1` meldden terwijl
+er 6 van 24 reeksen binnenkwamen.
+
+**Nu:** een fetch-fout is een `BackfillFetchError` met de tekst van de bron,
+per reeks in de uitvoer. Een reeks met ≥20 claims ouder dan 30 dagen wordt
+overgeslagen, dus opnieuw draaien is altijd veilig en vult alleen wat
+ontbreekt. Elke reeks wordt apart en atomair opgeslagen. Exit 0 betekent nu:
+elke gevraagde reeks heeft historie. Vier tests falen als het overslaan uitstaat.
+
+**Bijvangst:** dit maakt het opnieuw draaien van de FRED-domeinen veilig en
+nuttig. DGS2, T5YIE, T10YIE en WALCL zijn ná de eerste FRED-back-fill aan de
+monetary agent toegevoegd en hebben dus nog geen historie; die worden nu
+alsnog gevuld terwijl de rest wordt overgeslagen.
+
+**Niet te verifiëren zonder de echte API:** of `TIME_SERIES_DAILY` met
+`outputsize=full` in de betaalde tier van DD zit. Zo niet, dan zegt de uitvoer
+dat nu met de tekst van Alpha Vantage in plaats van stil te falen.
+
+### Weekenden telden als gemiste dagen (29-09) — 625 tests groen
+
+`_missed_days` telde alle kalenderdagen, terwijl de cron alleen ma t/m vr draait.
+Elk weekend zou als "dag zonder succesvolle run" zijn gemeld, als KRITIEKE melding,
+bij elke run van ma t/m vr (het weekend blijft zeven dagen in beeld). Gevonden in
+de eerste echte run op de VPS, die de dagen vóór de start van het systeem meldde.
+Een alarm dat dagelijks afgaat wordt genegeerd, en dan is het ook onzichtbaar op de
+dag dat er wél een run ontbreekt.
+
+**Nu:** alleen dagen in `EXPECTED_RUN_WEEKDAYS` (ma t/m vr) tellen mee. Een test
+leest de crontab-regel uit `docs/deployment.md` en faalt als de constante en de cron
+uit de pas lopen. Een echt gat op een werkdag wordt nog steeds gemeld (aparte test).
+Met het oude gedrag terug falen drie tests.
+
+**De back-fill-timeout** is ook opgerekt naar 120 s: op de VPS duurde één simpele
+Alpha Vantage-call 28 seconden. De dagelijkse agents hebben nog 15 s; of dat te krap
+is, hangt van de latentiemeting op de VPS af (open).
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

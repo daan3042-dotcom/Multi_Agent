@@ -166,6 +166,25 @@ sqlite3 "$MI_DB_PATH" "SELECT metric_key, value_json FROM claims
                        ORDER BY analysis_time DESC LIMIT 10;"
 ```
 
+### De melding "Werkdagen zonder succesvolle run"
+
+Elke run kijkt zeven dagen terug of er dagen waren zonder enkele succesvolle
+monitoring-run. Dat is een **kritieke** melding: het is het enige signaal dat een
+run nooit gebeurde (cron uit, venv stuk, VPS uit).
+
+**Alleen werkdagen tellen mee** (`EXPECTED_RUN_WEEKDAYS` in `runtime/daily.py`),
+omdat de cron `15 7 * * 1-5` alleen ma t/m vr draait. Tot 29-09 telde de code ook
+zaterdag en zondag mee: elk weekend zou als storing zijn gemeld, bij elke run van
+ma t/m vr, en een alarm dat dagelijks afgaat wordt genegeerd. Een test leest de
+cron-regel in dit document en controleert dat de code hetzelfde aanneemt; verander
+je de cron (bijvoorbeeld naar `1-7`), dan faalt die test totdat je de constante
+meeneemt.
+
+**Rond de start van het systeem** (eind september 2026) blijft de melding een
+paar dagen komen voor werkdagen vóór de VPS bestond. Dat is verwacht en verdwijnt
+vanzelf zodra die dagen uit het venster van zeven dagen vallen (op 3 oktober is het
+schoon). Het maakt de exit code van die runs `1`; dat is geen agent-fout.
+
 ### Drie tolerances die op deze machine geverifieerd moeten worden
 
 Niet vanuit de ontwikkelomgeving te controleren (geen netwerk naar FRED),
@@ -229,6 +248,52 @@ dan in het log naar regels die beginnen met `Forecast-probleem:` of
 `Baseline-probleem:` — een deels mislukte ronde gooit de geldige
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
 gat.
+
+### De historische back-fill (roadmap 1.11, 0b-1)
+
+Eenmalig, en sinds 29-09 **veilig om opnieuw te draaien**: elke reeks wordt
+apart afgehandeld. Een reeks die al historie heeft (≥20 claims ouder dan 30
+dagen) wordt overgeslagen, een mislukte reeks meldt de reden van de bron, en
+er ontstaan nooit dubbele claims. Vóór 29-09 slikte het script elke fout stil
+in (ook Alpha Vantage's "limiet bereikt", dat als HTTP 200 met alleen tekst
+komt) en telde een domein als geslaagd zodra één reeks data gaf.
+
+```bash
+cd /opt/multi_agent
+
+# Alles in één keer. Reeksen die er al staan worden overgeslagen; reeksen die
+# er sinds de vorige back-fill bij zijn gekomen (DGS2, T5YIE, T10YIE, WALCL bij
+# monetary_policy) worden alsnog gevuld.
+.venv/bin/python backfill.py
+```
+
+**Wat je in de uitvoer leest**, per reeks:
+
+- `OPGESLAGEN  N claims` — gelukt.
+- `overgeslagen al historie aanwezig` — stond er al, niet aangeraakt.
+- `MISLUKT  <reden van de bron>` — niet gevuld. Lees de reden:
+  - *"reached the ... requests per day limit"* → quota. Wacht tot morgen of
+    check je tier.
+  - *"premium endpoint"* → dit endpoint zit niet in je plan.
+  - *"api_key is invalid"* / *"invalid API call"* → verkeerde of niet-actieve key.
+  - *"reden onbekend"* (alleen commodity) → dat endpoint geeft de reden niet
+    door; probeer het los opnieuw.
+
+**Exit code 0** betekent: elke gevraagde reeks heeft nu historie. **Exit code 1**
+betekent: minstens één reeks is niet gevuld, en de laatste regels noemen welke.
+Draai gewoon opnieuw — alleen die reeksen worden dan opgehaald.
+
+**Controleren dat alles erin zit:**
+
+```bash
+sqlite3 "$MI_DB_PATH" "SELECT domain, metric_key, COUNT(*) AS claims, MIN(source_time) AS vanaf
+                       FROM claims WHERE metric_key IS NOT NULL
+                       GROUP BY domain, metric_key ORDER BY domain, metric_key;"
+```
+
+Elke reeks hoort hier honderden tot duizenden claims te hebben (dagreeksen
+~5.000 bij 20 jaar). Een reeks met een paar rijen is niet gebackfilld. Dat ziet
+`fit_baselines.py` ook, dus draai deze controle vóór je de ridge fit.
 
 ### Het cohort: dry-run versus echte meting (`MI_COHORT`)
 

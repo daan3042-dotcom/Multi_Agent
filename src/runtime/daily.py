@@ -579,8 +579,22 @@ def _run_baseline_rounds(conn, agents, result, now, week_id) -> None:
             )
 
 
+EXPECTED_RUN_WEEKDAYS = frozenset({0, 1, 2, 3, 4})
+"""De weekdagen waarop de cron een run start (Python's `weekday()`: 0 = maandag).
+Moet overeenkomen met de crontab-regel `15 7 * * 1-5` in docs/deployment.md;
+`tests/test_runtime_daily.py` leest die regel en controleert dat, zodat de twee
+niet stilzwijgend uit de pas lopen.
+
+WAAROM DIT ER IS. `_missed_days` telde tot 29-09 ALLE kalenderdagen, terwijl de
+cron alleen op werkdagen draait. Elk weekend zou dan als "dag zonder succesvolle
+run" zijn gemeld, als KRITIEKE melding, bij elke run ma t/m vr (het weekend blijft
+zeven dagen in beeld). Een alarm dat elke dag afgaat wordt genegeerd, en dan is
+het ook onzichtbaar op de dag dat er wél een run ontbreekt."""
+
+
 def _missed_days(conn, agents: list[AgentSpec], now: datetime, lookback: int = 7) -> list[str]:
-    """Kijkt terug of er dagen zijn zonder ENKELE succesvolle monitoring-run.
+    """Kijkt terug of er dagen zijn zonder ENKELE succesvolle monitoring-run,
+    op de dagen waarop een run VERWACHT wordt (`EXPECTED_RUN_WEEKDAYS`).
 
     Dekt gedeeltelijk het faalscenario dat alle andere meldingen missen: een
     run die nooit gebeurde. Elke melding in dit systeem wordt verstuurd
@@ -596,9 +610,13 @@ def _missed_days(conn, agents: list[AgentSpec], now: datetime, lookback: int = 7
     if not agents:
         return []
     today = now.date()
+    verwacht = [
+        today - timedelta(days=offset)
+        for offset in range(1, lookback + 1)
+        if (today - timedelta(days=offset)).weekday() in EXPECTED_RUN_WEEKDAYS
+    ]
     missed: list[str] = []
-    for offset in range(1, lookback + 1):
-        day = today - timedelta(days=offset)
+    for day in verwacht:
         ran = any(
             has_successful_run(conn, spec.domain, "monitoring", daily_event_id(day))
             for spec in agents
@@ -607,7 +625,7 @@ def _missed_days(conn, agents: list[AgentSpec], now: datetime, lookback: int = 7
             missed.append(day.isoformat())
     # Alleen melden als er ook ECHT al eens gedraaid is -- op dag 1 is de
     # hele week leeg, en dat is geen storing maar een nieuw systeem.
-    if len(missed) == lookback:
+    if len(missed) == len(verwacht):
         return []
     return sorted(missed)
 

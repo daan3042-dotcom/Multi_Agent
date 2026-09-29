@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
+
 from runtime.backfill import (
+    BackfillFetchError,
     backfill_commodity,
     backfill_currency,
     backfill_fred_domain,
@@ -45,14 +48,18 @@ def test_fetch_fred_full_history_skips_placeholder_values(monkeypatch):
         bf.requests, "get",
         lambda url, params, timeout: _fred_response([{"value": ".", "date": "2020-01-01"}]),
     )
-    assert fetch_fred_full_history("FEDFUNDS", "fake-key") == []
+    with pytest.raises(BackfillFetchError, match="geen bruikbare waarnemingen"):
+        fetch_fred_full_history("FEDFUNDS", "fake-key")
 
 
-def test_fetch_fred_full_history_network_error_returns_empty_list(monkeypatch):
+def test_fetch_fred_full_history_network_error_raises_with_the_reason(monkeypatch):
+    """Was: geef een lege lijst terug. Dat is precies hoe een half gevulde
+    back-fill als geslaagd kon eindigen (zie de moduledocstring)."""
     import runtime.backfill as bf
 
     monkeypatch.setattr(bf.requests, "get", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("netwerkfout")))
-    assert fetch_fred_full_history("FEDFUNDS", "fake-key") == []
+    with pytest.raises(BackfillFetchError, match="netwerkfout"):
+        fetch_fred_full_history("FEDFUNDS", "fake-key")
 
 
 def test_fetch_av_time_series_daily_full_history_happy_path(monkeypatch):
@@ -91,11 +98,12 @@ def test_backfill_fred_domain_stores_claims_with_analysis_time_equal_to_source_t
         ]),
     )
 
-    count = backfill_fred_domain(
+    resultaat = backfill_fred_domain(
         conn, "monetary_policy", "FRED:monetary_policy",
         {"fed_funds_rate": "FEDFUNDS"}, {}, "fake-key",
     )
-    assert count == 2
+    assert resultaat.saved == 2
+    assert resultaat.is_complete
 
     claims = load_latest_claims(conn, "monetary_policy", metric_key="fed_funds_rate")
     assert len(claims) == 2
@@ -154,9 +162,9 @@ def test_backfill_sector_uses_time_series_daily_not_global_quote(tmp_path, monke
         return resp
 
     monkeypatch.setattr(bf.requests, "get", fake_get)
-    count = backfill_sector(conn, "sector", "ALPHA_VANTAGE_EQUITY:sector", {"xlk_technology": "XLK"}, {}, "fake-key")
+    resultaat = backfill_sector(conn, "sector", "ALPHA_VANTAGE_EQUITY:sector", {"xlk_technology": "XLK"}, {}, "fake-key")
 
-    assert count == 1
+    assert resultaat.saved == 1
     assert captured_params[0]["function"] == "TIME_SERIES_DAILY"
     assert captured_params[0]["outputsize"] == "full"
 
@@ -175,9 +183,9 @@ def test_backfill_currency_uses_fx_daily_not_exchange_rate(tmp_path, monkeypatch
         return resp
 
     monkeypatch.setattr(bf.requests, "get", fake_get)
-    count = backfill_currency(conn, "currency", "ALPHA_VANTAGE_FX:currency", {"eur_usd": ("EUR", "USD")}, {}, "fake-key")
+    resultaat = backfill_currency(conn, "currency", "ALPHA_VANTAGE_FX:currency", {"eur_usd": ("EUR", "USD")}, {}, "fake-key")
 
-    assert count == 1
+    assert resultaat.saved == 1
     assert captured_params[0]["function"] == "FX_DAILY"
 
 
@@ -191,16 +199,234 @@ def test_backfill_commodity_reuses_existing_historical_fetch(tmp_path, monkeypat
         commodity_agent, "_fetch_commodity_data",
         lambda function_name, api_key: [{"value": "70.00", "date": "2020-01-01"}, {"value": "72.00", "date": "2020-02-01"}],
     )
-    count = backfill_commodity(conn, "commodity", "ALPHA_VANTAGE_COMMODITY:commodity", {"wti": "WTI"}, {}, "fake-key")
-    assert count == 2
+    resultaat = backfill_commodity(conn, "commodity", "ALPHA_VANTAGE_COMMODITY:commodity", {"wti": "WTI"}, {}, "fake-key")
+    assert resultaat.saved == 2
 
 
-def test_backfill_returns_zero_and_saves_nothing_when_history_is_empty(tmp_path, monkeypatch):
+def test_backfill_saves_nothing_and_says_so_when_the_fetch_fails(tmp_path, monkeypatch):
     import runtime.backfill as bf
 
     conn = _db(tmp_path)
     monkeypatch.setattr(bf.requests, "get", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("netwerkfout")))
 
-    count = backfill_fred_domain(conn, "monetary_policy", "FRED:monetary_policy", {"fed_funds_rate": "FEDFUNDS"}, {}, "fake-key")
-    assert count == 0
+    resultaat = backfill_fred_domain(conn, "monetary_policy", "FRED:monetary_policy", {"fed_funds_rate": "FEDFUNDS"}, {}, "fake-key")
+
+    assert resultaat.saved == 0
+    assert not resultaat.is_complete
+    assert "netwerkfout" in resultaat.failed[0].detail
     assert load_monitoring_claims(conn, "monetary_policy") == []
+
+
+# --------------------------------------------------------------------------
+# Gedeeltelijke back-fill: melden, en veilig herstellen (29-09)
+#
+# De aanleiding: de fetchers gaven bij elke fout `[]`, ook bij Alpha Vantage's
+# "limiet bereikt" (HTTP 200 met alleen een tekstveld). Een domein telde als
+# geslaagd zodra één reeks data gaf, en zonder dedup was een gedeeltelijke
+# run niet bij te vullen zonder de gelukte reeksen dubbel op te slaan.
+# --------------------------------------------------------------------------
+
+
+def _av_json(payload):
+    resp = MagicMock()
+    resp.raise_for_status = lambda: None
+    resp.json = lambda: payload
+    return resp
+
+
+def _dagreeks(n=30, start_jaar=2020):
+    """n dagen historie, ruim ouder dan 30 dagen, in het AV-formaat."""
+    from datetime import timedelta
+
+    start = datetime(start_jaar, 1, 1)
+    return {(start + timedelta(days=i)).date().isoformat(): {"4. close": f"{100 + i}"} for i in range(n)}
+
+
+@pytest.mark.parametrize("veld", ["Note", "Information", "Error Message"])
+def test_alpha_vantage_limietbericht_wordt_een_fout_met_de_tekst_van_de_bron(monkeypatch, veld):
+    """HET geval van 28-09. AV meldt 'limiet bereikt' met HTTP 200 en zonder
+    tijdreeks. Vroeger: lege lijst, dus stil. Nu: een fout die zegt waarom."""
+    import runtime.backfill as bf
+
+    monkeypatch.setattr(
+        bf.requests, "get",
+        lambda url, params, timeout: _av_json({veld: "You have reached the 25 requests per day limit"}),
+    )
+    with pytest.raises(BackfillFetchError, match="25 requests per day"):
+        fetch_av_time_series_daily_full_history("XLK", "fake-key")
+    with pytest.raises(BackfillFetchError, match="25 requests per day"):
+        fetch_av_fx_daily_full_history("EUR", "USD", "fake-key")
+
+
+def test_antwoord_zonder_tijdreeks_is_een_fout(monkeypatch):
+    import runtime.backfill as bf
+
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Meta Data": {}}))
+    with pytest.raises(BackfillFetchError, match="geen 'Time Series"):
+        fetch_av_time_series_daily_full_history("XLK", "fake-key")
+
+
+def test_fred_foutbericht_wordt_een_fout_met_de_tekst_van_de_bron(monkeypatch):
+    import runtime.backfill as bf
+
+    monkeypatch.setattr(
+        bf.requests, "get",
+        lambda url, params, timeout: _av_json({"error_code": 400, "error_message": "Bad Request. api_key is invalid"}),
+    )
+    with pytest.raises(BackfillFetchError, match="api_key is invalid"):
+        fetch_fred_full_history("FEDFUNDS", "fake-key")
+
+
+def test_een_domein_met_een_mislukte_reeks_is_niet_geslaagd(tmp_path, monkeypatch):
+    """Regressiegeval voor 'geslaagd zodra één reeks data gaf'. Vijf van de
+    elf ETF's is geen geslaagde back-fill."""
+    import runtime.backfill as bf
+
+    conn = _db(tmp_path)
+
+    def fake_get(url, params, timeout):
+        if params["symbol"] == "XLE":
+            return _av_json({"Note": "rate limit"})
+        return _av_json({"Time Series (Daily)": _dagreeks()})
+
+    monkeypatch.setattr(bf.requests, "get", fake_get)
+
+    resultaat = backfill_sector(
+        conn, "sector", "AV:sector", {"xlk_technology": "XLK", "xle_energy": "XLE"}, {}, "fake-key",
+    )
+
+    assert not resultaat.is_complete
+    assert [o.metric_key for o in resultaat.failed] == ["xle_energy"]
+    assert resultaat.saved == 30  # de gelukte reeks staat er wél
+
+
+def test_opnieuw_draaien_vult_alleen_het_ontbrekende_en_dupliceert_niets(tmp_path, monkeypatch):
+    """Het herstelpad, en de reden voor de hele ombouw: na een gedeeltelijke
+    run mag je gewoon opnieuw draaien. De gelukte reeks wordt overgeslagen
+    (geen dubbele claims), de mislukte wordt alsnog opgehaald."""
+    import runtime.backfill as bf
+
+    conn = _db(tmp_path)
+    limiet_bereikt = {"aan": True}
+    calls = []
+
+    def fake_get(url, params, timeout):
+        calls.append(params["symbol"])
+        if params["symbol"] == "XLE" and limiet_bereikt["aan"]:
+            return _av_json({"Note": "rate limit"})
+        return _av_json({"Time Series (Daily)": _dagreeks()})
+
+    monkeypatch.setattr(bf.requests, "get", fake_get)
+    etfs = {"xlk_technology": "XLK", "xle_energy": "XLE"}
+
+    eerste = backfill_sector(conn, "sector", "AV:sector", etfs, {}, "fake-key")
+    assert not eerste.is_complete
+
+    limiet_bereikt["aan"] = False
+    calls.clear()
+    tweede = backfill_sector(conn, "sector", "AV:sector", etfs, {}, "fake-key")
+
+    assert tweede.is_complete
+    assert calls == ["XLE"], "alleen de ontbrekende reeks mag opnieuw worden opgehaald"
+    statussen = {o.metric_key: o.status for o in tweede.outcomes}
+    assert statussen == {"xlk_technology": "skipped", "xle_energy": "saved"}
+    assert len(load_latest_claims(conn, "sector", metric_key="xlk_technology")) == 30, "geen dubbele claims"
+    assert len(load_latest_claims(conn, "sector", metric_key="xle_energy")) == 30
+
+
+def test_derde_run_doet_niets_meer(tmp_path, monkeypatch):
+    import runtime.backfill as bf
+
+    conn = _db(tmp_path)
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Time Series (Daily)": _dagreeks()}))
+    etfs = {"xlk_technology": "XLK"}
+    backfill_sector(conn, "sector", "AV:sector", etfs, {}, "fake-key")
+
+    monkeypatch.setattr(bf.requests, "get", lambda *a, **k: pytest.fail("mag niet meer ophalen"))
+    resultaat = backfill_sector(conn, "sector", "AV:sector", etfs, {}, "fake-key")
+
+    assert resultaat.saved == 0 and resultaat.is_complete
+
+
+def test_een_paar_claims_uit_de_dagelijkse_cyclus_telt_niet_als_historie(tmp_path, monkeypatch):
+    """De dagelijkse cyclus maakt één claim per dag. Twee dagen monitoring
+    zijn geen back-fill: de reeks moet dan nog steeds worden opgehaald."""
+    import runtime.backfill as bf
+    from contract.output_contract import Claim, Confidence, DomainOutput, Mode
+    from storage.schema import save_domain_output
+
+    conn = _db(tmp_path)
+    nu = datetime.now(timezone.utc)
+    claims = [
+        Claim(domain="sector", claim="XLK", value=200.0, source="test", confidence=Confidence.HIGH,
+              analysis_time=nu, source_time=nu, metric_key="xlk_technology")
+    ]
+    save_domain_output(conn, DomainOutput(domain="sector", mode=Mode.MONITORING, generated_at=nu, claims=claims))
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Time Series (Daily)": _dagreeks()}))
+
+    resultaat = backfill_sector(conn, "sector", "AV:sector", {"xlk_technology": "XLK"}, {}, "fake-key")
+
+    assert resultaat.outcomes[0].status == "saved"
+
+
+def test_commodity_zonder_data_is_een_fout_met_een_eerlijke_melding(tmp_path, monkeypatch):
+    """`_fetch_commodity_data` geeft bij elke fout None, dus de reden is hier
+    niet te achterhalen. De melding zegt dat, in plaats van iets te verzinnen."""
+    import agents.commodity_agent as commodity_agent
+
+    conn = _db(tmp_path)
+    monkeypatch.setattr(commodity_agent, "_fetch_commodity_data", lambda function_name, api_key: None)
+
+    resultaat = backfill_commodity(conn, "commodity", "AV:commodity", {"wti": "WTI"}, {}, "fake-key")
+
+    assert not resultaat.is_complete
+    assert "reden onbekend" in resultaat.failed[0].detail
+
+
+# --------------------------------------------------------------------------
+# De CLI
+# --------------------------------------------------------------------------
+
+
+def _cli():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("backfill_cli", Path(__file__).resolve().parent.parent / "backfill.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_cli_exitcode_en_uitvoer_bij_een_mislukte_reeks(tmp_path, monkeypatch, capsys):
+    """Exit 1 met de reden van de bron en de melding dat opnieuw draaien
+    veilig is. Vroeger was dit exit 0 zodra één reeks data gaf."""
+    import runtime.backfill as bf
+
+    monkeypatch.setenv("ALPHAVANTAGE_API_KEY", "fake-key")
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Note": "limiet bereikt (test)"}))
+    pad = str(tmp_path / "t.db")
+
+    code = _cli().main(["--db", pad, "--domain", "currency"])
+
+    uitvoer = capsys.readouterr().out
+    assert code == 1
+    assert "MISLUKT" in uitvoer and "limiet bereikt (test)" in uitvoer
+    assert "veilig opnieuw te draaien" in uitvoer
+
+
+def test_cli_tweede_run_slaat_over_en_geeft_nul(tmp_path, monkeypatch, capsys):
+    import runtime.backfill as bf
+
+    monkeypatch.setenv("ALPHAVANTAGE_API_KEY", "fake-key")
+    monkeypatch.setattr(bf.requests, "get", lambda url, params, timeout: _av_json({"Time Series FX (Daily)": _dagreeks()}))
+    pad = str(tmp_path / "t.db")
+    cli = _cli()
+
+    assert cli.main(["--db", pad, "--domain", "currency"]) == 0
+    capsys.readouterr()
+    assert cli.main(["--db", pad, "--domain", "currency"]) == 0
+
+    uitvoer = capsys.readouterr().out
+    assert uitvoer.count("overgeslagen") == 3  # de drie FX-paren
+    assert "OPGESLAGEN" not in uitvoer

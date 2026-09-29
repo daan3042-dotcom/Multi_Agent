@@ -1252,3 +1252,12 @@ def list_domain_metric_keys(conn: sqlite3.Connection, domain: str) -> list[str]:
         (domain,),
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def count_claims_before(conn: sqlite3.Connection, metric_key: str, cutoff: datetime) -> int:
+    """Aantal claims voor deze reeks met een `source_time` vóór `cutoff`.
+    Gebruikt door de back-fill om te zien of een reeks al historie heeft."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM claims WHERE metric_key = ? AND source_time IS NOT NULL AND source_time < ?",
+        (metric_key, cutoff.isoformat()),
+    ).fetchone()[0]
