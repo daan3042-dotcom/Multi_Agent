@@ -1025,6 +1025,36 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Trigger-kalibratierapport (1.5) — 676 tests groen
+
+Een rapport dat alleen leest: hoe vaak zou elke drempel gevuurd hebben over de
+historie. Het wijzigt niets en raakt `src/triggers/` niet (geen checkpoint 2). De
+KEUZE van de drempels is aan DD, en na T₀ᵇ mag ze niet meer verschuiven zonder een
+nieuw cohort.
+
+**Het telt zoals het systeem telt.** `run_monitoring` vergelijkt elke cyclus de
+nieuwste waarde met de vorige opgeslagen waarde en vuurt bij `|nu - vorige| >
+tolerance`, strikt groter dan. Het rapport telt per paar opeenvolgende waarnemingen,
+en een test vergelijkt de tellingen op 20 willekeurige reeksen met de echte
+`evaluate_surprise`, inclusief de randgevallen waar de verandering precies gelijk is
+aan de tolerance. Met `>=` in plaats van `>` falen drie tests.
+
+**Twee tellingen, omdat de tolerances absoluut zijn.** Voor een rente of spread is dat
+goed. Voor een koers niet: een ETF stond in 1999 op ~$25 en nu op ~$250, dus een vaste
+$6 (XLK) vuurt in het verleden veel minder vaak dan nu. Daarom staat er naast de
+absolute telling (zoals het systeem) een niveau-gecorrigeerde: dezelfde drempel als
+percentage van het huidige niveau. Verschillen die twee sterk, dan is de drempel
+`niveau-afhankelijk`.
+
+**Drie tabellen:** hoe vaak vuurt de huidige drempel (alles/10j/3j/1j), welke drempel
+hoort bij 1%, 2% en 5% van de waarnemingen, en het verwachte aantal triggers per jaar
+per domein. De registry leest elke tolerance rechtstreeks uit de agent-modules (40
+reeksen), zodat een wijziging in de code het rapport meeverandert.
+
+**Beperkingen.** De historie is de back-fill zoals die nu is (gereviseerd, niet de
+eerste print). `high_yield_credit_spread` heeft ~3 jaar, dus daar zegt "alles" niets.
+De commodity-reeksen hebben nog geen historie.
+
 ### De eerste droge run van de ridge op echte data (29-09) — 653 tests groen
 
 Voor het eerst tegen de echte back-fill. Alle 55 doelen zijn gefit, zonder

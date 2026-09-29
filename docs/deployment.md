@@ -351,6 +351,36 @@ gewoon een ronde later. **Een typefout** (`cohort0`, `Cohort_0`) laat
 `run_daily.py` met exit 2 stoppen voor er iets gebeurt, en meldt welke
 waarden wel mogen.
 
+### Het trigger-kalibratierapport (roadmap 1.5) — alleen lezen
+
+Hoe vaak zou elke triggerdrempel de afgelopen tientallen jaren gevuurd hebben? De
+huidige tolerances zijn illustratieve plaatshouders, en na T₀ᵇ mogen ze niet meer
+verschuiven zonder een nieuw cohort te starten. Dit is het moment om ze met open ogen
+te kiezen. Het rapport **wijzigt niets** (geen drempel, geen agent, niets in de
+database) en doet geen calls naar Alpha Vantage.
+
+```bash
+cd /opt/multi_agent
+.venv/bin/python calibrate_triggers.py                  # alle 40 reeksen
+.venv/bin/python calibrate_triggers.py --domain sector  # één domein, korter om te plakken
+```
+
+Drie tabellen:
+
+1. **Hoe vaak vuurt de huidige drempel** (per jaar, over alles / 10 jaar / 3 jaar / 1 jaar),
+   plus een kolom `3j,rel` met dezelfde drempel uitgedrukt als percentage van het huidige
+   niveau. Verschillen `3j` en `3j,rel` sterk, dan schuift een vaste, absolute drempel niet
+   mee met het niveau. Dat is het geval bij koersen (een ETF stond in 1999 op ~$25, nu op
+   ~$250) en niet bij rentes en spreads.
+2. **Welke drempel hoort bij 1%, 2% en 5% van de waarnemingen** (laatste 3 jaar).
+3. **Het verwachte aantal triggers per jaar** per domein bij de huidige drempels.
+
+De kolom `oordeel` noemt wat opvalt: `vuurt nooit`, `vuurt vaak`, `wisselt sterk per
+periode`, `niveau-afhankelijk`, `korte historie`. Die drempels zijn leeshulpen, geen regels.
+
+**Let op:** `high_yield_credit_spread` heeft maar ~3 jaar historie, dus daar zegt "alles"
+niets meer dan "3j". En de commodity-reeksen hebben nog geen historie (back-fill open).
+
 ### De ridge-baseline fitten en bevriezen (roadmap 4.6) — eenmalig, na de back-fill
 
 De derde baseline moet gefit worden op de historie, en daarna staat hij
