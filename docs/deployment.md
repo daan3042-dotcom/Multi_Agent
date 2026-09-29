@@ -230,6 +230,52 @@ dan in het log naar regels die beginnen met `Forecast-probleem:` of
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
 gat.
 
+### De historische back-fill (roadmap 1.11, 0b-1)
+
+Eenmalig, en sinds 29-09 **veilig om opnieuw te draaien**: elke reeks wordt
+apart afgehandeld. Een reeks die al historie heeft (≥20 claims ouder dan 30
+dagen) wordt overgeslagen, een mislukte reeks meldt de reden van de bron, en
+er ontstaan nooit dubbele claims. Vóór 29-09 slikte het script elke fout stil
+in (ook Alpha Vantage's "limiet bereikt", dat als HTTP 200 met alleen tekst
+komt) en telde een domein als geslaagd zodra één reeks data gaf.
+
+```bash
+cd /opt/multi_agent
+
+# Alles in één keer. Reeksen die er al staan worden overgeslagen; reeksen die
+# er sinds de vorige back-fill bij zijn gekomen (DGS2, T5YIE, T10YIE, WALCL bij
+# monetary_policy) worden alsnog gevuld.
+.venv/bin/python backfill.py
+```
+
+**Wat je in de uitvoer leest**, per reeks:
+
+- `OPGESLAGEN  N claims` — gelukt.
+- `overgeslagen al historie aanwezig` — stond er al, niet aangeraakt.
+- `MISLUKT  <reden van de bron>` — niet gevuld. Lees de reden:
+  - *"reached the ... requests per day limit"* → quota. Wacht tot morgen of
+    check je tier.
+  - *"premium endpoint"* → dit endpoint zit niet in je plan.
+  - *"api_key is invalid"* / *"invalid API call"* → verkeerde of niet-actieve key.
+  - *"reden onbekend"* (alleen commodity) → dat endpoint geeft de reden niet
+    door; probeer het los opnieuw.
+
+**Exit code 0** betekent: elke gevraagde reeks heeft nu historie. **Exit code 1**
+betekent: minstens één reeks is niet gevuld, en de laatste regels noemen welke.
+Draai gewoon opnieuw — alleen die reeksen worden dan opgehaald.
+
+**Controleren dat alles erin zit:**
+
+```bash
+sqlite3 "$MI_DB_PATH" "SELECT domain, metric_key, COUNT(*) AS claims, MIN(source_time) AS vanaf
+                       FROM claims WHERE metric_key IS NOT NULL
+                       GROUP BY domain, metric_key ORDER BY domain, metric_key;"
+```
+
+Elke reeks hoort hier honderden tot duizenden claims te hebben (dagreeksen
+~5.000 bij 20 jaar). Een reeks met een paar rijen is niet gebackfilld. Dat ziet
+`fit_baselines.py` ook, dus draai deze controle vóór je de ridge fit.
+
 ### Het cohort: dry-run versus echte meting (`MI_COHORT`)
 
 **Laat `MI_COHORT` leeg in `.env` tot T₀ᵇ.** Leeg betekent `dry_run`: alle

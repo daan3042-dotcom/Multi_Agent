@@ -45,20 +45,34 @@ wel hun eigen, correcte `analysis_time`/`source_time` houden (zie
 _claims_from_history()), dus de trigger-laag se `load_latest_claims()`
 (die queryt `claims` direct, niet via domain_outputs) werkt gewoon door.
 
-GEEN DEDUP: dit script is bewust een eenmalige, handmatige actie (geen
-event_id/agent_runs-idempotency zoals de dagelijkse cyclus) -- twee keer
-draaien voor hetzelfde domein voegt twee keer dezelfde claims toe. Zie
-`backfill.py`'s CLI-waarschuwing.
+IDEMPOTENT PER REEKS (29-09-2026; was: "geen dedup, één keer per domein").
+Vóór 29-09 slikten de fetchers elke fout in en gaven `[]` terug -- ook Alpha
+Vantage's antwoord "limiet bereikt" of "premium endpoint", dat als HTTP 200
+met tekst in plaats van data komt. Een domein telde als geslaagd zodra ÉÉN
+reeks data gaf, en omdat er geen dedup was, kon je de ontbrekende reeksen niet
+bijvullen zonder de gelukte dubbel op te slaan. Een half gevulde back-fill was
+dus niet te herstellen -- hetzelfde patroon als de 6-van-24-reeksen van
+28-09, waarbij alle agents `success=1` meldden.
+
+Nu geldt per reeks:
+  - een fetch-fout is een `BackfillFetchError` met de tekst van de bron, en die
+    komt per reeks in de uitvoer (`failed`);
+  - een reeks die al historie heeft (>=20 claims ouder dan 30 dagen) wordt
+    OVERGESLAGEN (`skipped`), dus opnieuw draaien is altijd veilig;
+  - elke reeks wordt apart en atomair opgeslagen.
+Mislukte reeksen kun je gewoon opnieuw draaien: alleen die worden opgehaald.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Callable, Literal
 
 import requests
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from storage.schema import save_domain_output
+from storage.schema import count_claims_before, save_domain_output
 
 FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 AV_BASE_URL = "https://www.alphavantage.co/query"
@@ -70,38 +84,73 @@ def _parse_date(raw: str) -> datetime:
     return datetime.fromisoformat(raw).replace(tzinfo=timezone.utc)
 
 
+class BackfillFetchError(Exception):
+    """Een fetch leverde geen bruikbare historie. Bevat waar mogelijk de
+    tekst van de bron zelf, want die zegt WAAROM (limiet, premium, verkeerde
+    key) en dat is precies wat je op de VPS wilt lezen."""
+
+
+def _get_json(url: str, params: dict, timeout: int = 30) -> dict:
+    """Eén HTTP-call, en alles wat misgaat wordt een `BackfillFetchError`.
+    Bewust breed afgevangen: netwerkfout, HTTP-fout en ongeldige JSON zijn
+    voor de aanroeper hetzelfde -- deze reeks is er niet."""
+    try:
+        resp = requests.get(url, params=params, timeout=timeout)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as e:  # noqa: BLE001
+        raise BackfillFetchError(f"{type(e).__name__}: {e}") from e
+    if not isinstance(payload, dict):
+        raise BackfillFetchError(f"onverwacht antwoord van de bron: {str(payload)[:200]}")
+    return payload
+
+
+def _av_series(payload: dict, series_key: str) -> dict:
+    """De tijdreeks uit een Alpha Vantage-antwoord, of een fout mét de tekst
+    van de bron.
+
+    DIT IS HET STUKJE DAT 28-09 ONTBRAK. Alpha Vantage meldt "limiet bereikt"
+    en "premium endpoint" met HTTP 200 en een JSON met alleen een `Note` of
+    `Information`-veld. Zonder deze controle is dat een antwoord zonder
+    tijdreeks, en dus stilletjes een lege reeks."""
+    for veld in ("Error Message", "Information", "Note"):
+        if veld in payload:
+            raise BackfillFetchError(f"Alpha Vantage: {str(payload[veld])[:300]}")
+    series = payload.get(series_key)
+    if not series:
+        raise BackfillFetchError(f"Alpha Vantage: geen '{series_key}' in het antwoord")
+    return series
+
+
 def fetch_fred_full_history(series_id: str, api_key: str) -> list[dict]:
     """Volledige historie voor ÉÉN FRED-reeks, oudste eerst. Geen `limit`
     meegeven -- FRED's default (100.000) is ruim boven wat een reeks ooit
-    bevat, dus geen paginering nodig. Lege lijst bij elke fout (geen gok,
-    zelfde patroon als de dagelijkse _fetch_series()-helpers)."""
-    try:
-        resp = requests.get(
-            FRED_BASE_URL,
-            params={"series_id": series_id, "api_key": api_key, "file_type": "json", "sort_order": "asc"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        observations = resp.json().get("observations", [])
-    except Exception:
-        return []
-    return [{"value": o["value"], "date": o["date"]} for o in observations if o.get("value") not in (None, ".")]
+    bevat, dus geen paginering nodig. Gooit `BackfillFetchError` als er niets
+    bruikbaars uitkomt (geen stille lege lijst meer)."""
+    payload = _get_json(
+        FRED_BASE_URL,
+        {"series_id": series_id, "api_key": api_key, "file_type": "json", "sort_order": "asc"},
+    )
+    if "error_message" in payload:
+        raise BackfillFetchError(f"FRED: {str(payload['error_message'])[:300]}")
+    geldig = [
+        {"value": o["value"], "date": o["date"]}
+        for o in payload.get("observations", []) if o.get("value") not in (None, ".")
+    ]
+    if not geldig:
+        raise BackfillFetchError(f"FRED: geen bruikbare waarnemingen voor {series_id}")
+    return geldig
 
 
 def fetch_av_time_series_daily_full_history(symbol: str, api_key: str) -> list[dict]:
     """Volledige dagelijkse slotkoers-historie voor één aandeel/ETF via
     Alpha Vantage's TIME_SERIES_DAILY (outputsize=full) -- ANDER endpoint
     dan sector_agent.py's dagelijkse GLOBAL_QUOTE, die geeft geen historie."""
-    try:
-        resp = requests.get(
-            AV_BASE_URL,
-            params={"function": "TIME_SERIES_DAILY", "symbol": symbol, "outputsize": "full", "apikey": api_key},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        series = resp.json().get("Time Series (Daily)", {})
-    except Exception:
-        return []
+    payload = _get_json(
+        AV_BASE_URL,
+        {"function": "TIME_SERIES_DAILY", "symbol": symbol, "outputsize": "full", "apikey": api_key},
+    )
+    series = _av_series(payload, "Time Series (Daily)")
     return [{"value": point["4. close"], "date": date} for date, point in series.items()]
 
 
@@ -110,19 +159,14 @@ def fetch_av_fx_daily_full_history(from_currency: str, to_currency: str, api_key
     Alpha Vantage's FX_DAILY (outputsize=full) -- ANDER endpoint dan
     currency_agent.py's dagelijkse CURRENCY_EXCHANGE_RATE, die geeft geen
     historie."""
-    try:
-        resp = requests.get(
-            AV_BASE_URL,
-            params={
-                "function": "FX_DAILY", "from_symbol": from_currency, "to_symbol": to_currency,
-                "outputsize": "full", "apikey": api_key,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        series = resp.json().get("Time Series FX (Daily)", {})
-    except Exception:
-        return []
+    payload = _get_json(
+        AV_BASE_URL,
+        {
+            "function": "FX_DAILY", "from_symbol": from_currency, "to_symbol": to_currency,
+            "outputsize": "full", "apikey": api_key,
+        },
+    )
+    series = _av_series(payload, "Time Series FX (Daily)")
     return [{"value": point["4. close"], "date": date} for date, point in series.items()]
 
 
@@ -176,56 +220,125 @@ def _save_backfill(conn, domain: str, claims: list[Claim]) -> int:
     return len(claims)
 
 
-def backfill_fred_domain(conn, domain: str, source_key: str, fred_series: dict, metric_specs: dict, api_key: str) -> int:
-    """Back-fill voor één FRED-gebaseerde agent (monetary_policy,
-    financial of economic) -- haalt de volledige historie op voor elke
-    reeks in `fred_series` en slaat ze samen op. Geeft het aantal
-    opgeslagen claims terug (0 als er niets kon worden opgehaald)."""
-    claims: list[Claim] = []
-    for metric_key, series_id in fred_series.items():
-        history = fetch_fred_full_history(series_id, api_key)
+HISTORY_MIN_OLD_CLAIMS = 20
+HISTORY_OLD_AFTER_DAYS = 30
+"""Een reeks telt als 'al gebackfilld' met minstens 20 claims van ouder dan 30
+dagen. De dagelijkse cyclus maakt één claim per dag, dus in de eerste dagen
+staan er een handvol -- ruim onder de grens. Een reeks die deze grens haalt
+heeft hoe dan ook een echte historie, ook als hij op een eerdere (FRED-)
+back-fill is binnengekomen vóórdat deze controle bestond."""
+
+
+@dataclass(frozen=True)
+class MetricOutcome:
+    """Wat er met één reeks gebeurde. Per reeks en niet per domein: 'domein
+    geslaagd' was precies de zin die een half gevulde back-fill verborg."""
+
+    metric_key: str
+    status: Literal["saved", "skipped", "failed"]
+    n_claims: int = 0
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class BackfillResult:
+    domain: str
+    outcomes: tuple[MetricOutcome, ...]
+
+    @property
+    def saved(self) -> int:
+        """Aantal opgeslagen claims."""
+        return sum(o.n_claims for o in self.outcomes if o.status == "saved")
+
+    @property
+    def failed(self) -> tuple[MetricOutcome, ...]:
+        return tuple(o for o in self.outcomes if o.status == "failed")
+
+    @property
+    def is_complete(self) -> bool:
+        """Elke reeks heeft nu historie: opgeslagen of al aanwezig. Alleen dit
+        mag 'geslaagd' heten."""
+        return not self.failed
+
+
+def _backfill_metric(
+    conn, domain: str, metric_key: str, label: str, source_key: str,
+    fetch: Callable[[], list[dict]], now: datetime,
+) -> MetricOutcome:
+    """Eén reeks: overslaan als hij al historie heeft, anders ophalen en
+    atomair opslaan (één DomainOutput, één commit). `generated_at` staat op de
+    oudste source_time -- zie de moduledocstring."""
+    grens = now - timedelta(days=HISTORY_OLD_AFTER_DAYS)
+    bestaand = count_claims_before(conn, metric_key, grens)
+    if bestaand >= HISTORY_MIN_OLD_CLAIMS:
+        return MetricOutcome(
+            metric_key, "skipped", detail=f"al historie aanwezig ({bestaand} claims ouder dan {HISTORY_OLD_AFTER_DAYS} dagen)"
+        )
+    try:
+        history = fetch()
+    except BackfillFetchError as e:
+        return MetricOutcome(metric_key, "failed", detail=str(e))
+    claims = _claims_from_history(domain, metric_key, label, source_key, history)
+    if not claims:
+        return MetricOutcome(metric_key, "failed", detail="geen enkele waarneming was numeriek bruikbaar")
+    oldest = min(c.source_time for c in claims)
+    save_domain_output(conn, DomainOutput(domain=domain, mode=Mode.MONITORING, generated_at=oldest, claims=claims))
+    return MetricOutcome(metric_key, "saved", n_claims=len(claims))
+
+
+def _backfill_domain(conn, domain: str, source_key: str, metric_specs: dict, jobs: dict[str, Callable[[], list[dict]]]) -> BackfillResult:
+    now = now_utc()
+    outcomes = []
+    for metric_key, fetch in jobs.items():
         spec = metric_specs.get(metric_key)
         label = spec.label if spec else metric_key
-        claims.extend(_claims_from_history(domain, metric_key, label, source_key, history))
-    return _save_backfill(conn, domain, claims)
+        outcomes.append(_backfill_metric(conn, domain, metric_key, label, source_key, fetch, now))
+    return BackfillResult(domain, tuple(outcomes))
 
 
-def backfill_sector(conn, domain: str, source_key: str, sector_etfs: dict, metric_specs: dict, api_key: str) -> int:
-    """Back-fill voor sector_agent.py -- TIME_SERIES_DAILY per ETF (11
-    calls), niet de dagelijkse GLOBAL_QUOTE."""
-    claims: list[Claim] = []
-    for metric_key, symbol in sector_etfs.items():
-        history = fetch_av_time_series_daily_full_history(symbol, api_key)
-        spec = metric_specs.get(metric_key)
-        label = spec.label if spec else metric_key
-        claims.extend(_claims_from_history(domain, metric_key, label, source_key, history))
-    return _save_backfill(conn, domain, claims)
+def backfill_fred_domain(conn, domain: str, source_key: str, fred_series: dict, metric_specs: dict, api_key: str) -> BackfillResult:
+    """Back-fill voor één FRED-gebaseerde agent (monetary_policy, financial of
+    economic): de volledige historie per reeks in `fred_series`."""
+    jobs = {key: (lambda sid=sid: fetch_fred_full_history(sid, api_key)) for key, sid in fred_series.items()}
+    return _backfill_domain(conn, domain, source_key, metric_specs, jobs)
 
 
-def backfill_currency(conn, domain: str, source_key: str, fx_pairs: dict, metric_specs: dict, api_key: str) -> int:
-    """Back-fill voor currency_agent.py -- FX_DAILY per paar (3 calls),
-    niet de dagelijkse CURRENCY_EXCHANGE_RATE."""
-    claims: list[Claim] = []
-    for metric_key, (from_currency, to_currency) in fx_pairs.items():
-        history = fetch_av_fx_daily_full_history(from_currency, to_currency, api_key)
-        spec = metric_specs.get(metric_key)
-        label = spec.label if spec else metric_key
-        claims.extend(_claims_from_history(domain, metric_key, label, source_key, history))
-    return _save_backfill(conn, domain, claims)
+def backfill_sector(conn, domain: str, source_key: str, sector_etfs: dict, metric_specs: dict, api_key: str) -> BackfillResult:
+    """Back-fill voor sector_agent.py -- TIME_SERIES_DAILY per ETF (12 calls,
+    inclusief de SPY-benchmark), niet de dagelijkse GLOBAL_QUOTE."""
+    jobs = {key: (lambda sym=sym: fetch_av_time_series_daily_full_history(sym, api_key)) for key, sym in sector_etfs.items()}
+    return _backfill_domain(conn, domain, source_key, metric_specs, jobs)
 
 
-def backfill_commodity(conn, domain: str, source_key: str, commodities: dict, metric_specs: dict, api_key: str) -> int:
-    """Back-fill voor commodity_agent.py -- hergebruikt die module se
-    EIGEN _fetch_commodity_data() (geeft al de volledige beschikbare
-    historie terug, precies wat deep_dive()'s voortschrijdend-gemiddelde-
-    model ook al gebruikt) in plaats van een tweede, functioneel
-    identieke fetch-helper te schrijven."""
+def backfill_currency(conn, domain: str, source_key: str, fx_pairs: dict, metric_specs: dict, api_key: str) -> BackfillResult:
+    """Back-fill voor currency_agent.py -- FX_DAILY per paar (3 calls), niet
+    de dagelijkse CURRENCY_EXCHANGE_RATE."""
+    jobs = {
+        key: (lambda van=van, naar=naar: fetch_av_fx_daily_full_history(van, naar, api_key))
+        for key, (van, naar) in fx_pairs.items()
+    }
+    return _backfill_domain(conn, domain, source_key, metric_specs, jobs)
+
+
+def backfill_commodity(conn, domain: str, source_key: str, commodities: dict, metric_specs: dict, api_key: str) -> BackfillResult:
+    """Back-fill voor commodity_agent.py -- hergebruikt die module se EIGEN
+    _fetch_commodity_data() (geeft al de volledige beschikbare historie terug,
+    precies wat deep_dive()'s voortschrijdend-gemiddelde-model ook al
+    gebruikt) in plaats van een tweede, functioneel identieke fetch-helper te
+    schrijven.
+
+    Die functie geeft bij elke fout `None`, dus hier is de REDEN niet te
+    achterhalen (limiet, premium, verkeerde key): de melding zegt dat eerlijk."""
     from agents.commodity_agent import _fetch_commodity_data
 
-    claims: list[Claim] = []
-    for metric_key, function_name in commodities.items():
-        history = _fetch_commodity_data(function_name, api_key) or []
-        spec = metric_specs.get(metric_key)
-        label = spec.label if spec else metric_key
-        claims.extend(_claims_from_history(domain, metric_key, label, source_key, history))
-    return _save_backfill(conn, domain, claims)
+    def haal_op(function_name: str) -> list[dict]:
+        history = _fetch_commodity_data(function_name, api_key)
+        if not history:
+            raise BackfillFetchError(
+                f"Alpha Vantage {function_name}: geen data (reden onbekend -- limiet, premium of key; "
+                f"probeer de reeks los opnieuw)"
+            )
+        return history
+
+    jobs = {key: (lambda fn=fn: haal_op(fn)) for key, fn in commodities.items()}
+    return _backfill_domain(conn, domain, source_key, metric_specs, jobs)

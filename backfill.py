@@ -4,7 +4,7 @@ backfill.py
 Roadmap 1.11, fase 0b-1 -- eenmalig, handmatig te draaien entrypoint voor
 de historische back-fill. Zie `src/runtime/backfill.py` voor de volledige
 uitleg (waarom andere AV-endpoints dan de dagelijkse cyclus, waarom
-`generated_at` op de oudste datum staat, waarom er geen dedup is).
+`generated_at` op de oudste datum staat, en hoe het overslaan per reeks werkt).
 
 GEBRUIK OP DE VPS:
 
@@ -20,16 +20,24 @@ GEBRUIK OP DE VPS:
     # Alles in één keer (alleen doen met een tier die de AV-belasting aankan):
     .venv/bin/python backfill.py
 
-BELANGRIJK: dit script heeft GEEN dedup. Twee keer draaien voor hetzelfde
-domein voegt twee keer dezelfde historische claims toe. Alleen bedoeld om
-één keer per domein gedraaid te worden.
+VEILIG OM OPNIEUW TE DRAAIEN (sinds 29-09-2026). Elke reeks wordt apart
+afgehandeld: heeft een reeks al historie (>=20 claims ouder dan 30 dagen), dan
+wordt hij OVERGESLAGEN; mislukt een reeks, dan staat de reden van de bron in de
+uitvoer en kun je gewoon opnieuw draaien -- alleen die reeks wordt dan
+opgehaald. Er ontstaan geen dubbele claims. (Vóór 29-09 gold "één keer per
+domein, geen dedup", en slikte het script elke fetch-fout stil in.)
+
+Dat betekent ook: draai gerust ALLE domeinen, ook de FRED-domeinen die al eens
+gedraaid zijn. Reeksen die er al staan worden overgeslagen; reeksen die
+sindsdien zijn toegevoegd (bijv. DGS2, T5YIE, T10YIE en WALCL bij
+monetary_policy) worden alsnog gevuld.
 
 Vereiste environment-variabelen: FRED_API_KEY (voor monetary_policy/
 financial/economic), ALPHAVANTAGE_API_KEY (voor currency/sector/commodity).
 
 EXIT CODES:
-    0 -- elk gevraagd domein leverde minstens één claim op
-    1 -- minstens één domein leverde niets op (mislukte fetch, of geen data)
+    0 -- elke gevraagde reeks heeft nu historie (opgeslagen of al aanwezig)
+    1 -- minstens één reeks kon niet opgehaald worden (reden staat in de uitvoer)
     2 -- de database kon niet geopend worden, of een vereiste API-key ontbreekt
 """
 
@@ -51,7 +59,7 @@ AV_DOMAINS = ("currency", "sector", "commodity")
 ALL_DOMAINS = FRED_DOMAINS + AV_DOMAINS
 
 
-def _backfill_one_domain(conn, domain: str, fred_api_key: str | None, av_api_key: str | None) -> int:
+def _backfill_one_domain(conn, domain: str, fred_api_key: str | None, av_api_key: str | None):
     """Importeert de bijbehorende agent-module PAS hier (zelfde reden als
     runtime/daily.py::default_agents(): geen requests-import/env-lookup
     nodig voor een domein dat niet gevraagd is)."""
@@ -101,7 +109,7 @@ def main(argv=None) -> int:
     domains = args.domain or list(ALL_DOMAINS)
     requested_av = [d for d in domains if d in AV_DOMAINS]
     if requested_av:
-        av_call_estimate = sum({"currency": 3, "sector": 11, "commodity": 10}[d] for d in requested_av)
+        av_call_estimate = sum({"currency": 3, "sector": 12, "commodity": 10}[d] for d in requested_av)
         log.warning(
             "Alpha Vantage-domeinen gevraagd (%s): dit kost naar schatting %d calls, "
             "exact tegen de dagelijkse quota-limiet aan als je de gratis tier gebruikt -- "
@@ -125,19 +133,34 @@ def main(argv=None) -> int:
         log.critical("Database %s kon niet geopend worden: %s: %s", args.db, type(e).__name__, e)
         return 2
 
-    had_empty_domain = False
+    mislukt: list[str] = []
     try:
         for domain in domains:
-            count = _backfill_one_domain(conn, domain, fred_api_key, av_api_key)
-            if count == 0:
-                had_empty_domain = True
-                log.warning("%s: geen enkele claim opgehaald/opgeslagen", domain)
-            else:
-                log.info("%s: %d historische claims opgeslagen", domain, count)
+            resultaat = _backfill_one_domain(conn, domain, fred_api_key, av_api_key)
+            print(f"\n{domain}")
+            for o in resultaat.outcomes:
+                if o.status == "saved":
+                    print(f"  {o.metric_key:<32} OPGESLAGEN  {o.n_claims:>6} claims")
+                elif o.status == "skipped":
+                    print(f"  {o.metric_key:<32} overgeslagen {o.detail}")
+                else:
+                    print(f"  {o.metric_key:<32} MISLUKT     {o.detail}")
+                    mislukt.append(f"{domain}/{o.metric_key}")
+            log.info(
+                "%s: %d claims opgeslagen, %d reeks(en) al aanwezig, %d mislukt",
+                domain, resultaat.saved,
+                sum(1 for o in resultaat.outcomes if o.status == "skipped"), len(resultaat.failed),
+            )
     finally:
         conn.close()
 
-    return 1 if had_empty_domain else 0
+    print()
+    if mislukt:
+        print(f"{len(mislukt)} reeks(en) NIET gevuld: {', '.join(mislukt)}")
+        print("Dit is veilig opnieuw te draaien: reeksen die al historie hebben worden overgeslagen.")
+        return 1
+    print("Alle gevraagde reeksen hebben historie.")
+    return 0
 
 
 if __name__ == "__main__":
