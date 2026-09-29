@@ -47,7 +47,9 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+import os
 from enum import Enum
+from typing import Mapping
 
 from contract.graph import GRAPH_VERSION, Node
 from contract.resolution import ResolutionMethod
@@ -61,9 +63,48 @@ is daarentegen een COVARIAAT binnen hetzelfde cohort (`model_id`,
 weken."""
 
 COHORT_0 = "cohort_0"
-"""Het eerste echte cohort, dat vanaf T0-b loopt. `cohort=pseudo_oos` is
-gereserveerd voor de pseudo-out-of-sample-run (4.4) en mag NOOIT met het
-echte cohort gemengd worden."""
+"""Het eerste echte cohort, dat vanaf T0-b loopt. Nooit hardcoden als
+default: zie `current_cohort()`."""
+DRY_RUN_COHORT = "dry_run"
+"""Alles wat vóór T₀ᵇ wordt voorspeld: de dry-run, de eerste weken op de VPS.
+Bewust géén cohort: contract, prompts en drempels zijn dan nog niet bevroren."""
+PSEUDO_OOS_COHORT = "pseudo_oos"
+"""Gereserveerd voor de pseudo-out-of-sample-run (4.4)."""
+KNOWN_COHORTS = (DRY_RUN_COHORT, PSEUDO_OOS_COHORT, COHORT_0)
+COHORT_ENV_VAR = "MI_COHORT"
+
+
+def current_cohort(environ: Mapping[str, str] | None = None) -> str:
+    """Het cohort waaronder NIEUWE voorspellingen nu worden opgeslagen.
+
+    WAAROM DIT UIT DE OMGEVING KOMT. Tot 29-09 stond `cohort_0` als vaste
+    default op `Prediction`. Zodra de wekelijkse ronde op de VPS draait,
+    zouden de voorspellingen van oktober dan als het ECHTE cohort zijn
+    opgeslagen -- vóór de freeze van contract, prompts en drempels. Dat is
+    niet achteraf te herstellen: `predictions` heeft bewust geen update-pad,
+    dus een verkeerd label is definitief.
+
+    DE DEFAULT IS DE VEILIGE KANT. Zonder `MI_COHORT` (of met een lege
+    waarde) is het `dry_run`. Het echte cohort krijg je alleen door het
+    BEWUST aan te zetten (`MI_COHORT=cohort_0` in `.env`, op T₀ᵇ). De fout
+    die overblijft is dus "vergeten om te schakelen", en die is zichtbaar
+    (het staat in het log en in `SELECT cohort, COUNT(*) FROM predictions`)
+    en herstelbaar door de klok een dag later te starten -- de andere kant
+    (te vroeg cohort_0) is dat niet.
+
+    Een onbekende waarde (een typefout als `cohort0`) is een fout en geen
+    stille terugval: anders ontstaat er een zwevend cohort dat niemand
+    ooit meet."""
+    bron = os.environ if environ is None else environ
+    waarde = bron.get(COHORT_ENV_VAR, "").strip()
+    if not waarde:
+        return DRY_RUN_COHORT
+    if waarde not in KNOWN_COHORTS:
+        raise ValueError(
+            f"{COHORT_ENV_VAR}={waarde!r} is geen bekend cohort. "
+            f"Toegestaan: {', '.join(KNOWN_COHORTS)}. Leeg laten betekent {DRY_RUN_COHORT}."
+        )
+    return waarde
 
 
 class PredictionKind(str, Enum):
@@ -114,7 +155,7 @@ class Prediction:
     event_rule: str | None = None
 
     # Herkomst en context
-    cohort: str = COHORT_0
+    cohort: str = field(default_factory=current_cohort)
     contract_version: str = CONTRACT_VERSION
     graph_version: str = GRAPH_VERSION
     graph_node: Node | None = None
@@ -151,6 +192,11 @@ class Prediction:
 
         if self.horizon_n <= 0:
             raise ValueError(f"horizon_n moet positief zijn, kreeg {self.horizon_n!r}")
+
+        if self.cohort not in KNOWN_COHORTS:
+            raise ValueError(
+                f"onbekend cohort {self.cohort!r}; toegestaan: {', '.join(KNOWN_COHORTS)}"
+            )
 
         # De methode is wat de resolver STRAKS uitvoert; de regeltekst is
         # wat een mens leest. Beide staan op de rij, want een voorspelling

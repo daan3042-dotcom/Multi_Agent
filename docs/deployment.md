@@ -42,7 +42,8 @@ cp .env.example .env
 chmod 600 .env       # bevat API-keys, alleen leesbaar voor deze user
 nano .env            # FRED_API_KEY, ALPHAVANTAGE_API_KEY, MI_DB_PATH,
                       # MI_WEBHOOK_URL invullen (ANTHROPIC_API_KEY pas
-                      # nodig zodra --deep-dives aan gaat, zie hieronder)
+                      # nodig zodra --deep-dives aan gaat, zie hieronder).
+                      # MI_COHORT LEEG LATEN tot T₀ᵇ, zie "Het cohort" hieronder.
 ```
 
 `run_daily.sh` (repo-root) laadt dit bestand automatisch vóór elke run —
@@ -228,6 +229,47 @@ dan in het log naar regels die beginnen met `Forecast-probleem:` of
 `Baseline-probleem:` — een deels mislukte ronde gooit de geldige
 voorspellingen niet weg, dus een lager aantal is geen crash maar wel een
 gat.
+
+### Het cohort: dry-run versus echte meting (`MI_COHORT`)
+
+**Laat `MI_COHORT` leeg in `.env` tot T₀ᵇ.** Leeg betekent `dry_run`: alle
+voorspellingen en baselines die de wekelijkse ronde schrijft, krijgen dat
+label en tellen dus NIET mee in het track record. Dat is precies wat je in
+de dry-run-week wilt: de hele keten (forecast, baselines, resolver, scores)
+draait echt en wordt echt gescoord, maar er raakt niets het echte cohort
+vervuild vóór de freeze.
+
+Het label is definitief zodra een voorspelling is opgeslagen — de
+`predictions`-tabel heeft geen update-pad. Daarom is de default de veilige
+kant, en is het echte cohort iets dat je bewust aanzet.
+
+**Controleren wat er staat:**
+
+```bash
+sqlite3 market_intelligence.db \
+  "SELECT cohort, COUNT(*) FROM predictions GROUP BY cohort;"
+```
+
+Vóór T₀ᵇ verwacht je hier **alleen `dry_run`**. Staat er `cohort_0`, dan is
+`MI_COHORT` te vroeg gezet: stop, en meld het voordat er nog een ronde draait.
+
+**De overgang op T₀ᵇ (één handeling, na de freeze):**
+
+1. Freeze bevestigd met versienummers (CLAUDE.md checkpoint 5).
+2. In `.env` op de VPS: `MI_COHORT=cohort_0`. Geen aanhalingstekens, geen
+   spatie rond het `=`.
+3. Draai `./run_daily.sh` (of wacht op de cron) en lees de eerste regels van
+   het log. Er hoort te staan:
+   `Cohort voor nieuwe voorspellingen: cohort_0 (ECHT COHORT -- telt mee in het track record)`
+4. Na de eerstvolgende wekelijkse ronde: dezelfde SQL als hierboven. Er
+   hoort nu een `cohort_0`-groep te staan die groeit.
+
+**Vergeten te schakelen** is de fout die overblijft, en die is te
+herstellen: elke run logt het cohort, dus je ziet `telt NIET mee` in
+`daily.log`. De eerste weken staan dan onder `dry_run`; de klok start
+gewoon een ronde later. **Een typefout** (`cohort0`, `Cohort_0`) laat
+`run_daily.py` met exit 2 stoppen voor er iets gebeurt, en meldt welke
+waarden wel mogen.
 
 ### De ridge-baseline fitten en bevriezen (roadmap 4.6) — eenmalig, na de back-fill
 

@@ -895,6 +895,49 @@ regressietest die op de oude code aantoonbaar faalt.
 4. De drempels `MIN_SAMPLES=30`, `MIN_SEASONAL_SAMPLES=60` en de
    ankerleeftijden zijn keuzes, geen berekeningen. Bij de freeze bevestigen.
 
+### Cohort vóór T₀ᵇ: `MI_COHORT` (29-09) — 610 tests groen
+
+`Prediction.cohort` stond hard op `cohort_0`. Zodra de wekelijkse ronde op
+de VPS draaide, waren de voorspellingen van 5, 12, 19 en 26 oktober en 2 en
+9 november als het ECHTE cohort opgeslagen — vóór de freeze van contract,
+prompts en drempels. `predictions` heeft bewust geen update-pad, dus een
+verkeerd label is definitief. Eén bestaande test (`test_prediction.py`) had
+dat gedrag zelfs als "correct" vastgelegd, wat bevestigt dat het nooit
+bewust was bedoeld.
+
+**De oplossing:** `current_cohort()` leest `MI_COHORT`, met `dry_run` als
+default. `Prediction.cohort` gebruikt die als `default_factory`, dus **één
+plek beslist voor elke voorspeller** — de LLM-agents, de drie baselines en
+later de menselijke invoer (4.8). Er is geen tweede plek die uit de pas kan
+lopen; een test bewaakt dat agent en baseline in hetzelfde cohort landen,
+want anders is er niets om ze mee te vergelijken.
+
+**De veilige kant is de default.** Niets zetten geeft `dry_run`, nooit
+`cohort_0`. Wat overblijft is de omgekeerde fout — vergeten om op T₀ᵇ te
+schakelen — en die is zichtbaar (elke run logt het cohort) en herstelbaar
+(de klok een dag later starten). De andere kant was dat niet.
+
+**Een typefout is een fout.** `MI_COHORT=cohort0` zou bij een stille
+terugval als `dry_run` worden weggeschreven, en juist op T₀ᵇ merk je dat
+pas weken later. `run_daily.py` stopt daarom met exit 2 voor er iets
+gebeurt, en `Prediction` weigert een onbekend cohort bij constructie.
+
+**Teruglezen raadpleegt de omgeving niet.** Het cohort van een opgeslagen
+rij staat vast; een wijziging van `MI_COHORT` op T₀ᵇ verandert geen oude
+rijen. Een test bewijst dat.
+
+**Dry-run wordt gewoon afgewikkeld.** Resolver en scores moeten in de
+dry-run-week bewezen worden — dat is de bedoeling ervan. Alleen het label
+scheidt die voorspellingen van het echte cohort.
+
+**`tests/conftest.py`** haalt `MI_COHORT` uit de omgeving voor elke test.
+Het deployment-runbook draait `pytest` vóór elke uitrol, en op T₀ᵇ staat
+`cohort_0` dan in de omgeving van de VPS: zonder dit zouden tests daar
+voorspellingen onder het echte cohort kunnen wegschrijven.
+
+**Op T₀ᵇ is er één handeling van DD:** `MI_COHORT=cohort_0` in `.env`, na
+de freeze, plus controle. Staat op de T₀ᵇ-checklist in de roadmap.
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
@@ -1113,11 +1156,6 @@ zijn output naar `AnalystAgentReport` vertaald krijgt) blijft zonder
 concrete trigger — post-T₀.
 
 ## Open questions needing the project owner's input
-
-- **[29-09] BLOKKEREND vóór `--deep-dives` aan gaat: cohort vóór T₀ᵇ.**
-  Zie `docs/roadmap.md`, "Open beslissingen". `Prediction.cohort` staat hard
-  op `cohort_0`; zonder ingreep worden de dry-run-voorspellingen van oktober
-  het echte cohort, en dat is niet te herstellen (geen update-pad).
 
 - **[28-09] `DTWEXBGS` → knoop `dollar`: uitgesteld tot na T₀ᵃ** (optie 3,
   besloten 28-09). Vraagt multi-provider-ondersteuning in

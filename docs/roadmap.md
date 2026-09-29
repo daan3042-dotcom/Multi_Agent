@@ -287,6 +287,7 @@ Secties 4.5, 4.6.
 - [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
+- [ ] **[29-09] `MI_COHORT=cohort_0` gezet in `.env` op de VPS, NA de freeze**, en gecontroleerd: het log van de eerstvolgende run zegt "ECHT COHORT", en `SELECT cohort, COUNT(*) FROM predictions GROUP BY cohort` toont nieuwe rijen onder `cohort_0`. Vergeten = de eerste weken van het echte cohort staan onder `dry_run`
 - [ ] Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1 (1.10)
 
 **Cohort-semantiek na T₀ᵇ:** een wijziging aan contract, graaf of
@@ -1322,21 +1323,6 @@ kalibratie-deel van 5.2.
 
 ## Open beslissingen (bewust nog niet dichtgetimmerd)
 
-- [ ] **[29-09] BLOKKEREND VÓÓR `--deep-dives` AAN GAAT: welk cohort
-      krijgen voorspellingen vóór T₀ᵇ?** `Prediction.cohort` staat hard op
-      `"cohort_0"` (`contract/prediction.py::COHORT_0`) en niets schakelt dat
-      om. Zodra de wekelijkse ronde op de VPS draait, zouden de
-      voorspellingen van 5, 12, 19, 26 okt en 2, 9 nov als het ECHTE cohort
-      worden opgeslagen — vóór de freeze van contract, prompts en drempels.
-      De roadmap zegt het tegenovergestelde: dry-run en pseudo-OOS horen
-      `pseudo_oos` te zijn en nooit met het echte cohort gemengd te worden.
-      **Waarom dit niet achteraf te herstellen is:** `predictions` heeft
-      bewust geen update-pad, dus een verkeerd label is definitief.
-      **Voorstel (nog niet gebouwd, raakt onbeheerd draaien = checkpoint
-      3):** het cohort komt uit de environment (`MI_COHORT`) met als
-      veilige default `dry_run`. Op T₀ᵇ zet DD `MI_COHORT=cohort_0` in
-      `.env`; alles daarvóór is per definitie geen cohort 0. Eén plek die
-      zowel de agents als de drie baselines volgt.
 - [ ] **Welke VPS-provider?** Richting (VPS) is beslist; provider en
       instance nog niet. De code veronderstelt niets over de machine.
       Blokkeert T₀ᵃ — eerstvolgende beslissing.
@@ -1359,6 +1345,26 @@ kalibratie-deel van 5.2.
       "financial philosophy agent" uit DD's eindbeeld thuishoort: geen
       voorspeller, maar een kennislaag (RAG) die de prompts van de
       andere agents voedt.
+
+## Beslist op 29-09-2026
+
+- [x] **Cohort vóór T₀ᵇ: `MI_COHORT`, default `dry_run`.** `Prediction.cohort`
+      stond hard op `cohort_0`; zodra de wekelijkse ronde op de VPS draaide,
+      waren de voorspellingen van oktober als het ECHTE cohort opgeslagen, vóór
+      de freeze — en `predictions` heeft bewust geen update-pad, dus een
+      verkeerd label is definitief. Nu komt het cohort uit de omgeving
+      (`contract/prediction.py::current_cohort`), met `dry_run` als default.
+      Het echte cohort krijg je alleen door `MI_COHORT=cohort_0` **bewust** in
+      `.env` te zetten, op T₀ᵇ, na de freeze. Eén plek beslist voor de agents,
+      de baselines en (straks) de menselijke voorspellers.
+      **Wat er overblijft is "vergeten om te schakelen"**, en dat is de veilige
+      fout: zichtbaar (elke run logt het cohort, en `SELECT cohort, COUNT(*)
+      FROM predictions GROUP BY cohort` toont het) en te herstellen door de
+      klok een dag later te starten. De andere kant — te vroeg `cohort_0` — was
+      dat niet. Een typefout (`cohort0`) stopt `run_daily.py` met exit 2, voor
+      er iets gebeurt. Dry-run-voorspellingen worden gewoon afgewikkeld en
+      gescoord: de dry-run-week moet resolver en scores juist bewijzen; alleen
+      het label scheidt ze van het echte cohort.
 
 ## Beslist op 28-09-2026
 
