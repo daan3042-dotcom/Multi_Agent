@@ -885,7 +885,7 @@ def test_total_predictions_per_week_is_pinned():
 # --------------------------------------------------------------------------
 
 
-def _seed_historie(conn, metric="testmetric", n=80):
+def _seed_historie(conn, metric="testmetric", n=400):
     """Een reeks zoals de back-fill die opslaat, eindigend op vrijdag
     2026-10-02 -- de vrijdag vóór MAANDAG."""
     from contract.output_contract import Claim, Confidence, DomainOutput, Mode
@@ -904,16 +904,30 @@ def _seed_historie(conn, metric="testmetric", n=80):
     ))
 
 
+def _bevries_ridge(conn):
+    """Fit en bevries het ridge-model voor het testdoel, zoals
+    fit_baselines.py dat op de VPS doet. Zonder dit meldt de ronde (terecht)
+    dat de derde baseline ontbreekt."""
+    from scoring.ridge import fit_ridge_model, freeze_ridge_model
+
+    doel = _forecast_agent().forecast_targets[0]
+    fit = fit_ridge_model(conn, "testdomain", doel, 5, MAANDAG)
+    freeze_ridge_model(conn, "testdomain", doel, 5, fit, MAANDAG, MAANDAG)
+
+
 def test_baselines_draaien_mee_met_de_forecast_ronde(tmp_path):
     from storage.schema import list_predictions
 
     conn = _db(tmp_path)
     _seed_historie(conn)
+    _bevries_ridge(conn)
 
     result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=_forecast_client())
 
     agents = sorted(p.agent for p in list_predictions(conn))
-    assert agents == ["baseline:climatology", "baseline:persistence", "testdomain"]
+    assert agents == [
+        "baseline:climatology", "baseline:persistence", "baseline:ridge", "testdomain",
+    ]
     assert len(result.baseline_results) == 1
     assert result.baseline_issues == []
 
@@ -937,12 +951,13 @@ def test_baselines_draaien_maar_een_keer_per_week(tmp_path):
 
     conn = _db(tmp_path)
     _seed_historie(conn)
+    _bevries_ridge(conn)
     client = _forecast_client()
 
     run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=client)
     tweede = run_daily(conn, agents=[_forecast_agent()], now=DINSDAG, client=client)
 
-    assert len(list_predictions(conn)) == 3
+    assert len(list_predictions(conn)) == 4
     assert tweede.baseline_results == []
 
 
@@ -953,13 +968,14 @@ def test_baselines_overleven_een_gecrashte_llm(tmp_path):
 
     conn = _db(tmp_path)
     _seed_historie(conn)
+    _bevries_ridge(conn)
     kapot = _forecast_client()
     kapot.messages.create.side_effect = RuntimeError("API plat")
 
     result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=kapot)
 
     assert sorted(p.agent for p in list_predictions(conn)) == [
-        "baseline:climatology", "baseline:persistence",
+        "baseline:climatology", "baseline:persistence", "baseline:ridge",
     ]
     assert result.forecast_issues  # de LLM-kant blijft wel zichtbaar
 
@@ -979,3 +995,25 @@ def test_ontbrekende_historie_komt_in_de_melding(tmp_path):
     assert result.baseline_issues
     assert result.has_problems
     assert any("Baseline-ronde" in m.body for m in meldingen)
+
+
+def test_ontbrekend_ridge_model_komt_in_de_melding_maar_de_rest_draait(tmp_path):
+    """Tot fit_baselines.py --freeze gedraaid is, ontbreekt de derde baseline.
+    Dat moet zichtbaar zijn (een agent zonder volledige meetlat), maar het
+    mag de twee andere baselines niet tegenhouden."""
+    from storage.schema import list_predictions
+
+    conn = _db(tmp_path)
+    _seed_historie(conn)
+    meldingen = []
+
+    result = run_daily(
+        conn, agents=[_forecast_agent()], now=MAANDAG, client=_forecast_client(),
+        notifier=meldingen.append,
+    )
+
+    assert sorted(p.agent for p in list_predictions(conn)) == [
+        "baseline:climatology", "baseline:persistence", "testdomain",
+    ]
+    assert any("ridge" in i for i in result.baseline_issues)
+    assert any("fit_baselines.py" in m.body for m in meldingen)

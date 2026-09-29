@@ -62,7 +62,8 @@ from contract.output_contract import DomainOutput
 from health.system_health import SystemHealthReport, sources_from_registry, system_health
 from manager.manager import DispatchPlan, dispatch
 from runtime.notifications import Notification, Notifier, build_notification, log_notifier
-from scoring.baselines import BaselineRoundResult, baseline_run_domain, run_baseline_round
+from scoring.baseline_round import baseline_run_domain, run_baseline_round
+from scoring.baselines import BaselineRoundResult
 from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,

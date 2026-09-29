@@ -32,8 +32,8 @@ from scoring.baselines import (
     PERSISTENCE,
     baseline_predictions,
     empirical_quantile,
-    run_baseline_round,
 )
+from scoring.baseline_round import run_baseline_round
 from scoring.resolver import resolve_due_predictions
 from storage.schema import (
     init_db,
@@ -436,7 +436,7 @@ def _gevulde_db(tmp_path):
 def test_ronde_slaat_beide_baselines_op_met_een_run_regel(tmp_path):
     conn = _gevulde_db(tmp_path)
 
-    uitkomst = run_baseline_round(conn, "monetary_policy", [_doel(horizons=(1, 5))], MAANDAG, event_id="2026-W41")
+    uitkomst = run_baseline_round(conn, "monetary_policy", [_doel(horizons=(1, 5))], MAANDAG, event_id="2026-W41", ridge=False)
 
     rijen = list_predictions(conn)
     assert len(rijen) == 4
@@ -449,10 +449,10 @@ def test_ronde_slaat_beide_baselines_op_met_een_run_regel(tmp_path):
 
 def test_tweede_ronde_in_dezelfde_week_schrijft_niets(tmp_path):
     conn = _gevulde_db(tmp_path)
-    run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG, event_id="2026-W41")
+    run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG, event_id="2026-W41", ridge=False)
 
     with pytest.raises(AlreadyProcessedError):
-        run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG + timedelta(days=1), event_id="2026-W41")
+        run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG + timedelta(days=1), event_id="2026-W41", ridge=False)
 
     assert len(list_predictions(conn)) == 2
 
@@ -472,7 +472,7 @@ def test_een_mislukte_run_regel_rolt_de_voorspellingen_terug(tmp_path, monkeypat
     monkeypatch.setattr(schema, "_insert_agent_run", stuk)
 
     with pytest.raises(RuntimeError):
-        run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG, event_id="2026-W41")
+        run_baseline_round(conn, "monetary_policy", [_doel()], MAANDAG, event_id="2026-W41", ridge=False)
 
     assert list_predictions(conn) == []
 
@@ -481,7 +481,7 @@ def test_baselines_worden_door_de_resolver_gescoord(tmp_path):
     """Het bewijs dat het contract past: geen aparte evaluatiepijplijn. De
     resolver wikkelt baseline-voorspellingen af zoals elke andere."""
     conn = _gevulde_db(tmp_path)
-    run_baseline_round(conn, "monetary_policy", [_doel(horizons=(5,))], MAANDAG, event_id="2026-W41")
+    run_baseline_round(conn, "monetary_policy", [_doel(horizons=(5,))], MAANDAG, event_id="2026-W41", ridge=False)
     _reeks(conn, "x", [101.0], laatste=MAANDAG + timedelta(days=8))
 
     resultaat = resolve_due_predictions(conn, now=MAANDAG + timedelta(days=9))

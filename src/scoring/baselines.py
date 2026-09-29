@@ -43,12 +43,11 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agents.base import AlreadyProcessedError, ForecastTarget
+from agents.base import ForecastTarget
 from contract.horizons import ReleaseCadence, resolves_at_for
 from contract.prediction import HorizonKind, Prediction, PredictionKind
 from contract.resolution import Observation, ResolutionMethod, eerste_prints
 from scoring.resolver import observations_for
-from storage.schema import has_successful_run, save_predictions_with_run
 
 BASELINE_VERSION = "v1"
 """Versie van de baselines. Gaat mee als `prompt_version` (zelfde rol: een
@@ -165,6 +164,7 @@ class _Sample:
     anchor: float                       # laatste bekende niveau; 0 bij relatief rendement
     anchor_date: datetime
     deltas: list[float]                 # veranderingen (niveau) of rendementen (relatief)
+    dates: list[datetime]               # startdatum van elk venster, gelijk uitgelijnd met `deltas`
     climate: list[tuple[int, float]]    # (kalendermaand, waarde) voor climatology
     unit: str                           # 'vensters' voor de note
 
@@ -179,6 +179,7 @@ def _level_sample(conn, target: ForecastTarget, horizon_n: int, as_of: datetime)
         anchor=waarden[-1],
         anchor_date=prints[-1].source_time,
         deltas=deltas,
+        dates=[prints[i].source_time for i in range(len(waarden) - horizon_n)],
         climate=[(o.source_time.month, o.value) for o in prints],
         unit=f"vensters van {horizon_n}",
     )
@@ -197,6 +198,7 @@ def _relative_sample(conn, target: ForecastTarget, horizon_n: int, as_of: dateti
             f"{target.metric_key} en {target.benchmark_metric_key} hebben geen gemeenschappelijk moment"
         )
     rendementen: list[tuple[int, float]] = []
+    startdata: list[datetime] = []
     for i in range(len(gedeeld) - horizon_n):
         start, eind = gedeeld[i], gedeeld[i + horizon_n]
         if reeks[start].value == 0 or bench[start].value == 0:
@@ -206,10 +208,12 @@ def _relative_sample(conn, target: ForecastTarget, horizon_n: int, as_of: dateti
             - (bench[eind].value / bench[start].value - 1) * 100
         )
         rendementen.append((eind.month, rr))
+        startdata.append(start)
     return _Sample(
         anchor=0.0,
         anchor_date=gedeeld[-1],
         deltas=[rr for _, rr in rendementen],
+        dates=startdata,
         climate=rendementen,
         unit=f"relatieve-rendementsvensters van {horizon_n}",
     )
@@ -355,33 +359,3 @@ def baseline_predictions(
             ))
 
     return BaselineRoundResult(domain, tuple(predictions), tuple(skipped), tuple(issues))
-
-
-def baseline_run_domain(domain: str) -> str:
-    """De sleutel waaronder de baseline-ronde van dit domein in `agent_runs`
-    staat. Los van het domein zelf, anders botst hij met de run-regel van de
-    LLM-forecast-ronde (zelfde domein, zelfde modus, zelfde week)."""
-    return f"baseline:{domain}"
-
-
-def run_baseline_round(
-    conn, domain: str, targets: list[ForecastTarget] | tuple[ForecastTarget, ...],
-    now: datetime, event_id: str | None = None,
-) -> BaselineRoundResult:
-    """De baseline-tegenhanger van `run_forecast_round()`: zelfde doelen,
-    zelfde `now`, zelfde week, één transactie.
-
-    Idempotent per `event_id` (de ISO-week), net als de LLM-ronde. Een
-    tweede run in dezelfde week schrijft niets."""
-    run_domain = baseline_run_domain(domain)
-    if event_id is not None and has_successful_run(conn, run_domain, "forecast", event_id):
-        raise AlreadyProcessedError(run_domain, "forecast", event_id)
-
-    resultaat = baseline_predictions(conn, domain, targets, now)
-    save_predictions_with_run(
-        conn, resultaat.predictions, run_domain, now,
-        success=bool(resultaat.predictions),
-        event_id=event_id,
-        error="; ".join(resultaat.issues) or None,
-    )
-    return resultaat
