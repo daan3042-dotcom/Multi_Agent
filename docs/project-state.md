@@ -964,6 +964,24 @@ alsnog gevuld terwijl de rest wordt overgeslagen.
 `outputsize=full` in de betaalde tier van DD zit. Zo niet, dan zegt de uitvoer
 dat nu met de tekst van Alpha Vantage in plaats van stil te falen.
 
+### Weekenden telden als gemiste dagen (29-09) — 625 tests groen
+
+`_missed_days` telde alle kalenderdagen, terwijl de cron alleen ma t/m vr draait.
+Elk weekend zou als "dag zonder succesvolle run" zijn gemeld, als KRITIEKE melding,
+bij elke run van ma t/m vr (het weekend blijft zeven dagen in beeld). Gevonden in
+de eerste echte run op de VPS, die de dagen vóór de start van het systeem meldde.
+Een alarm dat dagelijks afgaat wordt genegeerd, en dan is het ook onzichtbaar op de
+dag dat er wél een run ontbreekt.
+
+**Nu:** alleen dagen in `EXPECTED_RUN_WEEKDAYS` (ma t/m vr) tellen mee. Een test
+leest de crontab-regel uit `docs/deployment.md` en faalt als de constante en de cron
+uit de pas lopen. Een echt gat op een werkdag wordt nog steeds gemeld (aparte test).
+Met het oude gedrag terug falen drie tests.
+
+**De back-fill-timeout** is ook opgerekt naar 120 s: op de VPS duurde één simpele
+Alpha Vantage-call 28 seconden. De dagelijkse agents hebben nog 15 s; of dat te krap
+is, hangt van de latentiemeting op de VPS af (open).
+
 ## Known problems
 
 Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen

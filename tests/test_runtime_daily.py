@@ -1017,3 +1017,68 @@ def test_ontbrekend_ridge_model_komt_in_de_melding_maar_de_rest_draait(tmp_path)
     ]
     assert any("ridge" in i for i in result.baseline_issues)
     assert any("fit_baselines.py" in m.body for m in meldingen)
+
+
+# --------------------------------------------------------------------------
+# Weekenden zijn geen gemiste dagen (29-09)
+#
+# De cron draait ma t/m vr. `_missed_days` telde tot 29-09 alle kalenderdagen,
+# dus elk weekend werd als KRITIEKE melding gerapporteerd, bij elke run van
+# ma t/m vr. Een alarm dat elke dag afgaat wordt genegeerd.
+# --------------------------------------------------------------------------
+
+
+def _draai_dagen(conn, agents, dagen):
+    """Draait run_daily op elk van de opgegeven dagen (2026-11-<dag>)."""
+    for dag in dagen:
+        run_daily(conn, agents=agents, now=datetime(2026, 11, dag, tzinfo=timezone.utc), notifier=lambda n: None)
+
+
+def test_weekend_wordt_niet_als_gemiste_dag_gemeld(tmp_path):
+    """Een hele werkweek (ma 9 t/m vr 13 nov) draait, dan maandag 16 nov:
+    zaterdag en zondag zijn geen storing maar gewoon geen cron-dag."""
+    conn = _db(tmp_path)
+    agents = [AgentSpec("d", _real_monitor("d"))]
+    _draai_dagen(conn, agents, [9, 10, 11, 12, 13])
+
+    maandag = run_daily(conn, agents=agents, now=datetime(2026, 11, 16, tzinfo=timezone.utc), notifier=lambda n: None)
+
+    assert maandag.missed_days == []
+    assert not maandag.has_problems
+
+
+def test_een_gemiste_werkdag_naast_een_weekend_wordt_nog_wel_gemeld(tmp_path):
+    """Regressiegeval voor de andere kant: het weekend uitsluiten mag een
+    echt gat niet verbergen. Vrijdag 13 nov draait niet, maandag wel."""
+    conn = _db(tmp_path)
+    agents = [AgentSpec("d", _real_monitor("d"))]
+    _draai_dagen(conn, agents, [9, 10, 11, 12])  # vrijdag 13 overgeslagen
+
+    maandag = run_daily(conn, agents=agents, now=datetime(2026, 11, 16, tzinfo=timezone.utc), notifier=lambda n: None)
+
+    assert maandag.missed_days == ["2026-11-13"]
+    assert maandag.has_problems
+
+
+def test_de_verwachte_weekdagen_komen_overeen_met_de_cron_in_de_deployment_doc():
+    """De aanname 'ma t/m vr' staat op twee plekken: hier en in de crontab-regel.
+    Deze test leest die regel en faalt zodra ze uit de pas lopen -- anders zou
+    een wijziging van de cron naar 1-7 ongemerkt weer valse (of gemiste)
+    meldingen opleveren."""
+    import re
+    from pathlib import Path
+
+    from runtime.daily import EXPECTED_RUN_WEEKDAYS
+
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "deployment.md").read_text()
+    regel = re.search(r"^\d+ \d+ \* \* ([\d,\-]+) /usr/bin/flock", doc, re.M)
+    assert regel, "geen crontab-regel gevonden in docs/deployment.md"
+
+    cron_dagen = set()
+    for deel in regel.group(1).split(","):
+        van, _, tot = deel.partition("-")
+        cron_dagen.update(range(int(van), int(tot or van) + 1))
+    # cron: 1 = maandag ... 7 (of 0) = zondag; Python: 0 = maandag.
+    python_dagen = {(d - 1) % 7 for d in cron_dagen}
+
+    assert python_dagen == set(EXPECTED_RUN_WEEKDAYS)

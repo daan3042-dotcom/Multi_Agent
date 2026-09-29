@@ -109,7 +109,7 @@ def build_notification(result, health: SystemHealthReport | None) -> Notificatio
         # dit is het faalscenario waar het hele forward-testing-plan op
         # stukloopt, en het valt nergens anders op.
         escalate("critical")
-        lines.append(f"Dagen zonder enkele succesvolle monitoring-run: {', '.join(missed)}")
+        lines.append(f"Werkdagen zonder enkele succesvolle monitoring-run: {', '.join(missed)}")
 
     if crashed:
         escalate("critical")

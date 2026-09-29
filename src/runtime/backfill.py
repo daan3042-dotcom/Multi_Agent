@@ -90,8 +90,15 @@ class BackfillFetchError(Exception):
     key) en dat is precies wat je op de VPS wilt lezen."""
 
 
-def _get_json(url: str, params: dict, timeout: int = 30) -> dict:
+def _get_json(url: str, params: dict, timeout: int = 120) -> dict:
     """Eén HTTP-call, en alles wat misgaat wordt een `BackfillFetchError`.
+
+    De timeout is 120 s en niet 30: dit zijn eenmalige downloads van twintig jaar
+    dagdata (honderden kB per reeks), en op de VPS is één simpele Alpha
+    Vantage-call op 29-09 al 28 seconden gemeten. Een te korte timeout maakt van
+    een trage maar werkende bron een 'mislukte reeks'. Dat is nu wel zichtbaar
+    (en veilig te herhalen), maar onnodig.
+
     Bewust breed afgevangen: netwerkfout, HTTP-fout en ongeldige JSON zijn
     voor de aanroeper hetzelfde -- deze reeks is er niet."""
     try:

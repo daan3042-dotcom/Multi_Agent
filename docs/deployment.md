@@ -166,6 +166,25 @@ sqlite3 "$MI_DB_PATH" "SELECT metric_key, value_json FROM claims
                        ORDER BY analysis_time DESC LIMIT 10;"
 ```
 
+### De melding "Werkdagen zonder succesvolle run"
+
+Elke run kijkt zeven dagen terug of er dagen waren zonder enkele succesvolle
+monitoring-run. Dat is een **kritieke** melding: het is het enige signaal dat een
+run nooit gebeurde (cron uit, venv stuk, VPS uit).
+
+**Alleen werkdagen tellen mee** (`EXPECTED_RUN_WEEKDAYS` in `runtime/daily.py`),
+omdat de cron `15 7 * * 1-5` alleen ma t/m vr draait. Tot 29-09 telde de code ook
+zaterdag en zondag mee: elk weekend zou als storing zijn gemeld, bij elke run van
+ma t/m vr, en een alarm dat dagelijks afgaat wordt genegeerd. Een test leest de
+cron-regel in dit document en controleert dat de code hetzelfde aanneemt; verander
+je de cron (bijvoorbeeld naar `1-7`), dan faalt die test totdat je de constante
+meeneemt.
+
+**Rond de start van het systeem** (eind september 2026) blijft de melding een
+paar dagen komen voor werkdagen vóór de VPS bestond. Dat is verwacht en verdwijnt
+vanzelf zodra die dagen uit het venster van zeven dagen vallen (op 3 oktober is het
+schoon). Het maakt de exit code van die runs `1`; dat is geen agent-fout.
+
 ### Drie tolerances die op deze machine geverifieerd moeten worden
 
 Niet vanuit de ontwikkelomgeving te controleren (geen netwerk naar FRED),
