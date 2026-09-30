@@ -917,6 +917,11 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - [x] Afwijking t.o.v. 6-maands voortschrijdend gemiddelde
       (`src/analysis/moving_average_deviation.py`) — alternatieve, al
       geïmplementeerde methode; onderstaande zijn de eigenlijke doelmodellen
+- [ ] **[30-09] GEMETEN:** het commodity-endpoint is niet live, ook niet met het betaalde
+      plan. WTI heeft `interval=daily` maar de nieuwste waarneming liep 8 dagen achter (22-09
+      op 30-09); koper geeft ondanks `interval=daily` alleen maandcijfers, twee maanden achter.
+      Zie `docs/data-sources.md`. Verse dagdata voor commodity kan alleen via ETF's op
+      grondstoffen (`GLOBAL_QUOTE`), en dat is een keuze voor de reeksenlijst.
 - [ ] **[27-09]** In cohort 0 alleen monitoring, geen predictions: het
       Alpha Vantage-commodity-endpoint is maandelijks (40 dagen vers),
       dus een 5/21/63-daagse voorspelling is er niet tegen te resolven.

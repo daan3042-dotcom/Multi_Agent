@@ -81,6 +81,32 @@ check is nu ook de controle op de betaalde tier hieronder** — komt er na
 de upgrade nog een completeness-trigger voorbij voor currency, sector of
 commodity, dan is het probleem niet opgelost.
 
+## GEMETEN op 30-09-2026: het commodity-endpoint is niet live, ook niet met het betaalde plan
+
+DD vroeg of de commodity agent met het betaalde plan (real-time of 15 minuten vertraagd) live data kan
+ophalen. Dat real-time recht geldt voor koersen van aandelen, ETF's en valuta (`GLOBAL_QUOTE`, wat de
+sector en currency agent al gebruiken), niet voor het commodity-endpoint. Gemeten op de VPS op 30-09-2026,
+met `interval=daily` voor twee grondstoffen:
+
+| Grondstof | Antwoord | Nieuwste waarneming | Achterstand |
+|---|---|---|---|
+| WTI | `interval: daily`, dollar per vat | 22-09-2026 | 8 dagen (6 handelsdagen) |
+| Koper | vraagt daily, krijgt `interval: monthly`, dollar per metrische ton | juli 2026 (1-07-2026) | twee maanden |
+
+**Wat dat betekent.** Olie heeft dagcijfers, maar ongeveer een week achter: een echte dagelijkse maar geen
+verse bron. Koper (en volgens de documentatie ook aluminium, tarwe, maïs, katoen, suiker en koffie; alleen
+koper is gemeten) heeft alleen maandcijfers met twee maanden achterstand. Voor een voorspelling over 5, 21 of
+63 handelsdagen is dat geen bruikbare bron: de voorspelling zou op een waarde van een week of twee maanden
+terug moeten aansluiten en pas veel later af te rekenen zijn. Dit bevestigt waarom de commodity agent in
+cohort 0 alleen monitort. Aardgas is niet apart gemeten.
+
+**Als commodity ooit verse dagdata moet krijgen** (roadmap 2.6 en fase 4, "commodity naar dagelijkse
+bron"): de route via Alpha Vantage die wél real-time is, zijn ETF's op grondstoffen via `GLOBAL_QUOTE` en
+`TIME_SERIES_DAILY`, hetzelfde pad als de sector agent. Dat volgt futures met roll- en contango-effecten en
+is dus niet gelijk aan de spotprijs; de exacte symbolen zijn niet geverifieerd en moeten op de VPS worden
+gecontroleerd voordat er een reeks bij komt (checkpoint 4). Het raakt de reeksenlijst en vraagt drempels
+en een nieuwe trigger-versie.
+
 ## BESLIST op 28-09-2026: betaalde Alpha Vantage-tier
 
 DD kiest voor een betaald plan in plaats van een bronmigratie. De
