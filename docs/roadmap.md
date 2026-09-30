@@ -21,6 +21,7 @@ Vink items af zodra ze klaar zijn én groen zijn in de testsuite.
 | 26-09-2026 | Uitvoeringsvolgorde losgekoppeld van pijlernummering; pijler 4 naar voren | LLM-agents zijn niet eerlijk te backtesten → forward testing is het kritieke pad → kalendertijd is de schaarse resource |
 | 27-09-2026 | Zie hieronder | Externe review van de roadmap (Claude Fable 5.1) |
 | 28-09-2026 | Synthesizer-doelen op verhandelbare instrumenten, instrument-mapping, referentieprijs in de `resolution_rule`, en extra niet-reconstrueerbare data (consensus, expected moves, ruwe headlines). Gemarkeerd met **[28-09]** | Voorbereiding op een mogelijke swing-trading-laag (1–3 dagen) over 1–1,5 jaar, zonder die nu te bouwen. Zie "Beslist op 28-09-2026" |
+| 30-09-2026 | T₀ᵃ-streefdatum van 3 naar **7 oktober** | "7 dagen op rij zonder handmatige actie", en de cron draait alleen maandag tot en met vrijdag. 3 oktober is een zaterdag; als 29-09 dag 1 was, zijn zeven werkdagen vol op woensdag 7 oktober. DD bevestigde dit op 30-09 |
 
 **Mapping oude lettering → nieuwe nummering** (voor code-comments als
 "stap B.1" of "sectie C.1"): A→1, B+C→2, D→2.8, E→2.9, F→3.1, G→5,
@@ -158,7 +159,7 @@ intraday (buiten scope, zie Scope-afbakening).
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
 **Doel:** het systeem haalt elke dag zonder tussenkomst echte data op en
-legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
+legt triggers vast. **T₀ᵃ streefdatum 7 oktober** (herzien op 30-09 van 3 oktober: zeven werkdagen op rij, zie Herzieningen).
 
 | Taak | Sectie | Definition of done | Wie |
 |---|---|---|---|
@@ -348,7 +349,7 @@ Kelly zijn een beslissingslaag en horen niet in dit systeem.
 
 | Periode | Fase | Uitkomst |
 |---|---|---|
-| 29 sep – 5 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 3 okt: ingestieklok loopt** |
+| 29 sep – 7 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 7 okt: ingestieklok loopt** (was 3 okt) |
 | 6 – 12 okt | 0b. Back-fill, economic agent lean, runtime-fixes | historie in de DB, groei-knopen bediend |
 | 6 – 19 okt | 2. Contract + forecast-ronde + mensinvoer | agents en mensen produceren kwantielen/kansen |
 | 6 – 26 okt | 1. Causale graaf (parallel, partner) | knopen, pijlen, deterministische toets |

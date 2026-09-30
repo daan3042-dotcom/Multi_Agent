@@ -27,7 +27,7 @@ geldige weg, en dat kost kalendertijd in plaats van werktijd. Alles wat
 geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
 
 **Herzien op 27-09-2026 (externe review):** twee klokken — T₀ᵃ
-(ingestieklok, streefdatum 3-10-2026) en T₀ᵇ (predictieklok, 10-11-2026);
+(ingestieklok, streefdatum 7-10-2026, herzien op 30-09 van 3-10: zeven werkdagen op rij) en T₀ᵇ (predictieklok, 10-11-2026);
 kwantielen i.p.v. binaire richting; drie baselines; pseudo-out-of-sample
 vóór T₀ᵇ; economic agent lean vóór T₀; mensen als gescoorde
 voorspellers; `graph_node` optioneel in cohort 0. Alle correcties met
