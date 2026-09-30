@@ -131,7 +131,7 @@ anders zou het model dat de voorspelling deed, ook bepalen of hij uitkwam.
 | `level_at_or_after` | DGS10, DGS2, VIX, HY-spread, 10Y-2Y, de drie FX-paren | het niveau op de eerste observatie op of na de afloopdatum |
 | `nth_release` | ICSA, UNRATE, PAYEMS, NFCI | de n-de nieuwe publicatie ná het moment van voorspellen |
 | `relative_return` | de elf sector-ETF's | rendement van de ETF minus dat van SPY, over precies dezelfde twee observatiemomenten |
-| `direction_after_fomc` | FEDFUNDS-richting | ligt de rente hoger na de n-de FOMC-vergadering? **Vereist een kalender die nog ingevuld moet worden** |
+| `direction_after_fomc` | FEDFUNDS-richting | ligt de rente hoger na de n-de FOMC-vergadering? Gebruikt `FOMC_MEETING_DATES` (besluitdagen 28-10-2026 t/m 8-12-2027, van de officiële Fed-pagina; vergaderingen van vóór oktober 2026 ontbreken nog) |
 
 **"Eerste print" is geen extra werk maar een gevolg van het ontwerp.**
 Omdat we elke cyclus opslaan wat de bron op dát moment zei, is de

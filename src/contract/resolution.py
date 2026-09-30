@@ -66,19 +66,41 @@ class ResolutionMethod(str, Enum):
     dat met zoveel woorden in plaats van een benadering te verzinnen."""
 
 
-FOMC_MEETING_DATES: tuple[date, ...] = ()
+FOMC_MEETING_DATES: tuple[date, ...] = (
+    date(2026, 10, 28),
+    date(2026, 12, 9),
+    date(2027, 1, 27),
+    date(2027, 3, 17),
+    date(2027, 4, 28),
+    date(2027, 6, 9),
+    date(2027, 7, 28),
+    date(2027, 9, 15),
+    date(2027, 10, 27),
+    date(2027, 12, 8),
+)
 """De geplande FOMC-vergaderdata, in oplopende volgorde.
 
-BEWUST LEEG, EN DAT IS EEN OPENSTAAND PUNT (CLAUDE.md checkpoint 4). De
-Fed publiceert deze data jaren vooruit, maar ze zijn vanuit deze
-ontwikkelomgeving niet te verifiëren (geen uitgaand netwerk naar
-federalreserve.gov), en een verkeerde datum hier maakt een voorspelling
-stilzwijgend op het verkeerde moment af -- erger dan hem niet afwikkelen.
+BRON EN CONVENTIE (ingevuld op 30-09-2026, checkpoint 4 opgelost). DD heeft de
+data van de officiële pagina (federalreserve.gov/monetarypolicy/fomccalendars.htm,
+"2026 FOMC Meetings" en "2027 FOMC Meetings") als screenshot aangeleverd; ik
+kon die pagina zelf niet bereiken (geen uitgaand netwerk naar federalreserve.gov).
+Elke datum is de BESLUITDAG: de tweede dag van de tweedaagse vergadering, altijd
+een woensdag. De Fed noemt de vergaderingen "27-28 oktober" en publiceert de
+rentebeslissing op de tweede dag. `tests/test_fomc_calendar.py` bewaakt dat de
+datums oplopend zijn, op een woensdag vallen en aannemelijk ver uit elkaar liggen.
 
-Zolang deze tuple leeg is, blijven de twee FEDFUNDS-voorspellingen van de
-monetary agent onafgewikkeld en meldt de resolver per stuk waarom. Vul hem
-met de officiële kalender vóór T₀ᵇ, dan werkt de methode zonder verdere
-codewijziging.
+Elke datum is "tentative until confirmed at the meeting immediately preceding it",
+zegt de Fed zelf. Een verschoven of geannuleerde vergadering vraagt dus om een
+aanpassing hier; een onverwachte (niet-geplande) vergadering staat er bewust niet in.
+
+NOG NIET AANWEZIG: de vergaderingen van vóór oktober 2026. De pseudo-OOS-run
+(4.4) laat agents juli-september 2026 voorspellen en heeft daarvoor de data van
+juli en september 2026 nodig. Voeg die toe zodra ze van dezelfde pagina zijn
+gecontroleerd; tot dan meldt de resolver voor een voorspelling waarvan de
+vergadering buiten de lijst valt per stuk waarom.
+
+Een lege of te korte lijst maakt een voorspelling onafwikkelbaar met een reden,
+en geeft nooit een benadering: de resolver zegt hoeveel vergaderingen er ontbreken.
 
 WAAROM NIET BENADEREN met "de n-de FEDFUNDS-print": FEDFUNDS publiceert
 twaalf keer per jaar, de FOMC vergadert acht keer. Die twee lopen niet

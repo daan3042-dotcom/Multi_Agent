@@ -1271,7 +1271,7 @@ volwaardige "agents" in de scoring, met dezelfde kwantielvorm.
       voorspeld**, bewust en zichtbaar (`skipped`, niet `issues`): de
       gebeurtenis ligt op FOMC-vergaderingen, een basisrate uit maandelijkse
       FEDFUNDS-vensters zou een ándere gebeurtenis scoren. Zelfde reden als
-      de lege FOMC-kalender in 4.5. Gevolg: die twee doelen worden alleen
+      de FOMC-kalender in 4.5 (die sinds 30-09 gevuld is, maar dat verandert niets aan deze reden). Gevolg: die twee doelen worden alleen
       tegen de agent zelf gescoord, niet tegen een baseline.
 - [ ] **[27-09] Afspraak herzien:** een agent gaat er na zes maanden
       alleen uit bij *bewijs van geen skill* — skill-posterior (4.5)
@@ -1395,6 +1395,30 @@ kalibratie-deel van 5.2.
       "financial philosophy agent" uit DD's eindbeeld thuishoort: geen
       voorspeller, maar een kennislaag (RAG) die de prompts van de
       andere agents voedt.
+
+## Beslist op 30-09-2026
+
+- [x] **Ridge-baseline: weggelaten inputs, optie A (huidige regel).** DD koos op
+      30-09 na een uitleg van de twee opties. Een input met minder dan 80% van de
+      trainingsrijen wordt uit het model gelaten en genoteerd in `dropped`; het
+      model traint op de volledige beschikbare historie (bijv. ~16.100 rijen voor
+      de 10-jaars rente sinds 1962). Het alternatief (B: alle inputs meenemen en
+      trainen op het gemeenschappelijke venster, ~5.900 rijen sinds 2003 voor de
+      10-jaars rente, ~2.000 rijen en 7,5 jaar voor de sectoren) is bewust niet
+      gekozen. Reden: A is op alle 55 doelen op echte data getest (`oos/rw` ≤
+      1,000, nooit slechter dan "geen verandering"), B bestaat nog niet als code,
+      en met minder data wordt het model ruiziger terwijl de inputs op deze
+      horizonnen bijna niets voorspellen. Eerlijke keerzijde: bij een paar doelen
+      krijgt de ridge minder informatie dan het LLM ziet, dus de lat is daar iets
+      lager dan de roadmap-formulering ("op de agent's eigen inputs") letterlijk
+      vraagt. **B kan later als extra referentie worden toegevoegd** zonder de
+      bevroren A aan te raken; dat is niet uitgezocht en hoort bij een besluit na
+      T₀ᵇ. **Nog te doen:** de ridge daadwerkelijk bevriezen (`fit_baselines.py
+      --freeze`, niet terug te draaien), samen met de andere freeze-punten en
+      uiterlijk 27 oktober.
+- [x] **FOMC-kalender ingevuld** (zie project-state, "FOMC-kalender ingevuld").
+      Vergaderingen van vóór oktober 2026 ontbreken nog en zijn alleen nodig voor
+      de pseudo-OOS-run.
 
 ## Beslist op 29-09-2026
 
