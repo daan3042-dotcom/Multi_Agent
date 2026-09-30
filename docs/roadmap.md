@@ -291,7 +291,7 @@ Secties 4.5, 4.6.
       bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
       de monitoring-scope waaruit die doelen gekozen worden
 - [x] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2) **[29-09: back-fill van alle domeinen, trigger-versie v2 (v1 gecontroleerd met het rapport); HY-spread heeft maar drie jaar, CPI en payrolls zijn bewust niet gekalibreerd, zie "Open beslissingen"]**
-- [ ] Economic agent lean gebouwd en gekoppeld (2.7)
+- [x] Economic agent lean gebouwd en gekoppeld (2.7) **[28-09: gebouwd, checkpoint 1 door DD goedgekeurd; draait sinds 29-09 mee in de dagelijkse cyclus, `economic=ok` in de log]**
 - [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
 - [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer nog niet; menselijke invoer bewust op pauze (2.0/4.8, DD 30-09)
 - [~] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5) **[28-09: gebouwd en getest; nog niet tegen echte afgelopen voorspellingen gedraaid — dat kan pas als de eerste horizon verstrijkt]**
