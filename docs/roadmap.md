@@ -102,10 +102,19 @@ netwerk over de graaf en Black-Litterman/Kelly staan apart en later.
 
 ## Huidige focus
 
-**Fase 0 — sectie 1.11.** Code voor runner, notificaties en entrypoint
-staat (280 tests groen). Open is niet-code: VPS bestellen, keys, cron,
-back-up, heartbeat, quota-check. Tot de ingestieklok loopt is elke
-andere taak voorbarig.
+**Fase 0 — sectie 1.11, ingestieklok (T₀ᵃ).** Stand 30-09-2026, 719 tests
+groen. De VPS draait de dagelijkse cyclus (cron 07:15 UTC, maandag tot en met
+vrijdag) met alle zes agents en een actieve heartbeat; 29 en 30 september waren
+schone runs. De back-fill is voor alle domeinen gedraaid, de triggerregels
+dragen een versienummer (v2, gekalibreerd), en de code voor het
+voorspellingscontract, de forecast-ronde, de resolver, de scores en de
+baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
+**Open voor T₀ᵃ:** zeven schone werkdagen op rij, op zijn vroegst woensdag
+7 oktober als de reeks op 29-09 begon, en de heartbeat-test (alarmkanaal
+getest met een tijdelijke check; de strikte "machine een dag uit"-test na T₀ᵃ).
+Daarna, in volgorde: `--deep-dives` aanzetten met een dry-run-plan (checkpoint
+3), pseudo-OOS-run (4.4), menselijke voorspellers (4.8), synthesizer als
+gescoorde agent, en de freeze vóór T₀ᵇ (checkpoint 5).
 
 ## De agents van cohort 0
 
@@ -160,7 +169,7 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | Geautomatiseerde offsite back-up | 1.11 | dagelijkse kopie buiten de VPS (Litestream of `.backup` + rclone) én één keer daadwerkelijk hersteld op een andere machine | DD |
 | Externe heartbeat / dead man's switch | 1.11 | alarm bij UITBLIJVEN van een run, getest door de machine bewust een dag uit te zetten | DD |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
-| Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar. **[29-09] Script omgebouwd: idempotent per reeks, fouten van de bron worden gemeld i.p.v. ingeslikt, een domein is pas geslaagd als elke reeks historie heeft. back-fill gedraaid op 29-09: FRED compleet (4 nieuwe monetary-reeksen alsnog gevuld), currency en sector compleet, **commodity nog niet** (10/10 mislukt, reden nu zichtbaar). **Let op: `high_yield_credit_spread` heeft maar ~3 jaar historie, dus voor die reeks is 'macro ≥ 20 jaar' niet te halen (checkpoint 4)** | Claude Code |
+| Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar. **[29-09] Script omgebouwd: idempotent per reeks, fouten van de bron worden gemeld i.p.v. ingeslikt, een domein is pas geslaagd als elke reeks historie heeft. back-fill gedraaid op 29-09: FRED compleet (4 nieuwe monetary-reeksen alsnog gevuld), currency en sector compleet, **commodity op 29-09 alsnog gevuld** (4.221 claims, alle tien de reeksen, ~35 jaar maandcijfers; de eerste poging faalde door lege Alpha Vantage-antwoorden, zie project-state). **Let op: `high_yield_credit_spread` heeft maar ~3 jaar historie, dus voor die reeks is 'macro ≥ 20 jaar' niet te halen (checkpoint 4)** | Claude Code |
 | Economic agent, lean | 2.7 | monitoring + Sahm Rule + ICSA/UNRATE/PAYEMS, sectie in `docs/agents.md`, checkpoint 1 uit `CLAUDE.md` | Claude Code |
 | ~~Atomiciteit claims/dedup~~ **[28-09] ✅** | 1.11 | `storage/schema.py::save_output_with_run()` zet beide inserts in één transactie; `agents/base.py` gebruikt 'm op alle drie de opslagpaden. Vóór de fix leverde een dubbele `event_id` juist dúbbele claims op: de IntegrityError sloeg toe ná de commit die hij moest voorkomen | — |
 | ~~Ouderdomsgrens in `system_health()`~~ **[28-09] ✅** | 1.11 | run ouder dan de grens telt niet meer als actuele status. Asymmetrisch: oude monitoring-run → STALE (de cyclus staat stil, dat is wél erg), oude deep-dive → UNKNOWN (event-gedreven, weken niets is normaal). Grenzen instelbaar per aanroeper | — |

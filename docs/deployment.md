@@ -514,8 +514,15 @@ dry-run.
    komt. Niet nu meteen nodig, wel vóór T₀ᵃ als afgerond geldt.
 
 **Status:** ping-URL werkt (getest met een losse `curl`, groen vinkje in
-het dashboard), cron-regel staat (`crontab -l` bevestigd). Alleen punt 6
-(de daadwerkelijke "machine uitzetten"-test) staat nog open.
+het dashboard), cron-regel staat (`crontab -l` bevestigd). **[30-09]** Het
+dashboard toont de ping van de dagelijkse run van 07:15 UTC als groen, met
+grace-tijd 2 uur en een e-mailmelding gekoppeld. Alleen punt 6 (de
+daadwerkelijke "machine uitzetten"-test) staat nog open. **Voorstel (30-09):**
+het alarmkanaal testen met een tijdelijke tweede check `mi-test` (kortste
+periode, één ping, wachten op de e-mail, check verwijderen) zodat er geen dag
+ingestie verloren gaat; de strikte versie (cron een dag uit) na T₀ᵃ.
+De ping-URL van `mi-daily` is een zwak geheim: niet in chats of screenshots
+delen.
 
 ## Offsite back-up (0a-5): DigitalOcean Spaces + rclone — ✅ 27-09-2026, met een bekende beperking
 
