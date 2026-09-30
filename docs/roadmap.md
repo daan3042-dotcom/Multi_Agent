@@ -276,7 +276,7 @@ Secties 4.5, 4.6.
 
 - [ ] Dagelijkse automatische run met live data, 14 dagen op rij zonder handmatige actie (1.11)
 - [ ] Offsite back-up loopt dagelijks én is één keer hersteld (1.11)
-- [ ] Externe heartbeat actief en getest door de machine uit te zetten (1.11)
+- [~] Externe heartbeat actief en getest door de machine uit te zetten (1.11) **[30-09: alarmkanaal getest met een tijdelijke check, e-mail na 2 minuten; de strikte test met de machine uit volgt na T₀ᵃ]**
 - [ ] API-quota gemeten tegen het dagelijkse callvolume incl. deep-dives (1.11)
 - [ ] **[28-09] Reeksenlijst per agent definitief**: welke reeksen elke
       agent ophaalt staat vast, en elke graafknoop is bediend óf expliciet

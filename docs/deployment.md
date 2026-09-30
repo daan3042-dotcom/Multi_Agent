@@ -519,10 +519,14 @@ dry-run.
 het dashboard), cron-regel staat (`crontab -l` bevestigd). **[30-09]** Het
 dashboard toont de ping van de dagelijkse run van 07:15 UTC als groen, met
 grace-tijd 2 uur en een e-mailmelding gekoppeld. Alleen punt 6 (de
-daadwerkelijke "machine uitzetten"-test) staat nog open. **Voorstel (30-09):**
-het alarmkanaal testen met een tijdelijke tweede check `mi-test` (kortste
-periode, één ping, wachten op de e-mail, check verwijderen) zodat er geen dag
-ingestie verloren gaat; de strikte versie (cron een dag uit) na T₀ᵃ.
+daadwerkelijke "machine uitzetten"-test) staat nog open. **[30-09] Alarmkanaal
+getest en geslaagd:** met een tijdelijke tweede check `mi-test` (kortste periode,
+één ping vanaf de VPS, daarna geen ping meer) kwam de "down"-e-mail na twee
+minuten aan; de check is daarna verwijderd. Zo is aangetoond dat een uitgebleven
+ping een mail oplevert zonder dat er een dag ingestie verloren ging. Dit bewijst
+het alarmkanaal, niet dat de echte cron-regel het alarm uitlokt als de machine
+uitstaat. **De strikte versie (cron een dag uit) blijft staan voor na T₀ᵃ** en
+is pas dan afgevinkt op de T₀ᵇ-checklist.
 De ping-URL van `mi-daily` is een zwak geheim: niet in chats of screenshots
 delen.
 
