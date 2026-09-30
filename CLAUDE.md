@@ -70,6 +70,7 @@ en `docs/project-state.md`.
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
 | API-quota/callvolume per bron | `docs/data-sources.md` |
 | **Data die niet terug te halen is: beoordeling en plan (breed archief)** | `docs/data-archive.md` |
+| Bronnen meten voor het archief (alleen lezen) | `probe_sources.py`, `src/sources/probe.py` |
 | VPS-inrichting + dry-run-plan (checkpoint 3) | `docs/deployment.md` |
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |

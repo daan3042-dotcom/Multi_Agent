@@ -477,6 +477,9 @@ gebouwd wordt staat in deel A, niet hier.
       **[30-09]** DD's uitgebreide onderzoek naar niet-terug-te-halen data (twee lagen:
       breed ruw archief en een smalle set per agent) is beoordeeld en in fases gezet in
       `docs/data-archive.md`. Eerst een probe van de bronnen, dan pas bouwen.
+      **[30-09] Fase A gebouwd:** `probe_sources.py` (alleen lezen) meet per bron of hij bereikbaar,
+      betaald en terug te halen is, en geeft een advies (archief nu, archief later, beslissing DD).
+      De uitkomst op de VPS is de invoer voor het ontwerp van het archief.
 - [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
 - [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
       mode=DEEP_DIVE, geen eigen entiteit)

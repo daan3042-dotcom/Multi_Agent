@@ -76,11 +76,37 @@ we er een archief voor bouwen.
 
 ## Voorstel in fases
 
-**Fase A, eerst weten wat kan (alleen lezen, klein).** Een probe-script dat per kandidaatbron één aanroep doet
+**Fase A, eerst weten wat kan (alleen lezen, klein). GEBOUWD op 30-09: `probe_sources.py`.** Een probe-script dat per kandidaatbron één aanroep doet
 en meldt: bereikbaar, gratis of betaald, hoe ver historie, of het een archief heeft. Dat vervangt het
 gokken: Alpha Vantage (`HISTORICAL_OPTIONS`, `REALTIME_OPTIONS`, `TIME_SERIES_INTRADAY` met maand,
 `NEWS_SENTIMENT`), de FRED-ID's uit het onderzoek, Cboe-CSV's, SPY-holdings, Atlanta Fed Market Probability
 Tracker.
+
+### Het probe-script gebruiken
+
+```bash
+cd /opt/multi_agent
+.venv/bin/python probe_sources.py --json probe.json
+```
+
+Ongeveer 2 tot 8 minuten (een seconde pauze per Alpha Vantage-aanroep, en die aanroepen zijn soms traag). Het toont een tabel met per bron:
+status, kosten, of het terug te halen is, de nieuwste waarneming en de achterstand, en het **advies**; daaronder de
+details (wat de bron zelf zei, en de **eenheid** bij FRED-reeksen) en een telling per advies. Opties: `--zonder-av` (geen
+Alpha Vantage), `--alleen opties intraday` (filter op categorie), `--json PAD` (kopie van het rapport).
+
+**Wat het rapport wel en niet is.** Het meet en adviseert; het slaat niets op. Het is de invoer voor laag 1, niet laag 1
+zelf. De adviesregel is klein en staat in `sources/probe.py::bepaal_advies`: niet gemeten of niet te krijgen wordt een
+beslissing voor DD; bereikbaar en niet terug te halen wordt archief nu; bereikbaar en terug te halen wordt archief later;
+onbekend wordt eerst de diepte meten. De herstelbaarheid van een "nu"-meting (bijvoorbeeld optieketens van vandaag)
+volgt uit de bijbehorende historische meting: lukt die niet, dan is elke dag zonder archief verloren.
+
+**Wat een `fout` of `niet bereikbaar` bij een openbare bron betekent.** Een aantal url's en dataset-ID's (Cboe, State
+Street, CFTC, Kalshi, Polymarket, de FRED-ID's) komt uit het onderzoek en uit het hoofd. Een 404 is dan geen storing
+maar een bevinding: de bron heet anders of bestaat niet meer. De rij zegt dat, en we corrigeren de url.
+
+**Veiligheid.** Sleutels staan nooit in de uitvoer (elke tekst gaat door `redact_secrets`), en het script schrijft niets
+weg behalve de JSON op verzoek. Niet met `-v` of een debug-vlag draaien: urllib3 logt dan volledige url's. Niet op
+dezelfde minuut als de cron van 07:15 draaien.
 
 **Fase B, goedkoop en meteen nuttig (FRED, geen nieuwe bron).**
 - `DFEDTARU` en `DFEDTARL` (target range) en `DFF` (dagelijks) naast `FEDFUNDS`. Dit is meer dan een

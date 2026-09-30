@@ -1027,6 +1027,29 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Probe-script voor het brede archief (1.2/1.4, 30-09) — 781 tests groen
+
+DD legde een uitgebreid onderzoek (met een ander model) voor over data die niet terug te halen is. Het is
+beoordeeld in `docs/data-archive.md`: het kernprincipe (een breed ruw archief plus een smalle set per agent) is
+overgenomen en staat al in de roadmap (1.2 `expectations` en `events`); een deel van wat "niet terug te halen" heette is dat
+wel (ALFRED, CFTC, Cboe-indexen, mogelijk optieketens en intraday via het betaalde Alpha Vantage-plan).
+
+**Gebouwd: `probe_sources.py` en `src/sources/probe.py`, fase A, alleen lezen.** Meet ~14 Alpha Vantage-aanroepen
+(optieketens historisch en realtime, intraday met maandparameter, nieuws, transcripts, zeven ETF's als grondstofproxy),
+51 FRED-reeksen (titel, frequentie, **eenheid**, eerste en laatste waarneming, achterstand), de ALFRED-vintages, en tien
+openbare bronnen (Cboe, SPY-holdings, CFTC, NY Fed, Treasury, ECB, Kalshi, Polymarket, de Fed). Wat niet te meten valt
+(consensus, fed funds futures, ISM, Yahoo bewust niet) staat er toch in, met reden. Per rij een advies uit één kleine regel.
+
+**Ontwerpkeuzes.** Geen opslag en geen database (een test bewaakt dat de module de opslaglaag niet importeert). Sleutels komen
+nooit in de uitvoer: `redact_secrets` in zowel de fetch als `ProbeResult`, en een test over het volledige JSON. De herstelbaarheid
+van een "nu"-meting volgt uit de historische meting, niet uit een aanname. Het Alpha Vantage-volume is beperkt tot ~15 aanroepen
+met een seconde pauze (het incident van 29-09), en een test bewaakt dat. Dieptemetingen tonen bewust geen achterstand: de geteste
+datum in die kolom las als verouderde data (gevonden bij het bekijken van het eerste rapport).
+
+**Ongetest.** Niet tegen de echte bronnen gedraaid: dat is de eerste run op de VPS. Een deel van de url's en dataset-ID's komt uit
+het hoofd en kan een 404 geven; dat is dan een bevinding. De volgende stap is die run, en op basis daarvan het ontwerp van
+het archief zelf (eigen job, gecomprimeerde bestanden in de DigitalOcean Space).
+
 ### Menselijke voorspelinvoer (4.8) op pauze, console-limiet ingesteld (30-09)
 
 DD zette de menselijke invoer bewust op pauze: zijn expertise ligt bij daytrading en deels bij
