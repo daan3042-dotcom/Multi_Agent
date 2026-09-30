@@ -1027,6 +1027,16 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Menselijke voorspelinvoer (4.8) op pauze, console-limiet ingesteld (30-09)
+
+DD zette de menselijke invoer bewust op pauze: zijn expertise ligt bij daytrading en deels bij
+macro, en de doelen van cohort 0 zijn breder. Hij komt er zelf op terug; Claude Code bouwt het niet
+uit zichzelf. Gemiste weken zijn niet in te halen (dat weet DD), maar er verandert niets aan het
+contract of de scoring en T₀ᵇ wordt er niet door geblokkeerd. De ontwerpvoorstellen (kernset van
+~12 doelen, alleen op de dag van de agents-ronde, blind, bevestigen vóór opslaan, en mogelijk
+aansluiten op de verhandelbare doelen van de synthesizer) staan bij 4.8 in `docs/roadmap.md`.
+Daarnaast stelde DD de uitgavenlimiet van $200 per maand in het Anthropic-console in.
+
 ### Tokenverbruik, time-out en maandrem voor `--deep-dives` (1.11, 30-09) — 744 tests groen
 
 Bij het dry-run-plan voor `--deep-dives` (checkpoint 3, `docs/deployment.md`) keurde DD de
