@@ -474,6 +474,9 @@ gebouwd wordt staat in deel A, niet hier.
         sizing in een eventuele trading-laag.
       Beide alleen waar een gratis/goedkope bron bestaat (1.4); welke
       bron is nog open. Niet T₀-blokkerend.
+      **[30-09]** DD's uitgebreide onderzoek naar niet-terug-te-halen data (twee lagen:
+      breed ruw archief en een smalle set per agent) is beoordeeld en in fases gezet in
+      `docs/data-archive.md`. Eerst een probe van de bronnen, dan pas bouwen.
 - [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
 - [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
       mode=DEEP_DIVE, geen eigen entiteit)
