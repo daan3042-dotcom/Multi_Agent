@@ -16,6 +16,7 @@ import pytest
 
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode
 from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract import resolution
 from contract.resolution import ResolutionMethod
 from scoring.resolver import MAX_WACHTTIJD, resolve_due_predictions
 from scoring.scores import SCORER_VERSION
@@ -199,9 +200,11 @@ def test_na_de_wachttijd_wordt_het_onafwikkelbaar_met_reden(tmp_path):
     assert evaluatie["realised_value"] is None
 
 
-def test_ontbrekende_fomc_kalender_is_meteen_onafwikkelbaar(tmp_path):
+def test_ontbrekende_fomc_kalender_is_meteen_onafwikkelbaar(tmp_path, monkeypatch):
     """Niet wachten: de kalender komt niet vanzelf. De reden noemt het
-    bestand waar hij ingevuld moet worden."""
+    bestand waar hij ingevuld moet worden. De standaardkalender is sinds
+    30-09-2026 gevuld, dus deze test maakt hem expliciet leeg."""
+    monkeypatch.setattr(resolution, "FOMC_MEETING_DATES", ())
     conn = _db(tmp_path)
     _claim(conn, "fed_funds_rate", 1, 4.00)
     save_prediction(conn, _kwantiel(

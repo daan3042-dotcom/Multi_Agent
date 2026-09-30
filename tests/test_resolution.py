@@ -197,8 +197,23 @@ def test_zonder_fomc_kalender_wordt_er_niet_benaderd():
     """CLAUDE.md: nooit stilzwijgend doorgaan met een beste gok. FEDFUNDS
     publiceert twaalf keer per jaar en de FOMC vergadert acht keer, dus
     'de n-de print' is een andere gebeurtenis dan 'na de n-de vergadering'."""
+    # Expliciet een lege kalender meegeven: de standaardkalender is sinds
+    # 30-09-2026 gevuld, en deze test gaat over wat er bij een LEGE gebeurt.
     with pytest.raises(Unresolvable, match="FOMC-kalender"):
-        direction_after_fomc([_obs(1, 4.0)], NU, 1)
+        direction_after_fomc([_obs(1, 4.0)], NU, 1, meetings=())
+
+
+def test_de_ingevulde_standaardkalender_maakt_een_voorspelling_afwikkelbaar():
+    """Sinds 30-09-2026 is FOMC_MEETING_DATES gevuld. Een voorspelling van
+    begin oktober 2026 over de eerstvolgende vergadering wacht dus (er is nog
+    geen waarneming na 28 oktober) in plaats van onafwikkelbaar te zijn: dat
+    verschil is precies wat de kalender oplevert."""
+    from contract.resolution import FOMC_MEETING_DATES, NotYetResolvable
+
+    assert FOMC_MEETING_DATES, "de standaardkalender is leeg"
+    gemaakt = datetime(2026, 10, 5, 7, 15, tzinfo=timezone.utc)
+    with pytest.raises(NotYetResolvable, match="2026-10-28"):
+        direction_after_fomc([_obs(1, 4.0)], gemaakt, 1)
 
 
 def test_met_kalender_werkt_de_methode_wel():

@@ -1271,7 +1271,7 @@ volwaardige "agents" in de scoring, met dezelfde kwantielvorm.
       voorspeld**, bewust en zichtbaar (`skipped`, niet `issues`): de
       gebeurtenis ligt op FOMC-vergaderingen, een basisrate uit maandelijkse
       FEDFUNDS-vensters zou een ándere gebeurtenis scoren. Zelfde reden als
-      de lege FOMC-kalender in 4.5. Gevolg: die twee doelen worden alleen
+      de FOMC-kalender in 4.5 (die sinds 30-09 gevuld is, maar dat verandert niets aan deze reden). Gevolg: die twee doelen worden alleen
       tegen de agent zelf gescoord, niet tegen een baseline.
 - [ ] **[27-09] Afspraak herzien:** een agent gaat er na zes maanden
       alleen uit bij *bewijs van geen skill* — skill-posterior (4.5)

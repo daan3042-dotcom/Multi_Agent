@@ -801,10 +801,12 @@ vergelijken met een CRPS uit de literatuur.
    keer geëvalueerd bij het definiëren van de functie. Het invullen van de
    kalender zou dan pas na een herstart effect hebben gehad.
 
-**Openstaand, en bewust: `FOMC_MEETING_DATES` is leeg.** De Fed publiceert
-de vergaderdata jaren vooruit, maar ze zijn vanuit deze ontwikkelomgeving
-niet te verifiëren en een verkeerde datum wikkelt een voorspelling
-stilzwijgend op het verkeerde moment af. Benaderen met "de n-de
+**[30-09: opgelost] `FOMC_MEETING_DATES` was leeg, is nu gevuld.** Zie het
+kopje "FOMC-kalender ingevuld" hieronder. De rest van deze alinea beschrijft
+waarom hij tot dan bewust leeg was. De Fed publiceert de vergaderdata jaren
+vooruit, maar ze waren vanuit deze ontwikkelomgeving niet te verifiëren en
+een verkeerde datum wikkelt een voorspelling stilzwijgend op het verkeerde
+moment af. Benaderen met "de n-de
 FEDFUNDS-print" mag niet: FEDFUNDS publiceert twaalf keer per jaar, de
 FOMC vergadert acht keer, dus dat zou een andere gebeurtenis scoren dan de
 voorspelling beschrijft. Zolang de tuple leeg is, blijven de twee
@@ -1024,6 +1026,41 @@ begrenzing van de bron (FRED beperkt de ICE BofA-reeksen tot een recent venster)
 maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks ziet
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
+
+### FOMC-kalender ingevuld (4.5, 30-09) — checkpoint 4 opgelost
+
+**Bron en werkwijze.** Ik kon federalreserve.gov niet bereiken vanuit deze
+omgeving en heb dus niets uit mijn geheugen ingevuld. DD opende de officiële
+pagina en stuurde screenshots van de tabellen "2026 FOMC Meetings" (oktober,
+december) en "2027 FOMC Meetings" (alle acht). Ik las de datums er zelf uit en
+zette de tweede dag van elke vergadering in de tuple: 28 oktober en 9 december
+2026, en 27 januari, 17 maart, 28 april, 9 juni, 28 juli, 15 september, 27
+oktober en 8 december 2027. Alle tien vallen op een woensdag (gecontroleerd).
+
+**Wat dit ontgrendelt.** De twee FEDFUNDS-richtingsdoelen van de monetary
+agent (`direction_after_fomc`) waren tot nu toe onafwikkelbaar en zijn dat
+niet meer, zolang er genoeg vergaderingen na `created_at` staan. Drie punten
+om te weten:
+
+- **Convention: besluitdag.** Voor de resolver maakt het niet uit welke dag van
+  de twee, want FEDFUNDS-waarnemingen hebben een `source_time` op de eerste van
+  de maand. Voor de leesbaarheid en de test (altijd een woensdag) staat de
+  besluitdag erin.
+- **"Tentative".** De Fed zegt zelf dat elke datum voorlopig is tot de vorige
+  vergadering hem bevestigt. Een verschoven of geannuleerde vergadering vraagt
+  een aanpassing van de tuple. Een niet-geplande vergadering staat er bewust niet
+  in.
+- **Vergaderingen van vóór oktober 2026 ontbreken nog.** De pseudo-OOS-run (4.4)
+  laat agents juli-september 2026 voorspellen en heeft daarvoor 29 juli en de
+  septembervergadering van 2026 nodig. Die zijn nog niet van de pagina
+  gecontroleerd. Tot dan is een voorspelling in die periode onafwikkelbaar,
+  met de reden erbij, en is dat geen benadering.
+
+**Tests.** Een bestaande test (`test_zonder_fomc_kalender_wordt_er_niet_benaderd`)
+riep de methode zonder kalender aan en verwachtte een lege. Nu de standaard
+gevuld is geeft ze expliciet `meetings=()` mee; de intentie blijft dezelfde.
+De vier tests uit `tests/test_fomc_calendar.py` draaien nu tegen echte data:
+oplopend, woensdag, vier tot tien weken uit elkaar, hooguit acht per jaar.
 
 ### Controle-run van v1 en commodity als v2 (1.5, 29-09) — 714 tests groen
 
