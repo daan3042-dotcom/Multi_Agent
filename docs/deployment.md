@@ -223,9 +223,11 @@ puur "haalt de ingestieklok elke dag zonder tussenkomst echte data op".
 4. Geen dubbele rijen voor dezelfde dag (zou op een atomiciteits- of
    idempotency-bug wijzen — zie roadmap 1.7/1.11).
 
-**Na 3 schone dagen:** `--deep-dives` toevoegen aan de cron-regel (en
-`ANTHROPIC_API_KEY` in `.env`), en **T₀ᵃ is gehaald** zodra dat ook 7 dagen
-op rij zonder handmatige actie draait (roadmap 1.11's eigen DoD).
+**Na 3 schone dagen:** zie het aparte plan hieronder ("Dry-run-plan voor
+`--deep-dives`"). **T₀ᵃ is gehaald** na zeven werkdagen op rij ingestie zonder
+handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober). Een eerdere
+versie van deze zin koppelde T₀ᵃ aan zeven dagen mét `--deep-dives`; dat is de
+voorspelmeting (T₀ᵇ), niet de ingestieklok, en is rechtgezet.
 
 **Let op wat die vlag sinds 28-09 nog meer aanzet:** de wekelijkse
 forecast-ronde (roadmap 2.0) draait mee op de maandagcyclus, mits er een
@@ -475,6 +477,169 @@ dag zonder back-up is een dag data die je kwijt bent bij een VPS-storing,
 en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
 dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
 dry-run.
+
+## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
+
+Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
+blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op 7 oktober). DD keurde het plan
+goed met één aanpassing: de maandgrens voor LLM-kosten staat op **$200**, niet $20.
+
+### Wat de vlag aanzet (uit de code, `runtime/daily.py`)
+
+Eén vlag, drie dingen, alle achter één Anthropic-client:
+
+1. **Deep-dives** voor elk domein waarvan minstens één trigger vuurde. Per domein
+   twee LLM-aanroepen: de duiding (max. 800 tokens) en de kwaliteitscontrole
+   (`qc.default_llm_review`). De manager bundelt gelijktijdige triggers per domein.
+2. **De wekelijkse forecast-ronde:** één aanroep per agent (vijf agents, commodity
+   voorspelt niet), alle doelen in één JSON (max. 2000 tokens). **Hij draait niet
+   per se op maandag maar op elke werkdag zolang de ISO-week nog geen geslaagde
+   ronde kent.** Wie de vlag op een woensdag aanzet, krijgt dus dezelfde dag al een
+   ronde voor die week.
+3. **De baseline-ronde** (deterministisch, kost niets): persistence en climatology.
+   De ridge draait pas mee als hij is bevroren; tot dan meldt de ronde dat, en dat
+   geeft **exit code 1 op de dag dat de ronde draait**. Dat is verwacht, geen storing.
+
+Alles draait onder `MI_COHORT=dry_run` (de standaard): geen enkele voorspelling
+telt mee. Een fout in de LLM-fase blokkeert de ingestie niet: monitoring is dan al
+opgeslagen, en elke agent zit in zijn eigen foutisolatie.
+
+### Wat het kost (ruwe schatting, niet gemeten)
+
+Tokens zijn geschat uit de promptlengtes in de code (systeemprompts 1.400 tot 2.200
+tekens, plus de claims van het domein): ongeveer 2.000 invoer- en 1.000 uitvoertokens
+per forecast-aanroep, en 1.500 in en 800 uit per deep-dive plus een korte kwaliteitscontrole.
+Tegen de prijs van het huidige model (`claude-sonnet-4-6`, $3 per miljoen invoer- en $15 per
+miljoen uitvoertokens, prijzen van 25-09-2026):
+
+| Onderdeel | Aanroepen per week | Kosten per week |
+|---|---|---|
+| Forecast-ronde | 5 | ~$0,10 |
+| Deep-dives | 2 tot 3 domeinen | ~$0,05 |
+| **Totaal** | ~10 tot 15 | **~$0,15 tot $0,25** |
+
+Dat is ongeveer $8 tot $13 per jaar. De slechtste dag (alle zes de domeinen triggeren)
+is ongeveer $0,15. Zelfs met een factor vijf te laag geschat is het tientallen dollars per
+jaar. **Kosten zijn dus niet de reden voor voorzichtigheid; de betrouwbaarheid van de keten is dat.**
+Meten kan pas na de eerste run, in het Anthropic-console onder Usage.
+
+### Wat er is gebouwd (30-09, na akkoord, met tests)
+
+1. **Een time-out op de Anthropic-client** (`run_daily.py::build_client`): 90 seconden per
+   aanroep en twee herhalingen. Voorheen gold de SDK-standaard van 10 minuten per poging, en
+   één hangende aanroep kon de run een half uur vasthouden; `flock` liet de run van de
+   volgende dag dan overslaan.
+2. **Tokenverbruik per aanroep** (`runtime/llm_budget.py`, tabel `llm_usage`): elke
+   LLM-aanroep legt zijn invoer- en uitvoertokens en de geschatte kosten vast, en de log
+   toont ze per aanroep en per run.
+3. **Een harde maandrem van $200** (`MI_MAX_MAANDBEDRAG_USD`, default 200). Zodra de
+   geschatte kosten van de kalendermaand (UTC) de grens bereiken, stopt het systeem met
+   aanroepen. **Niet stil:** de aanroep die de grens raakt faalt zoals elke mislukte
+   LLM-aanroep (de deep-dive wordt `needs_review`, de forecast-ronde een mislukte
+   `agent_run` met reden), dus exit code 1 en een melding. Vanaf 50% van de grens komt
+   bij elke aanroep een WARNING. Monitoring blijft draaien. Een onleesbare
+   `MI_MAX_MAANDBEDRAG_USD` stopt `run_daily.py --deep-dives` met exit 2.
+   De prijzen staan hardcoded (peildatum 25-09-2026) en een onbekend model telt tegen de
+   duurste bekende prijs. Het Anthropic-console blijft de autoriteit aan de factuurkant.
+
+Het verbruik uitlezen:
+
+```bash
+sqlite3 market_intelligence.db "SELECT date(called_at) AS dag, COUNT(*) AS aanroepen, SUM(input_tokens) AS invoer, SUM(output_tokens) AS uitvoer, ROUND(SUM(cost_usd), 4) AS dollar FROM llm_usage GROUP BY dag ORDER BY dag DESC LIMIT 14;"
+```
+
+De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand ... van $200`.
+
+### Voorwaarden om te beginnen
+
+- [ ] T₀ᵃ gehaald: zeven werkdagen op rij ingestie zonder handmatige actie (op zijn
+      vroegst woensdag 7 oktober, als de reeks op 29-09 begon). **Een handmatige testrun
+      vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
+- [ ] Trigger-versie `v2` in de log en in `trigger_events`.
+- [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
+- [ ] Een uitgavenlimiet van $200 per maand in het Anthropic-console (DD's handeling; de code-rem
+      van hetzelfde bedrag is de tweede lijn).
+- [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
+
+### Fase 1 — één begeleide testrun (voorstel: donderdag 8 oktober, middag)
+
+De cron van 07:15 heeft dan al gedraaid; monitoring wordt bij een tweede run
+overgeslagen (idempotent). Draai met de hand:
+
+```bash
+cd /opt/multi_agent && ./run_daily.sh --deep-dives
+```
+
+Dat draait alleen de LLM-fasen: deep-dives voor triggers van vandaag (als die er zijn),
+de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
+
+1. **De log:** per agent een regel `forecast-ronde 2026-W41 -- N voorspellingen`, geen
+   `Traceback`, geen `apikey=`. Verwacht: één waarschuwing over de ontbrekende ridge.
+2. **Ronde compleet en onder het juiste cohort:**
+   ```bash
+   sqlite3 market_intelligence.db "SELECT agent, cohort, COUNT(*) FROM predictions GROUP BY agent, cohort ORDER BY agent;"
+   ```
+   Alleen `dry_run`. Rond 57 voorspellingen in totaal voor de vijf agents, plus baselines.
+3. **Herkomst vastgelegd:**
+   ```bash
+   sqlite3 market_intelligence.db "SELECT DISTINCT agent, model_id, prompt_version, trigger_version FROM predictions;"
+   ```
+   Agents: het modelnummer, `v1`, `v2`. Baselines: `deterministic`.
+4. **De runs zelf:**
+   ```bash
+   sqlite3 market_intelligence.db "SELECT domain, mode, success, error FROM agent_runs WHERE mode IN ('forecast','deep_dive') ORDER BY run_at DESC LIMIT 15;"
+   ```
+   `success=1` voor alle vijf de forecast-rijen; een `0` met een fout is precies wat je wilt zien.
+5. **De kwaliteitscontrole van deep-dives (alleen als er triggers waren):**
+   ```bash
+   sqlite3 market_intelligence.db "SELECT domain, status, COUNT(*) FROM qc_cases GROUP BY domain, status;"
+   ```
+   `NEEDS_REVIEW` is een vlag en geen fout (CLAUDE.md, regel 3): lees de tekst voordat je oordeelt.
+6. **Lees minstens twee voorspellingen met de hand** en kijk of de kwantielen (q10 < q50 < q90)
+   en de onderbouwing te volgen zijn. Dit is het enige punt dat geen test kan controleren.
+7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console
+   onder Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een factor tien af, of wijken de
+   tokens in de database sterk af van het console, stop dan en meld het.
+
+**Stop en meld het** bij: voorspellingen onder een ander cohort dan `dry_run`; een agent zonder
+enkele voorspelling; een run langer dan tien minuten; kosten een factor tien boven de schatting.
+
+### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf vrijdag 9 oktober)
+
+Alleen als fase 1 schoon was: `--deep-dives` toevoegen aan de cron-regel (`crontab -e`,
+dezelfde regel als in dit document, plus de vlag). Ronden vallen dan op de maandagen
+12, 19 en 26 oktober (plus een inhaalronde op vrijdag 9 oktober voor de lopende week).
+
+**Elke dag, twee minuten:** de laatste regels van `daily.log`. Exit 0, of exit 1 met een
+begrijpelijke reden (de ridge-melding op de rondedag is verwacht).
+**Elke maandag na de ronde:** queries 2, 3 en 4 hierboven, en het aantal voorspellingen per agent
+in vergelijking met vorige week. Ontbreekt er een agent, dan probeert de ronde het de rest van
+de week zelf opnieuw (vier kansen, ma t/m vr); zie je vrijdag nog een gat, dan is dat het laatste
+moment om `./run_daily.sh --deep-dives` met de hand te draaien.
+
+**Uitschakelen (de noodrem):** zet een `#` voor de cron-regel met `--deep-dives` en schrijf de
+regel opnieuw zonder de vlag. Monitoring blijft draaien; er gaat geen data verloren. Doe dit bij:
+een voorspelling onder een ander cohort dan `dry_run`; een monitoringdag die ontbreekt terwijl
+deep-dives aan stonden; drie dagen op rij exit 1 om een andere reden dan de ridge-melding; kosten
+boven $5 in één week. De maandrem van $200 is een ruime vangrail voor een echte ontsporing; deze
+$5 per week is de grens waarbij je zelf ingrijpt, ver vóór de rem.
+
+### Fase 3 — de dry-run-week (27 oktober tot 9 november, roadmap fase 3b)
+
+Dat is de eigenlijke generale repetitie, met het model en de prompts zoals ze bij de freeze
+bevroren worden. Drie weken begeleid draaien ervoor betekent dat de meeste fouten er dan al uit zijn.
+
+### Beslissing die vóór fase 3 valt: welk model?
+
+De code gebruikt overal `claude-sonnet-4-6` (`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de
+deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de pseudo-OOS-run uit van een model met
+een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5). Die twee kloppen niet
+met elkaar. Een ander model is geen kostenkwestie (zie boven) maar een codekwestie: de nieuwere
+modellen hebben altijd-aan-denken (dat de 2000 tokens van de forecast-ronde kan opeten), ondersteunen
+geen vaste `tool_choice` en vragen nieuwe promptafstemming. Voorstel: **fase 1 en 2 op het huidige
+model draaien om de keten te toetsen, de modelkeuze los daarvan nemen en tijdig vóór 27 oktober
+doorvoeren.** Dat kan zonder gevolgen voor het cohort, want vóór de freeze is een modelwissel een
+covariaat in `dry_run`, geen vervuiling.
 
 ## Externe heartbeat (0a-6): healthchecks.io — ✅ 27-09-2026
 

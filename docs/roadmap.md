@@ -1408,6 +1408,24 @@ kalibratie-deel van 5.2.
 
 ## Beslist op 30-09-2026
 
+- [x] **Dry-run-plan voor `--deep-dives` goedgekeurd** (checkpoint 3), zie
+      `docs/deployment.md`. Drie fasen: één begeleide testrun op donderdag
+      8 oktober, cron aan vanaf vrijdag 9 oktober, drie weken begeleid, dan de
+      dry-run-week (fase 3b). De testrun wacht bewust tot na T₀ᵃ (7 oktober):
+      een handmatige run telt als handmatige actie. **Gebouwd:** time-out van 90
+      seconden op de Anthropic-client, tokenverbruik per aanroep vastgelegd
+      (`llm_usage`), en een harde maandrem van **$200** (DD: "zet het maximale
+      tokenverbruik op $200 per maand"; het voorstel was $20). De rem faalt zoals
+      een gewone mislukte LLM-aanroep en is dus zichtbaar (exit 1, melding);
+      monitoring blijft draaien. Verwachte kosten ~$0,15 tot $0,25 per week, niet
+      gemeten. De zin in het bestaande dry-run-plan die T₀ᵃ aan zeven dagen mét
+      `--deep-dives` koppelde is rechtgezet: dat is T₀ᵇ.
+- [ ] **Modelkeuze (`model_id`), open, vóór de dry-run-week.** De code gebruikt
+      overal `claude-sonnet-4-6`; de pseudo-OOS-run (4.4) veronderstelt een model
+      met kennisgrens juni 2026. Voorstel: de keten eerst op het huidige model
+      toetsen en de keuze los daarvan nemen, tijdig vóór 27 oktober. Vóór de freeze
+      is een modelwissel een covariaat in `dry_run`.
+
 - [x] **Ridge-baseline: weggelaten inputs, optie A (huidige regel).** DD koos op
       30-09 na een uitleg van de twee opties. Een input met minder dan 80% van de
       trainingsrijen wordt uit het model gelaten en genoteerd in `dropped`; het
