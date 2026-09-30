@@ -30,6 +30,7 @@ Vereiste environment-variabelen (zie .env.example):
                                die niemand leest is geen fail-loud.
                                Zie src/runtime/notifications.py.
     ANTHROPIC_API_KEY       -- alleen nodig met --deep-dives
+    MI_MAX_MAANDBEDRAG_USD  -- maandgrens voor LLM-kosten (default 200), alleen met --deep-dives
 
 Deep-dives staan standaard UIT. Monitoring is goedkoop en deterministisch;
 deep-dives kosten geld per aanroep en draaien straks onbeheerd. Die kosten
@@ -41,7 +42,8 @@ EXIT CODES (cron/monitoring kan hierop sturen):
     0 -- cyclus voltooid, niets mis
     1 -- cyclus voltooid, maar minstens één agent faalde of crashte
     2 -- de cyclus zelf kon niet draaien (database onbereikbaar, onbekende MI_COHORT,
-         of MI_COHORT=cohort_0 met een trigger-regelset die niet bevroren is)
+         MI_COHORT=cohort_0 met een trigger-regelset die niet bevroren is, of met
+         --deep-dives een onleesbare MI_MAX_MAANDBEDRAG_USD / ontbrekende API-key)
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 from contract.prediction import COHORT_0, current_cohort  # noqa: E402
 from runtime.daily import daily_event_id, run_daily  # noqa: E402
 from contract.trigger_version import TRIGGER_VERSION  # noqa: E402
+from runtime.llm_budget import MeteredClient, max_maandbedrag  # noqa: E402
 from runtime.notifications import log_notifier, webhook_notifier  # noqa: E402
 from runtime.trigger_guard import TriggerPinError, check_trigger_pin  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db  # noqa: E402
@@ -76,6 +79,15 @@ def build_notifier():
     return log_notifier
 
 
+LLM_TIMEOUT_SECONDEN = 90.0
+LLM_MAX_HERHALINGEN = 2
+"""Time-out per LLM-aanroep. De SDK-standaard is 10 minuten per poging met twee
+herhalingen: één hangende aanroep kon de run dan een half uur vasthouden, en
+`flock` laat de run van de volgende dag dan overslaan. Een forecast- of
+deep-dive-aanroep duurt normaal tientallen seconden; 90 is ruim, en na twee
+herhalingen (elk met dezelfde grens) is het ergste geval een paar minuten."""
+
+
 def build_client():
     """Alleen geladen als --deep-dives meegegeven is, zodat de dagelijkse
     monitoring-cyclus geen Anthropic-import of API-key nodig heeft.
@@ -86,7 +98,11 @@ def build_client():
     zo'n week een gat in het cohort."""
     from anthropic import Anthropic
 
-    return Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return Anthropic(
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        timeout=LLM_TIMEOUT_SECONDEN,
+        max_retries=LLM_MAX_HERHALINGEN,
+    )
 
 
 def main(argv=None) -> int:
@@ -158,6 +174,11 @@ def main(argv=None) -> int:
 
     try:
         client = build_client() if args.deep_dives else None
+        if client is not None:
+            # De maandrem (runtime/llm_budget.py): elke aanroep wordt vastgelegd
+            # en de maandgrens (default $200) is een harde stop. Een onleesbare
+            # MI_MAX_MAANDBEDRAG_USD stopt hier met exit 2, net als een onbekend cohort.
+            client = MeteredClient(client, conn, max_maandbedrag())
     except Exception as e:  # noqa: BLE001
         # Ontbrekende ANTHROPIC_API_KEY of een niet-geïnstalleerde anthropic-
         # package. De cyclus zelf kon niet starten zoals gevraagd, dus exit
@@ -166,12 +187,18 @@ def main(argv=None) -> int:
         log.critical("Deep-dives gevraagd maar de client kon niet opgezet worden: %s: %s", type(e).__name__, e)
         return 2
 
+    verbruik = None
     try:
         result = run_daily(conn, client=client, notifier=build_notifier(), event_id=event_id)
+        # Vóór conn.close(): de samenvatting leest het maandverbruik uit de database.
+        if isinstance(client, MeteredClient):
+            verbruik = client.samenvatting()
     finally:
         conn.close()
 
     log.info(result.summary())
+    if verbruik:
+        log.info(verbruik)
     if result.health is not None:
         log.info("System health: %s", result.health.overall_status.value)
     if result.missed_days:

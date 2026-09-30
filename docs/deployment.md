@@ -478,10 +478,11 @@ en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
 dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
 dry-run.
 
-## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **VOORSTEL 30-09-2026, wacht op akkoord van DD**
+## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
-blijft zo tot DD dit plan heeft goedgekeurd en de voorwaarden hieronder gehaald zijn.
+blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op 7 oktober). DD keurde het plan
+goed met één aanpassing: de maandgrens voor LLM-kosten staat op **$200**, niet $20.
 
 ### Wat de vlag aanzet (uit de code, `runtime/daily.py`)
 
@@ -522,15 +523,32 @@ is ongeveer $0,15. Zelfs met een factor vijf te laag geschat is het tientallen d
 jaar. **Kosten zijn dus niet de reden voor voorzichtigheid; de betrouwbaarheid van de keten is dat.**
 Meten kan pas na de eerste run, in het Anthropic-console onder Usage.
 
-### Wat ik voorstel aan code te wijzigen (pas ná akkoord, met tests)
+### Wat er is gebouwd (30-09, na akkoord, met tests)
 
-1. **Een time-out op de Anthropic-client** (`run_daily.py::build_client`). Nu geldt de
-   standaard van de SDK: 10 minuten per poging en twee herhalingen. Eén hangende aanroep
-   kan de run dan een half uur vasthouden; `flock` laat de run van de volgende dag dan
-   overslaan. Voorstel: 90 seconden per aanroep. Dat is een wijziging in `run_daily.py`,
-   dus checkpoint 3.
-2. **Tokengebruik in de log** (`response.usage` per aanroep, één INFO-regel), zodat de
-   kosten uit `daily.log` zijn af te lezen en niet alleen uit het console.
+1. **Een time-out op de Anthropic-client** (`run_daily.py::build_client`): 90 seconden per
+   aanroep en twee herhalingen. Voorheen gold de SDK-standaard van 10 minuten per poging, en
+   één hangende aanroep kon de run een half uur vasthouden; `flock` liet de run van de
+   volgende dag dan overslaan.
+2. **Tokenverbruik per aanroep** (`runtime/llm_budget.py`, tabel `llm_usage`): elke
+   LLM-aanroep legt zijn invoer- en uitvoertokens en de geschatte kosten vast, en de log
+   toont ze per aanroep en per run.
+3. **Een harde maandrem van $200** (`MI_MAX_MAANDBEDRAG_USD`, default 200). Zodra de
+   geschatte kosten van de kalendermaand (UTC) de grens bereiken, stopt het systeem met
+   aanroepen. **Niet stil:** de aanroep die de grens raakt faalt zoals elke mislukte
+   LLM-aanroep (de deep-dive wordt `needs_review`, de forecast-ronde een mislukte
+   `agent_run` met reden), dus exit code 1 en een melding. Vanaf 50% van de grens komt
+   bij elke aanroep een WARNING. Monitoring blijft draaien. Een onleesbare
+   `MI_MAX_MAANDBEDRAG_USD` stopt `run_daily.py --deep-dives` met exit 2.
+   De prijzen staan hardcoded (peildatum 25-09-2026) en een onbekend model telt tegen de
+   duurste bekende prijs. Het Anthropic-console blijft de autoriteit aan de factuurkant.
+
+Het verbruik uitlezen:
+
+```bash
+sqlite3 market_intelligence.db "SELECT date(called_at) AS dag, COUNT(*) AS aanroepen, SUM(input_tokens) AS invoer, SUM(output_tokens) AS uitvoer, ROUND(SUM(cost_usd), 4) AS dollar FROM llm_usage GROUP BY dag ORDER BY dag DESC LIMIT 14;"
+```
+
+De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand ... van $200`.
 
 ### Voorwaarden om te beginnen
 
@@ -539,8 +557,9 @@ Meten kan pas na de eerste run, in het Anthropic-console onder Usage.
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
 - [ ] Trigger-versie `v2` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
-- [ ] Een uitgaven­limiet in het Anthropic-console (voorstel: $20 per maand) als harde rem.
-- [ ] Dit plan goedgekeurd, inclusief de twee codewijzigingen hierboven.
+- [ ] Een uitgavenlimiet van $200 per maand in het Anthropic-console (DD's handeling; de code-rem
+      van hetzelfde bedrag is de tweede lijn).
+- [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
 
 ### Fase 1 — één begeleide testrun (voorstel: donderdag 8 oktober, middag)
 
@@ -578,8 +597,9 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    `NEEDS_REVIEW` is een vlag en geen fout (CLAUDE.md, regel 3): lees de tekst voordat je oordeelt.
 6. **Lees minstens twee voorspellingen met de hand** en kijk of de kwantielen (q10 < q50 < q90)
    en de onderbouwing te volgen zijn. Dit is het enige punt dat geen test kan controleren.
-7. **De kosten:** Anthropic-console, Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een
-   factor tien af, stop dan en meld het.
+7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console
+   onder Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een factor tien af, of wijken de
+   tokens in de database sterk af van het console, stop dan en meld het.
 
 **Stop en meld het** bij: voorspellingen onder een ander cohort dan `dry_run`; een agent zonder
 enkele voorspelling; een run langer dan tien minuten; kosten een factor tien boven de schatting.
@@ -601,7 +621,8 @@ moment om `./run_daily.sh --deep-dives` met de hand te draaien.
 regel opnieuw zonder de vlag. Monitoring blijft draaien; er gaat geen data verloren. Doe dit bij:
 een voorspelling onder een ander cohort dan `dry_run`; een monitoringdag die ontbreekt terwijl
 deep-dives aan stonden; drie dagen op rij exit 1 om een andere reden dan de ridge-melding; kosten
-boven $5 in één week.
+boven $5 in één week. De maandrem van $200 is een ruime vangrail voor een echte ontsporing; deze
+$5 per week is de grens waarbij je zelf ingrijpt, ver vóór de rem.
 
 ### Fase 3 — de dry-run-week (27 oktober tot 9 november, roadmap fase 3b)
 

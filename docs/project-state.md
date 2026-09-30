@@ -1027,6 +1027,39 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Tokenverbruik, time-out en maandrem voor `--deep-dives` (1.11, 30-09) — 744 tests groen
+
+Bij het dry-run-plan voor `--deep-dives` (checkpoint 3, `docs/deployment.md`) keurde DD de
+codewijzigingen goed, met één aanpassing: een maandgrens van **$200** in plaats van de
+voorgestelde $20.
+
+**Wat er is.** `runtime/llm_budget.py` wikkelt de Anthropic-client in `MeteredClient`
+(alleen in `run_daily.py`, niet in de agents): vóór elke aanroep controleert hij het
+maandverbruik, na afloop legt hij invoer- en uitvoertokens en de geschatte kosten vast in de
+nieuwe tabel `llm_usage` en logt hij ze. De grens (`MI_MAX_MAANDBEDRAG_USD`, default 200)
+werkt op de kalendermaand in UTC en telt uit de database, dus over runs heen. Bij het
+bereiken gooit de aanroep `BudgetExceeded`, en de bestaande foutisolatie behandelt dat als
+elke mislukte LLM-aanroep: de deep-dive wordt `needs_review`, de forecast-ronde een mislukte
+`agent_run` met reden. Dat geeft exit code 1 en een melding, en is dus nooit stil. Vanaf 50%
+komt een WARNING. Daarnaast heeft de client nu een time-out van 90 seconden met twee
+herhalingen (de SDK-standaard was 10 minuten per poging).
+
+**Ontwerpkeuzes.** Geen stille stop: een voorspelling die door de rem wegvalt is een gat in
+het cohort, en dat mag nooit onzichtbaar zijn. Prijzen hardcoded met peildatum 25-09-2026;
+een onbekend model telt tegen de duurste prijs (liever te vroeg remmen). De rem geldt alleen
+met `--deep-dives`; een typefout in de variabele stopt dan met exit 2 en raakt de ingestie
+zonder de vlag niet. Een aanroep zonder `usage` telt als $0 met een WARNING: dat is het
+enige gat, en het is zichtbaar.
+
+**De test vond een echte fout in mijn eigen wijziging.** De samenvatting van het verbruik
+werd gelezen ná `conn.close()` in `run_daily.py`, wat elke run met `--deep-dives` aan het
+eind had laten crashen. Mutatiecontroles (rem uit, vastleggen uit, time-out weg, samenvatting
+na close) worden alle vier gevangen.
+
+**Ongetest.** Niet tegen de echte API gedraaid; de nep-client bootst `usage` na. De eerste
+begeleide testrun (8 oktober) is het echte bewijs, met het Anthropic-console ernaast om de
+geschatte kosten te vergelijken. Het console-limiet van $200 is DD's eigen handeling.
+
 ### FOMC-kalender ingevuld (4.5, 30-09) — checkpoint 4 opgelost
 
 **Bron en werkwijze.** Ik kon federalreserve.gov niet bereiken vanuit deze

@@ -76,6 +76,20 @@ CREATE TABLE IF NOT EXISTS data_health (
 );
 CREATE INDEX IF NOT EXISTS idx_data_health_source ON data_health(source, checked_at);
 
+-- Elke LLM-aanroep met zijn tokenverbruik en de geschatte kosten (roadmap 1.11,
+-- checkpoint 3). De bron voor de maandrem in runtime/llm_budget.py en voor het
+-- antwoord op "wat kost dit?" zonder het Anthropic-console erbij te halen.
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    called_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cost_usd REAL NOT NULL,
+    price_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_called_at ON llm_usage(called_at);
+
 CREATE TABLE IF NOT EXISTS trigger_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     domain TEXT NOT NULL,
@@ -476,6 +490,30 @@ def record_trigger_event(
     )
     conn.commit()
     return cur.lastrowid
+
+
+def record_llm_usage(
+    conn: sqlite3.Connection, called_at: datetime, model: str,
+    input_tokens: int, output_tokens: int, cost_usd: float, price_note: str | None = None,
+) -> int:
+    cur = conn.execute(
+        "INSERT INTO llm_usage (called_at, model, input_tokens, output_tokens, cost_usd, price_note) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (called_at.isoformat(), model, int(input_tokens), int(output_tokens), float(cost_usd), price_note),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def llm_usage_since(conn: sqlite3.Connection, since: datetime) -> tuple[float, int, int, int]:
+    """(kosten in USD, aantal aanroepen, invoertokens, uitvoertokens) vanaf `since`.
+    Vergelijkt op de ISO-tekst van `called_at`, die altijd UTC met offset is."""
+    kosten, aantal, tin, tuit = conn.execute(
+        "SELECT COALESCE(SUM(cost_usd), 0), COUNT(*), COALESCE(SUM(input_tokens), 0), "
+        "COALESCE(SUM(output_tokens), 0) FROM llm_usage WHERE called_at >= ?",
+        (since.isoformat(),),
+    ).fetchone()
+    return float(kosten), int(aantal), int(tin), int(tuit)
 
 
 def record_data_health(conn: sqlite3.Connection, source: str, checked_at: datetime, success: bool, detail: str | None = None) -> int:
