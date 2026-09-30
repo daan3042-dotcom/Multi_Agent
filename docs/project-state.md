@@ -1215,7 +1215,7 @@ voorspelkracht: de cross-validatie kiest uit 14 combinaties, dus de toevallig be
 (winner's curse). Op pure ruis komt het model ook op ~0,98 uit; een test legt dat
 vast met een ondergrens. Echte structuur zie je aan duidelijk lagere waarden.
 
-**Open punt voor de freeze: weggelaten inputs.** Een input met minder dan 80% van
+**[30-09: beslist door DD, optie A] Weggelaten inputs.** DD koos de huidige regel (een input met minder dan 80% van de trainingsrijen wordt weggelaten); zie "Beslist op 30-09-2026" in `docs/roadmap.md`. De analyse hieronder is de onderbouwing van die keuze. **Oorspronkelijk open punt voor de freeze: weggelaten inputs.** Een input met minder dan 80% van
 de trainingsrijen wordt weggelaten, en dat is bij de lange doelen systematisch:
 de 10-jaars rente (sinds 1962) verliest de balans van de Fed (2002), de
 inflatieverwachtingen (2003) en de 2-jaars rente; de negen oudste sector-ETF's
