@@ -257,6 +257,37 @@ def test_een_te_lage_drempel_vuurt_vaak():
     assert any(f.startswith("vuurt vaak") for f in cal.flags)
 
 
+def _maanden(waarden):
+    """Zoals `_dagen`, maar één waarneming per maand (30 dagen): een maandreeks."""
+    start = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    return [(start + timedelta(days=30 * i), w) for i, w in enumerate(waarden)]
+
+
+def test_vijf_keer_per_jaar_op_een_maandreeks_is_niet_vaak():
+    """Regressie op de eerste vlag ('vuurt op meer dan 10% van de waarnemingen'): die gaf
+    'vuurt vaak (42%)' bij elke maandreeks die precies op het doel van 5 per jaar zat, omdat
+    5 van de 12 publicaties per ontwerp 42% is. Het gaat om het aantal per jaar."""
+    # Elke tweede maand een sprong van 1: ~6 triggers per jaar bij tolerance 0,5.
+    reeks = [(i % 2) * 1.0 for i in range(60)]
+    cal = calibrate_series("d", "m", 0.5, _maanden(reeks))
+    assert not any(f.startswith("vuurt vaak") for f in cal.flags), cal.flags
+
+
+def test_een_dagreeks_met_zestig_triggers_per_jaar_is_wel_vaak():
+    """De vlag is niet weggehaald, alleen gelijkgetrokken: 60 per jaar is voor elke cadans veel."""
+    reeks = [0.0] * 6 + [1.0] * 6
+    reeks = (reeks * 200)[: 3 * 365]
+    cal = calibrate_series("d", "m", 0.5, _dagen(reeks))
+    assert any(f.startswith("vuurt vaak") for f in cal.flags), cal.flags
+
+
+def test_een_regel_die_bijna_nooit_vuurt_krijgt_de_vlag_zelden():
+    reeks = [0.0] * 1000
+    reeks[500] = 5.0  # één sprong in ~2,7 jaar (twee veranderingen: op en neer)
+    cal = calibrate_series("d", "m", 1.0, _dagen(reeks))
+    assert "vuurt zelden" in cal.flags, cal.flags
+
+
 def test_korte_historie_wordt_gemeld():
     """`high_yield_credit_spread` heeft maar ~3 jaar: 'alles' zegt daar niet meer dan '3j'."""
     cal = calibrate_series("d", "m", 0.5, _dagen([i % 2 for i in range(3 * 365)]))

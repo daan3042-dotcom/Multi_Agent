@@ -1227,7 +1227,7 @@ het LLM ziet", maar levert veel minder rijen en jaren op (bij sector: 2.000 rije
 is het effect klein, maar het is een keuze tussen trouw en steekproefgrootte, dus
 van DD. Standaard blijft de huidige regel.
 
-### Alpha Vantage gaf een lege `{}` voor élk endpoint (29-09) — open
+### Alpha Vantage gaf een lege `{}` voor élk endpoint (29-09) — hersteld, oorzaak onbekend
 
 Na ruim 100 calls op één dag (dagelijkse runs, testruns, experimenten en de
 back-fill) begon Alpha Vantage rond 11:07 UTC voor **elk** endpoint `{}` terug te
@@ -1246,9 +1246,16 @@ het voorstel voor 60 s timeout plus één herhaalpoging bij de dagelijkse agents
 
 **Wat er nu is:** de back-fill meldt een leeg antwoord als zodanig ("LEEG antwoord
 ({})") in plaats van "geen 'data'", en noemt bij een onbekend antwoord de velden
-die er wel waren. Een mail aan Alpha Vantage support is opgesteld. Openstaand:
-commodity-back-fill (10 maandreeksen), en of de dagelijkse run van 30-09 07:15
-weer reeksen mist. Dat laatste zie je vanzelf: de completeness-check meldt het.
+die er wel waren. Een mail aan Alpha Vantage support is opgesteld. **Uitkomst (30-09).**
+Rond 13:25 UTC op 29-09 gaf hetzelfde endpoint weer een volledige koers, dus de
+`{}` was tijdelijk. De commodity-back-fill draaide daarna zonder één mislukking
+(4.221 claims, alle tien de reeksen), en de dagelijkse run van 30-09 07:15 was
+compleet: zes van zes agents `ok`, geen completeness-trigger. De mail aan support
+is niet verstuurd. **De oorzaak is niet vastgesteld** en het kan terugkomen: zie je
+weer een `completeness:`-trigger voor currency, sector of commodity, noteer dan de
+tijd en het aantal calls van die dag. Het voorstel voor 60 s timeout plus één
+herhaalpoging blijft ingetrokken zolang er geen tweede voorval is dat het patroon
+duidelijker maakt.
 
 ### `.env` voor de handmatige scripts (29-09) — 641 tests groen
 
@@ -1318,11 +1325,12 @@ Geen openstaande gaten binnen sectie A of B's eigen scope. Bewuste grenzen
   afweging; mocht DD liever een trigger ZIEN OP relatieve sterkte zelf,
   is dat een grotere wijziging (raakt gedeelde infrastructuur) die eerst
   besproken moet worden.
-- `commodity_agent.py`'s tolerances zijn NOG minder zeker dan
-  `sector_agent.py`'s — grondstofprijzen/eenheden zijn hier niet met
-  zekerheid geverifieerd tegen actuele marktdata (in tegenstelling tot de
-  ETF-prijzen, waar de schattingen redelijk vertrouwd zijn). Sterkste
-  kandidaat tot nu toe voor DD's eigen latere finetuning.
+- ~~`commodity_agent.py`'s tolerances zijn NOG minder zeker dan
+  `sector_agent.py`'s~~ **[29-09 opgelost, trigger-versie v2]**: gekalibreerd op
+  35 jaar back-fill, en de eenheden zijn geverifieerd tegen de opgeslagen data
+  (koper staat in dollar per metrische ton; de oude tolerantie nam per pond aan en
+  vuurde bij elke publicatie). Zie project-state, "Controle-run van v1 en commodity
+  als v2".
 - **1.7's `system_health()` — bewuste grenzen, geen gaten:**
   - "trigger"-component heeft GEEN eigen, apart bijgehouden faalstatus —
     trigger-evaluatie draait inline binnen `run_monitoring()`, dus de

@@ -5,7 +5,7 @@ T₀ᵃ). De definition of done daar: *dagelijks callvolume (monitoring +
 deep-dives) < limiet van de gebruikte tier, gedocumenteerd hier; anders
 bron wisselen vóór T₀ᵃ*.
 
-**Stand: 28-09-2026. Er is een probleem, en het staat hieronder.**
+**Stand: 28-09-2026. Er is een probleem, en het staat hieronder.** **[30-09] Na de overstap naar een betaald plan was de run van 30-09 compleet (currency, sector en commodity `ok`, geen completeness-trigger). Dat is één run; de eerdere lege antwoorden van 29-09 rond 11:07 UTC zijn onverklaard, zie `docs/project-state.md`.**
 
 ## Waarom dit telt
 
@@ -97,7 +97,7 @@ komt pas vanaf cohort v1 in de scoring (roadmap deel A). Dat was al de
 planning; de upgrade verandert daar niets aan.
 
 **Te doen na de upgrade:** één run draaien en controleren dat er geen
-completeness-trigger meer komt. De vier opties hieronder blijven staan als
+completeness-trigger meer komt. **[30-09 gedaan: de run van 07:15 was compleet, 0 triggers.]** De vier opties hieronder blijven staan als
 verantwoording van de keuze, niet als openstaande actie.
 
 ## Het probleem

@@ -21,6 +21,7 @@ Vink items af zodra ze klaar zijn én groen zijn in de testsuite.
 | 26-09-2026 | Uitvoeringsvolgorde losgekoppeld van pijlernummering; pijler 4 naar voren | LLM-agents zijn niet eerlijk te backtesten → forward testing is het kritieke pad → kalendertijd is de schaarse resource |
 | 27-09-2026 | Zie hieronder | Externe review van de roadmap (Claude Fable 5.1) |
 | 28-09-2026 | Synthesizer-doelen op verhandelbare instrumenten, instrument-mapping, referentieprijs in de `resolution_rule`, en extra niet-reconstrueerbare data (consensus, expected moves, ruwe headlines). Gemarkeerd met **[28-09]** | Voorbereiding op een mogelijke swing-trading-laag (1–3 dagen) over 1–1,5 jaar, zonder die nu te bouwen. Zie "Beslist op 28-09-2026" |
+| 30-09-2026 | T₀ᵃ-streefdatum van 3 naar **7 oktober** | "7 dagen op rij zonder handmatige actie", en de cron draait alleen maandag tot en met vrijdag. 3 oktober is een zaterdag; als 29-09 dag 1 was, zijn zeven werkdagen vol op woensdag 7 oktober. DD bevestigde dit op 30-09 |
 
 **Mapping oude lettering → nieuwe nummering** (voor code-comments als
 "stap B.1" of "sectie C.1"): A→1, B+C→2, D→2.8, E→2.9, F→3.1, G→5,
@@ -102,10 +103,19 @@ netwerk over de graaf en Black-Litterman/Kelly staan apart en later.
 
 ## Huidige focus
 
-**Fase 0 — sectie 1.11.** Code voor runner, notificaties en entrypoint
-staat (280 tests groen). Open is niet-code: VPS bestellen, keys, cron,
-back-up, heartbeat, quota-check. Tot de ingestieklok loopt is elke
-andere taak voorbarig.
+**Fase 0 — sectie 1.11, ingestieklok (T₀ᵃ).** Stand 30-09-2026, 719 tests
+groen. De VPS draait de dagelijkse cyclus (cron 07:15 UTC, maandag tot en met
+vrijdag) met alle zes agents en een actieve heartbeat; 29 en 30 september waren
+schone runs. De back-fill is voor alle domeinen gedraaid, de triggerregels
+dragen een versienummer (v2, gekalibreerd), en de code voor het
+voorspellingscontract, de forecast-ronde, de resolver, de scores en de
+baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
+**Open voor T₀ᵃ:** zeven schone werkdagen op rij, op zijn vroegst woensdag
+7 oktober als de reeks op 29-09 begon, en de heartbeat-test (alarmkanaal
+getest met een tijdelijke check; de strikte "machine een dag uit"-test na T₀ᵃ).
+Daarna, in volgorde: `--deep-dives` aanzetten met een dry-run-plan (checkpoint
+3), pseudo-OOS-run (4.4), menselijke voorspellers (4.8), synthesizer als
+gescoorde agent, en de freeze vóór T₀ᵇ (checkpoint 5).
 
 ## De agents van cohort 0
 
@@ -149,7 +159,7 @@ intraday (buiten scope, zie Scope-afbakening).
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
 **Doel:** het systeem haalt elke dag zonder tussenkomst echte data op en
-legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
+legt triggers vast. **T₀ᵃ streefdatum 7 oktober** (herzien op 30-09 van 3 oktober: zeven werkdagen op rij, zie Herzieningen).
 
 | Taak | Sectie | Definition of done | Wie |
 |---|---|---|---|
@@ -160,7 +170,7 @@ legt triggers vast. **T₀ᵃ streefdatum 3 oktober.**
 | Geautomatiseerde offsite back-up | 1.11 | dagelijkse kopie buiten de VPS (Litestream of `.backup` + rclone) én één keer daadwerkelijk hersteld op een andere machine | DD |
 | Externe heartbeat / dead man's switch | 1.11 | alarm bij UITBLIJVEN van een run, getest door de machine bewust een dag uit te zetten | DD |
 | **T₀ᵃ: ingestieklok loopt** | 1.11 | 7 dagen op rij data zonder handmatige actie | — |
-| Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar. **[29-09] Script omgebouwd: idempotent per reeks, fouten van de bron worden gemeld i.p.v. ingeslikt, een domein is pas geslaagd als elke reeks historie heeft. back-fill gedraaid op 29-09: FRED compleet (4 nieuwe monetary-reeksen alsnog gevuld), currency en sector compleet, **commodity nog niet** (10/10 mislukt, reden nu zichtbaar). **Let op: `high_yield_credit_spread` heeft maar ~3 jaar historie, dus voor die reeks is 'macro ≥ 20 jaar' niet te halen (checkpoint 4)** | Claude Code |
+| Back-fill: volledige historie waar de bron dat toelaat (FRED: alles; AV: wat er is) | 1.11 | elke gemonitorde metric heeft historie; macro ≥ 20 jaar. **[29-09] Script omgebouwd: idempotent per reeks, fouten van de bron worden gemeld i.p.v. ingeslikt, een domein is pas geslaagd als elke reeks historie heeft. back-fill gedraaid op 29-09: FRED compleet (4 nieuwe monetary-reeksen alsnog gevuld), currency en sector compleet, **commodity op 29-09 alsnog gevuld** (4.221 claims, alle tien de reeksen, ~35 jaar maandcijfers; de eerste poging faalde door lege Alpha Vantage-antwoorden, zie project-state). **Let op: `high_yield_credit_spread` heeft maar ~3 jaar historie, dus voor die reeks is 'macro ≥ 20 jaar' niet te halen (checkpoint 4)** | Claude Code |
 | Economic agent, lean | 2.7 | monitoring + Sahm Rule + ICSA/UNRATE/PAYEMS, sectie in `docs/agents.md`, checkpoint 1 uit `CLAUDE.md` | Claude Code |
 | ~~Atomiciteit claims/dedup~~ **[28-09] ✅** | 1.11 | `storage/schema.py::save_output_with_run()` zet beide inserts in één transactie; `agents/base.py` gebruikt 'm op alle drie de opslagpaden. Vóór de fix leverde een dubbele `event_id` juist dúbbele claims op: de IntegrityError sloeg toe ná de commit die hij moest voorkomen | — |
 | ~~Ouderdomsgrens in `system_health()`~~ **[28-09] ✅** | 1.11 | run ouder dan de grens telt niet meer als actuele status. Asymmetrisch: oude monitoring-run → STALE (de cyclus staat stil, dat is wél erg), oude deep-dive → UNKNOWN (event-gedreven, weken niets is normaal). Grenzen instelbaar per aanroeper | — |
@@ -266,7 +276,7 @@ Secties 4.5, 4.6.
 
 - [ ] Dagelijkse automatische run met live data, 14 dagen op rij zonder handmatige actie (1.11)
 - [ ] Offsite back-up loopt dagelijks én is één keer hersteld (1.11)
-- [ ] Externe heartbeat actief en getest door de machine uit te zetten (1.11)
+- [~] Externe heartbeat actief en getest door de machine uit te zetten (1.11) **[30-09: alarmkanaal getest met een tijdelijke check, e-mail na 2 minuten; de strikte test met de machine uit volgt na T₀ᵃ]**
 - [ ] API-quota gemeten tegen het dagelijkse callvolume incl. deep-dives (1.11)
 - [ ] **[28-09] Reeksenlijst per agent definitief**: welke reeksen elke
       agent ophaalt staat vast, en elke graafknoop is bediend óf expliciet
@@ -339,7 +349,7 @@ Kelly zijn een beslissingslaag en horen niet in dit systeem.
 
 | Periode | Fase | Uitkomst |
 |---|---|---|
-| 29 sep – 5 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 3 okt: ingestieklok loopt** |
+| 29 sep – 7 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 7 okt: ingestieklok loopt** (was 3 okt) |
 | 6 – 12 okt | 0b. Back-fill, economic agent lean, runtime-fixes | historie in de DB, groei-knopen bediend |
 | 6 – 19 okt | 2. Contract + forecast-ronde + mensinvoer | agents en mensen produceren kwantielen/kansen |
 | 6 – 26 okt | 1. Causale graaf (parallel, partner) | knopen, pijlen, deterministische toets |

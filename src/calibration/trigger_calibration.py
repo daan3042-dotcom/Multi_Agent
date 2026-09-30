@@ -68,10 +68,18 @@ twee triggers is een verschil van factor drie gewoon toeval, en de eerste versie
 daardoor op 25 van de 40 regels."""
 SHORT_HISTORY_YEARS = 5.0
 UNSTABLE_FACTOR = 3.0
-OFTEN_FRACTION = 0.10
-SELDOM_FRACTION = 0.005
-"""Drempels voor de 'oordeel'-kolom. Adviserend en bewust ruim; het zijn leeshulpen,
-geen regels. Wijzigen ze, dan wijzigt alleen de tekst in het rapport."""
+OFTEN_PER_YEAR = 25.0
+SELDOM_PER_YEAR = 1.0
+"""Drempels voor de 'oordeel'-kolom, in triggers PER JAAR over de laatste drie jaar. Adviserend
+en bewust ruim; het zijn leeshulpen, geen regels. Wijzigen ze, dan wijzigt alleen de tekst in
+het rapport.
+
+WAAROM PER JAAR EN NIET ALS AANDEEL VAN DE WAARNEMINGEN. De eerste versie gebruikte 'vuurt op
+meer dan 10% van de waarnemingen'. Dat betekent iets heel anders per cadans: bij een dagreeks is
+10% ruim 25 per jaar, bij een maandreeks 1,2 per jaar. Na de kalibratie op 5 per jaar (29-09)
+stond 'vuurt vaak (42%)' daardoor bij bijna elke maandreeks (5 van de 12 publicaties is 42%,
+per ontwerp) en bij elke commodity-regel, terwijl er niets aan de hand was. Per jaar betekent
+voor elke cadans hetzelfde."""
 
 DAYS_PER_YEAR = 365.25
 
@@ -225,9 +233,9 @@ def _flags(stats: dict[str, WindowStat], adjusted: WindowStat | None, years: flo
     alles, drie = stats["alles"], stats["3j"]
     if alles.fires == 0 and drie.fires == 0:
         flags.append("vuurt nooit")
-    elif drie.fraction is not None and drie.fraction > OFTEN_FRACTION:
-        flags.append(f"vuurt vaak ({drie.fraction:.0%} van de waarnemingen)")
-    elif drie.fraction is not None and drie.fraction < SELDOM_FRACTION and drie.fires > 0:
+    elif drie.per_year is not None and drie.per_year > OFTEN_PER_YEAR:
+        flags.append(f"vuurt vaak ({drie.per_year:.0f} per jaar)")
+    elif drie.per_year is not None and drie.per_year < SELDOM_PER_YEAR and drie.fires > 0:
         flags.append("vuurt zelden")
 
     kandidaten = [s for s in stats.values() if s.per_year is not None and s.pairs >= MIN_PAIRS]
