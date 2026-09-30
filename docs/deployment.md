@@ -385,11 +385,13 @@ Drie tabellen:
    percentage van de dagen: 2% is ~5 triggers per jaar bij een dagreeks maar ~0,24 bij een maandreeks.
 3. **Het verwachte aantal triggers per jaar** per domein bij de huidige drempels.
 
-De kolom `oordeel` noemt wat opvalt: `vuurt nooit`, `vuurt vaak`, `wisselt sterk per
-periode`, `niveau-afhankelijk`, `korte historie`. Die drempels zijn leeshulpen, geen regels.
+De kolom `oordeel` noemt wat opvalt: `vuurt nooit`, `vuurt vaak` (meer dan 25 per jaar),
+`vuurt zelden` (minder dan 1 per jaar), `wisselt sterk per periode`, `niveau-afhankelijk`,
+`korte historie`. Die drempels zijn leeshulpen, geen regels, en tellen per jaar zodat ze voor
+dag-, week- en maandreeksen hetzelfde betekenen.
 
 **Let op:** `high_yield_credit_spread` heeft maar ~3 jaar historie, dus daar zegt "alles"
-niets meer dan "3j". En de commodity-reeksen hebben nog geen historie (back-fill open).
+niets meer dan "3j". De commodity-reeksen zijn maandelijks (sinds 29-09 met ~35 jaar historie): een reeks kan er hooguit twaalf keer per jaar vuren.
 
 ### De ridge-baseline fitten en bevriezen (roadmap 4.6) — eenmalig, na de back-fill
 
