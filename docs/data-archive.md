@@ -108,7 +108,33 @@ maar een bevinding: de bron heet anders of bestaat niet meer. De rij zegt dat, e
 weg behalve de JSON op verzoek. Niet met `-v` of een debug-vlag draaien: urllib3 logt dan volledige url's. Niet op
 dezelfde minuut als de cron van 07:15 draaien.
 
-**Fase B, goedkoop en meteen nuttig (FRED, geen nieuwe bron).**
+### Uitkomst van de probe op de VPS (01-10-2026)
+
+66 aanroepen (14 Alpha Vantage, 52 FRED), geen fouten, geen sleutel in de uitvoer.
+
+| Advies | Aantal | Wat |
+|---|---|---|
+| archief NU | 1 | SPY-samenstelling (State Street): alleen de huidige dag, geen historie |
+| archief later (terug te halen) | 74 | alle FRED-reeksen, Cboe VIX3M/VIX9D/VVIX/SKEW (vanaf 1990-2011), ALFRED (859 PAYEMS-vintages), CFTC, NY Fed, Treasury DTS, ECB, Alpha Vantage-opties (5 jaar terug gemeten) en intraday (vanaf 2016) |
+| eerst diepte meten | 2 | Kalshi, Polymarket (1 record gezien, historie onbekend) |
+| beslissing DD | 10 | 6 betaald/gelicentieerd (consensus, fed funds futures, earnings-consensus, ISM, CME CVOL, futures-intraday), 4 nog niet onderzocht (Atlanta Fed, regionale Fed-enquêtes, Yahoo bewust niet, nieuws leeg) |
+
+**Wat het rapport scheef weergeeft.**
+- **De drie ICE BofA-spreads** (`BAMLC0A0CM`, `BAMLH0A3HYC`, `BAMLH0A0HYM2`) staan als "archief later",
+  maar FRED geeft ze maar vanaf 2023-10-02, en dat is op 01-10-2026 precies drie jaar terug. Dat lijkt
+  een rollend venster: ouder dan drie jaar is voorgoed weg, en de oudste dag valt elke dag eraf. Wat in onze
+  eigen database staat blijft van ons. **Te bevestigen:** de probe op een latere dag opnieuw draaien; staat
+  "vanaf" dan op 2023-10-03, dan is het een rollend venster.
+- **`av_nieuws_1j` (leeg)** is geen bewijs dat nieuws niet bestaat: het kan aan het gekozen zoekvenster liggen.
+  Eerst met een kort, recent venster testen.
+- **`av_options_realtime` gaf 4 contracten**: een zwakke meting, zegt niets over het echte aanbod.
+- **De valutareeksen van de Fed (DEX*, DTWEXBGS) lopen 6 dagen achter** (wekelijkse H.10-release). Normaal, maar
+  de currency agent werkt dus op data van maximaal een week oud.
+- Het script labelt "nog niet onderzocht" als "beslissing DD (niet beschikbaar of betaald)". Dat is onjuist
+  voor Atlanta Fed, regionale Fed-enquêtes en Yahoo; het zijn open onderzoeksvragen, geen beslissingen.
+
+**Fase B, goedkoop en meteen nuttig (FRED, geen nieuwe bron).** **[01-10: DFEDTARU gedaan, zie hieronder;
+SPY-holdings gebouwd, nog niet in de cron.]**
 - `DFEDTARU` en `DFEDTARL` (target range) en `DFF` (dagelijks) naast `FEDFUNDS`. Dit is meer dan een
   archiefpunt, zie hieronder.
 - Vooral ook: releasedatum vastleggen waar de bron het geeft.
@@ -126,6 +152,25 @@ later en mengt de dagen vóór en ná het besluit. `DFEDTARU` (bovengrens van de
 precies op de besluitdag met een stap van 0,25: geen afrondingsruis, geen wachttijd, en het is meteen een betere
 trigger dan de huidige FEDFUNDS-drempel. Dat is een wijziging van de resolutieregel, dus **vóór de freeze**
 doen, niet erna (CLAUDE.md). Verifiëren op de VPS dat `DFEDTARU` beschikbaar en actueel is.
+
+**[01-10-2026 gedaan.]** Probe bevestigt: dagelijks, 0 dagen achterstand, vanaf 2008-12-16. De monetary agent haalt
+nu `DFEDTARU` op (`fed_funds_target_upper`, spec 0,125, knoop `policy_stance`) en de twee FOMC-doelen wijzen ernaar.
+`direction_after_fomc` pakt de eerste waarneming NA de besluitdag, wat werkt of FRED de nieuwe stand op de
+besluitdag zelf of een dag later toont. Trigger-versie v3. FEDFUNDS blijft staan.
+
+## Het ruwe archief draaien (SPY-holdings)
+
+Gebouwd op 01-10-2026: `archive_daily.py` + `src/archive/spy_holdings.py`. Eén bestand per dag, gzip, onder
+`archive/spy_holdings/<jaar>/spy_holdings_<datum>.xlsx.gz`, plus een regel in `manifest.jsonl` (ophaaltijd, `as_of`,
+grootte, sha256, of het byte-identiek is aan de dag ervoor). Het bestand wordt **niet geparsed** (dat vraagt
+openpyxl/pandas, gecompileerd): het ruwe bestand is het archief, en parsen kan altijd later.
+
+**Afwijking van het eerdere voorstel:** de index staat in een `manifest.jsonl` en niet in SQLite. Een archief mag de
+database waar T₀ᵃ op draait nooit kunnen vergrendelen of vervuilen.
+
+**Niet geverifieerd tot de eerste run op de VPS** (checkpoint 4): of de bron een User-Agent eist, welke datum de bron
+met "as of" bedoelt en hoe laat die ververst, en of de tekst "As of" in het bestand staat zoals de code aanneemt. Het
+laatste is best-effort (`as_of: null` is geen fout). Het dry-run-plan staat in `docs/deployment.md`, "Het ruwe archief".
 
 ## Twee beslissingen die dit onderzoek aanscherpt
 

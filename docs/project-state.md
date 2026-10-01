@@ -1027,6 +1027,40 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Probe-uitkomst, DFEDTARU voor de FOMC-doelen en het SPY-archief (1.2/1.4, 4.5, 01-10) — 805 tests groen
+
+**Probe gedraaid op de VPS** (66 aanroepen, geen fouten, 0 sleutels in de uitvoer). Uitkomst en kanttekeningen
+(ICE BofA-spreads maar drie jaar op FRED; nieuws "leeg" is geen bewijs; realtime-opties een zwakke meting) staan in
+`docs/data-archive.md`, "Uitkomst van de probe op de VPS".
+
+**DFEDTARU voor de FOMC-doelen (roadmap 4.5, vóór de freeze).** `agents/monetary_policy_agent.py`: nieuwe reeks
+`fed_funds_target_upper` (DFEDTARU, dagelijks) in `FRED_SERIES`, `METRIC_SPECS` (tolerance 0,125 = halve stap, severity
+high) en `GRAPH_MAPPING` (`policy_stance`); de twee FOMC-doelen (`direction_after_fomc`, horizon 1 en 2) wijzen ernaar
+i.p.v. naar FEDFUNDS, met bijgewerkte `event_rule` en `resolution_rule`. `direction_after_fomc` zelf is niet veranderd: de
+eerste waarneming NA de besluitdag beslist, en dat werkt voor een dagreeks net zo goed. Winst: de uitkomst is er een dag
+na de vergadering in plaats van vijf tot zes weken. **Trigger-versie v2 -> v3** (alleen deze ene spec erbij; de
+vingerafdruk `1d72aeed38fc97ec` staat in `TRIGGER_FINGERPRINTS`). FRED-volume 15 -> 16 per dag (`test_api_budget`,
+`data-sources.md`). Nieuwe tests: reeks/spec/doelen kloppen; de trigger vuurt op een stap en nooit op geen verandering;
+afwikkelen op de dag na de besluitdag; de besluitdag zelf telt niet als "na". Bestaande tests bijgewerkt waar ze
+`fed_funds_rate` als FOMC-doel noemden (resolver, mapping, baselines, kalibratie-telling 40 -> 41).
+**Bewuste keuze:** FEDFUNDS blijft staan (trend, Taylor Rule), dus een renteverandering geeft twee triggers; zelfde
+afweging als UNRATE in twee agents.
+
+**SPY-holdings-archief (docs/data-archive.md, fase B).** `archive_daily.py` + `src/archive/spy_holdings.py` +
+`archive_daily.sh`: haalt het State Street-bestand op, valideert dat het een echte xlsx is (een HTTP 200 met een
+foutpagina wordt geweigerd), gzipt het, schrijft atomair, leest het terug en vergelijkt de sha256, en voegt een regel
+aan `manifest.jsonl` toe. Eigen proces, eigen map (`MI_ARCHIVE_DIR`, standaard `archive/`, in `.gitignore`), **geen
+databasetoegang** (een test bewaakt dat). `--status` toont ontbrekende werkdagen. 20 tests in `tests/test_archive_spy.py`.
+
+**Niet geverifieerd:** de bron is vanuit de bouwomgeving niet bereikbaar (proxy weigert het domein). Dus pas bekend na de
+eerste run op de VPS: of een User-Agent volstaat, welke datum "as of" betekent, hoe laat de bron ververst, en of de
+as-of-regex het echte bestand leest (best-effort, `null` is geen fout). Staat **niet in de cron**: dry-run-plan in
+`docs/deployment.md`, "Het ruwe archief". De archiefmap zit nog niet in `backup.sh` (handmatige stap, beschreven).
+
+**Bewust niet gedaan:** Kalshi/Polymarket-diepte meten, nieuws opnieuw testen met een kort venster, de probe-adviesregel
+corrigeren voor "nog niet onderzocht", `roadmap.html` bijwerken, reeksenlijst-beslissingen (loonstijging, core CPI,
+commodity-ETF's) vastleggen (DD: "prima" = het voorstel volgen: uitstellen, want FRED-reeksen zijn herstelbaar).
+
 ### Probe-script voor het brede archief (1.2/1.4, 30-09) — 781 tests groen
 
 DD legde een uitgebreid onderzoek (met een ander model) voor over data die niet terug te halen is. Het is

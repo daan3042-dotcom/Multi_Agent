@@ -43,7 +43,7 @@ VERWACHT: dict[str, dict[str, ResolutionMethod]] = {
     "monetary_policy": {
         "10y_treasury_yield": ResolutionMethod.LEVEL_AT_OR_AFTER,
         "2y_treasury_yield": ResolutionMethod.LEVEL_AT_OR_AFTER,
-        "fed_funds_rate": ResolutionMethod.DIRECTION_AFTER_FOMC,
+        "fed_funds_target_upper": ResolutionMethod.DIRECTION_AFTER_FOMC,
     },
     "currency": {
         "eur_usd": ResolutionMethod.LEVEL_AT_OR_AFTER,

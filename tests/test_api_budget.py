@@ -37,15 +37,15 @@ SPY_REFERENTIE_CALLS = 1  # sector haalt SPY één keer op per deep-dive
 
 
 def test_fred_monitoring_volume():
-    """15 calls per dag. FRED is gratis en ruim; dit getal staat hier zodat
+    """16 calls per dag (15 + DFEDTARU op 01-10-2026). FRED is gratis en ruim; dit getal staat hier zodat
     het zichtbaar meegroeit, niet omdat het krap is."""
     fred = (
         len(monetary_policy_agent.FRED_SERIES)
         + len(financial_agent.FRED_SERIES)
         + len(economic_agent.FRED_SERIES)
     )
-    assert fred == 15, (
-        f"FRED-monitoringvolume is {fred}, docs/data-sources.md zegt 15. "
+    assert fred == 16, (
+        f"FRED-monitoringvolume is {fred}, docs/data-sources.md zegt 16. "
         f"Werk dat document in dezelfde ronde bij."
     )
 
@@ -95,7 +95,7 @@ def test_worst_case_volume_op_een_volatiele_dag():
         + len(commodity_agent.COMMODITIES)  # voortschrijdend gemiddelde per grondstof
     )
 
-    assert fred == 20
+    assert fred == 21
     assert alpha_vantage == 47
 
 

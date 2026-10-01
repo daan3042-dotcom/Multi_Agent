@@ -25,10 +25,10 @@ Afgeleid uit de code (`FRED_SERIES`, `FX_PAIRS`, `SECTOR_ETFS`,
 
 | Provider | Agent | Calls |
 |---|---|---|
-| FRED | monetary_policy | 8 |
+| FRED | monetary_policy | 9 |
 | FRED | financial | 4 |
 | FRED | economic | 3 |
-| **FRED totaal** | | **15** |
+| **FRED totaal** | | **16** |
 | Alpha Vantage | currency | 3 |
 | Alpha Vantage | sector | 11 |
 | Alpha Vantage | commodity | 10 |
@@ -50,7 +50,7 @@ dag dat ze aanstaan komt dit erbovenop:
 
 | Provider | Monitoring | Deep-dives | Totaal |
 |---|---|---|---|
-| FRED | 15 | 5 | **20** |
+| FRED | 16 | 5 | **21** |
 | Alpha Vantage | 24 | 22 | **46** |
 
 En let op de vorm van dat getal: het Alpha Vantage-volume **piekt precies

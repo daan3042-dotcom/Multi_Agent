@@ -641,6 +641,80 @@ model draaien om de keten te toetsen, de modelkeuze los daarvan nemen en tijdig 
 doorvoeren.** Dat kan zonder gevolgen voor het cohort, want vóór de freeze is een modelwissel een
 covariaat in `dry_run`, geen vervuiling.
 
+## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
+
+Wat het is en waarom: `docs/data-archive.md`, "Het ruwe archief draaien". Kort: de SPY-samenstelling van State
+Street is de enige bron uit de probe die niet terug te halen is. `archive_daily.py` haalt het bestand één keer
+per dag op, gzipt het onder `archive/spy_holdings/` en schrijft een regel in `manifest.jsonl`. Het is een
+eigen proces zonder database, los van de dagelijkse run: het kan T₀ᵃ niet raken, en T₀ᵃ kan het niet raken.
+
+**Stap 1 — één handmatige run (nu, kost niets, raakt niets anders).**
+
+```bash
+cd /opt/multi_agent && git pull origin claude/beautiful-cori-f9p6h6 && .venv/bin/python archive_daily.py
+```
+
+Wat je ziet bij succes: één regel `spy_holdings: gearchiveerd archive/spy_holdings/2026/... (… B -> … B gzip,
+as_of=…, identiek aan gisteren=False)`. **Dit is de eerste echte test tegen State Street** (de bouw gebeurde in
+een omgeving die dat domein niet kan bereiken), dus drie dingen zijn pas nu bekend:
+
+- Werkt het zonder meer? Zo niet, dan staat er `NIET gearchiveerd:` met de reden (bijvoorbeeld `HTTP 403`: de bron
+  eist iets wat we niet sturen). Er is dan niets weggeschreven.
+- Staat er `as_of=2026-…` of `as_of=None`? Bij `None` komt er een waarschuwing "as_of niet te lezen". Dat is
+  geen fout (het ruwe bestand is bewaard), maar stuur me dan het volgende, zodat ik de leesregel aanpas:
+
+```bash
+cd /opt/multi_agent && zcat "$(ls -t archive/spy_holdings/*/*.gz | head -1)" | .venv/bin/python -c "import sys,io,zipfile; print(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read('xl/sharedStrings.xml').decode()[:1500])"
+```
+
+- Hoe lang het duurt (moet seconden zijn).
+
+**Stap 2 — de cron-regel (pas na een geslaagde stap 1).** Aparte regel, aparte lock, eigen log, **na** de
+dagelijkse run (07:15) zodat ze elkaar nooit raken. 08:30 UTC is bewust: de bron ververst hoogstwaarschijnlijk
+'s avonds Amerikaanse tijd, dus 's ochtends staat de vorige handelsdag erin. Dat laatste is een aanname; stap 3 meet het.
+
+```bash
+crontab -e
+```
+
+```
+30 8 * * 1-5 /usr/bin/flock -n /tmp/mi-archive.lock /opt/multi_agent/archive_daily.sh >> /var/log/mi/archive.log 2>&1
+```
+
+Geen healthchecks-ping eraan in het begin: een mislukte archiefdag is vervelend maar geen alarm (anders dan een
+gemiste ingestiedag). Pas na twee weken stabiel draaien beslissen we of er een eigen check bij komt.
+
+**Stap 3 — twee weken alleen kijken (dagelijks twee seconden).**
+
+```bash
+cd /opt/multi_agent && .venv/bin/python archive_daily.py --status
+```
+
+Wat je controleert, en wat het betekent:
+
+| Je ziet | Betekenis | Actie |
+|---|---|---|
+| `ontbrekende werkdagen: geen` | elke werkdag is binnengekomen | niets |
+| een datum bij ontbrekende werkdagen | die dag mislukte (kijk in `/var/log/mi/archive.log`) | die dag is voorgoed verloren; oorzaak zoeken |
+| `byte-identiek aan de dag ervoor` op een dinsdag t/m vrijdag | de bron ververste niet tussen twee werkdagen | meld het: dan loopt de cron te vroeg |
+| `as_of` is steeds 1 handelsdag oud | verwacht (de run van 08:30 pakt de vorige slotstand) | niets |
+| `as_of` is 2+ handelsdagen oud | de bron loopt achter | meld het |
+| `zonder leesbare as_of` > 0 | de leesregel past niet op het bestand | stuur me het stukje sharedStrings uit stap 1 |
+
+**Opslag:** ~40 KB per dag, dus ongeveer 10 MB per jaar. Geen probleem op deze machine (11 % van 23 GB gebruikt).
+
+**Back-up:** de map `/opt/multi_agent/archive/` zit **niet** in `backup.sh` (dat kopieert alleen de database).
+Voeg dit toe aan `backup.sh` (na de bestaande `rclone copy`-regel), want een archief dat alleen op deze machine
+staat is weg als de machine weg is, en dat is precies de data die niet terug te halen is:
+
+```
+rclone copy /opt/multi_agent/archive do-spaces:<jouw-space-naam>/archive/
+```
+
+**Wat dit bewust niet doet:** de bestanden niet parsen, niets naar de database schrijven, geen andere bronnen
+archiveren (Kalshi/Polymarket wachten op een diepte-meting, betaalde bronnen op DD's budgetbeslissing), en niet
+mee in `run_daily.py`.
+
 ## Externe heartbeat (0a-6): healthchecks.io — ✅ 27-09-2026
 
 1. Account aanmaken op [healthchecks.io](https://healthchecks.io) (gratis
