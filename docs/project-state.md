@@ -1027,6 +1027,89 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Ruw LLM-logboek en Sonnet 5.5 (1.2/1.11, 01-10) — 880 tests groen
+
+**Logboek (`llm_calls`, onveranderlijk).** `MeteredClient` legt bij elke LLM-aanroep het volledige verzoek (alle parameters, geen sleutel) en het
+antwoord (tekst, stop_reason, tokens) of de fout vast, met agent, doel en event-id via `client.context(...)`; `agents/base.py` zet dat voor de
+forecast-ronde, de deep-dive en de QC-review. Een mislukte schrijfactie kost het antwoord niet en laat de run niet crashen maar wordt als ERROR gelogd; er is
+geen regel als de maandrem de aanroep tegenhoudt. `list_llm_calls` leest het terug. Een nieuwe tabel: geen migratie.
+
+**Model: `claude-sonnet-5-5` (besluit DD).** Geverifieerd via de naslag: bestaat, $2/$10, 1M context. Gevonden gevaar: **denken staat daar standaard aan** en telt mee in
+onze kleine `max_tokens`; zonder maatregel zouden antwoorden leeg of afgekapt kunnen komen en de QC-review stil verzwakken. Opgelost centraal in `MeteredClient`
+(`thinking={"type": "between_tools"}`, alleen voor dit model; op 4.6 zou het een 400 zijn), dus `src/qc/` is NIET gewijzigd (checkpoint 2); de QC-review krijgt het model
+via de bestaande `model`-parameter. `DEFAULT_DEEP_DIVE_MODEL` staat nu los in `base.py`. Kostenschatting bijgewerkt (~$0,10 tot $0,17 per week, met denken uit).
+**Niet getest tegen de echte API:** modeltoegang van het account, en of de geïnstalleerde `anthropic`-versie `between_tools` doorgeeft (faalt zichtbaar). Denken aan voor de
+forecast-ronde is een experiment voor de testrun. De kennisgrens juni 2026 is niet onafhankelijk geverifieerd.
+**node_state uitgesteld (DD):** vastgelegd in de roadmap (1.2) met de twee ontwerpopties en de prijs van uitstel; niet gebouwd.
+
+### Vijf kwantielen, optie B (4.1/4.5, 01-10) — 867 tests groen
+
+**Besluit (DD):** niveaus .10 .25 .50 .75 .90. DD koos eerst zeven (optie D) en draaide dat terug naar vijf (optie B). De D-keuze was alleen
+documentatie (geen code); die is met een `git revert` ongedaan gemaakt (commit fe0b2e4), en B is daarna van nul opgebouwd. Contract v0 -> v1.
+
+**Wat er is veranderd:** `QUANTILE_LEVELS`/`QUANTILE_FIELDS` in `contract/prediction.py` als enige bron (prompt, validatie, scoring, baselines en
+kalibratie lezen ze); `Prediction` met `q25` en `q75` en een middenkruising-controle; schema met vijf kolommen en CHECK-constraints (ook `evaluations`:
+`pinball_q25`, `pinball_q75`); `scoring/scores.py` v2 (`pinball_losses(kwantielen, y)`, CRPS = 2 × gemiddelde pinball, geweigerd bij een verkeerd
+aantal); `baselines.py` v2 (persistence en climatology op vijf niveaus), `ridge.py` v2 (residu-kwantielen op vijf niveaus; een bevroren model met een
+ander aantal wordt niet geladen); `agents/base.py` (regel 2 van `FORECAST_SYSTEM_RULES`, JSON-vorm, parser) en `FORECAST_PROMPT_VERSION` v1 -> v2 voor alle vijf
+agents (hashes in `test_forecast_prompt_version.py`); `diagnostics.py` en het rapport (zes gebieden, verwacht 10/15/25/25/15/10%, plus binnen q25-q75 en q10-q90).
+
+**De migratie van een bestaande database (het risicovolste deel, `_migreer_predictions_kwantielen`).** `init_db` draait elke ochtend, dus een crash daar raakt T₀ᵃ.
+Lege `predictions` en `evaluations` worden vervangen door de nieuwe vorm. Staan er rijen in, dan worden beide tabellen NIET weggegooid en NIET gerepareerd maar
+hernoemd naar `predictions_legacy_v0` en `evaluations_legacy_v0` (indexen losgekoppeld, vreemde sleutel volgt de hernoeming), met een warning. Dit wijkt bewust af van
+de eerdere migratie voor `resolution_method`, die hard weigert en daarmee de dagelijkse run zou laten crashen. Getest tegen de EXACTE oude tabelvorm uit git
+(`tests/test_quantile_migration.py`): leeg, met rijen, idempotent, nieuwe voorspellingen en uitkomsten werken erna, de indexen horen bij de nieuwe tabellen.
+
+**Gemeten voor de keuze van de CRPS-weging** (synthetisch, voorspeller die de echte verdeling kent): gelijk gewogen over vijf niveaus 1,9% (normaal) en 0,7% (dikke
+staarten) onder de echte CRPS; weging naar kansbreedte 2,1 en 2,5% erboven; trapezium 4,1 en 4,5% eronder. Gelijk gewogen is dus de dichtste en de eenvoudigste, en is
+niet veranderd. Voor drie niveaus was het ~11% en voor zeven gelijk gewogen 16 tot 19% te laag. De rangorde van voorspellers was bij elke keuze gelijk.
+
+**Ongetest/onzeker:** of een taalmodel vijf kwantielen betrouwbaar en gekalibreerd uitspreekt (nog nooit gemeten; de begeleide `--deep-dives`-testrun is de eerste echte
+meting; meer dan 5% afgewezen kruisingen is het signaal om te heroverwegen); de migratie is niet op de echte VPS-database gedraaid (alleen tegen de oude tabelvorm uit git).
+Staartrisico's (q05/q95) zijn bewust niet vastgelegd. **Op de VPS vóór het uitrollen:** `SELECT COUNT(*) FROM predictions;` (verwacht 0). Is het meer dan 0, dan werkt de migratie
+nog steeds, maar de rijen belanden in de legacy-tabellen. **Dit is een contractwijziging en dus een freeze-item (checkpoint 5), vóór de eerste echte voorspelling.**
+
+### T₀ᵃ-teller, roadmap.html en probe-advies (1.11, 01-10) — 842 tests groen
+
+**`t0a_status.py` + `src/runtime/t0a_status.py` (alleen lezen, database `mode=ro`).** Rekent uit `agent_runs` en `trigger_events` per werkdag
+vanaf 02-10 uit of die schoon was (alle zes agents `ok` én geen volledigheidstrigger), de lopende reeks, en de vroegste datum voor T₀ᵃ. Een dag
+zonder run is "GEEN RUN" en breekt de reeks; vandaag-nog-niet-gedraaid breekt niets; eenmaal gehaald blijft gehaald. Markeert een run buiten
+het cron-venster als "mogelijk handmatig" (vermoeden, telt niet als niet-schoon) en een wisselende trigger-versie. De lijst van zes agents komt uit
+`runtime.daily.default_agents()`. **Kan niet bewijzen dat er geen handmatige actie was; nog nooit gedraaid op de echte database.**
+**`docs/roadmap.html`:** T₀ᵃ op zijn vroegst 12 oktober met de nieuwe definitie, `t0-8` (synthesizer nog niet, menselijke invoer op pauze) en
+een nieuw punt `t0-14` voor de reeksenlijst; alle bestaande ID's gelijk, dus afvinkingen blijven staan; de JavaScript is syntactisch gecontroleerd.
+**Probe-advies:** "nog niet onderzocht" (Atlanta Fed, regionale Fed-enquêtes) is nu "eerst uitzoeken", Yahoo "bewust niet"; betaald blijft "beslissing DD".
+
+### Kalibratie, AUC en effectieve n (4.5, 01-10) — 826 tests groen
+
+Nieuw: `src/scoring/diagnostics.py` (zuivere rekenregels, alleen stdlib, vaste seed), `src/scoring/evaluation_report.py`
+(leest `evaluations` + `predictions`, schrijft niets) en `evaluate_scores.py` (opent de database `mode=ro`; een test bewijst dat
+het bestand ongewijzigd blijft). **Cohorten en soorten (kwantiel/binair) staan altijd in aparte regels**: CRPS en Brier liggen op
+andere schalen, en `dry_run`, `pseudo_oos` en `cohort_0` mogen nooit gemiddeld worden. Per groep: n, n_eff, hoofdscore met 90%-band,
+kalibratie (kwantiel: waar de uitkomst viel; binair: voorspeld versus gebeurd per klasse) en AUC.
+**Effectieve n:** rondegemiddelden, moving-block bootstrap met blokken van `horizon / afstand tussen rondes`, ontwerpeffect =
+variantie met blokken gedeeld door variantie zonder; n_eff = n / ontwerpeffect, nooit boven nominaal. Een test bewijst het punt:
+een gladde (overlappende) reeks geeft minder dan de helft van de effectieve n van witte ruis. **Bewust eerlijk bij weinig data:** onder
+8 rondes of twee blokken is `n_effective=None` en staat er "NIET BETROUWBAAR", want een getal dat vertrouwen wekt zonder grond is erger
+dan geen getal. AUC is `None` bij één soort uitkomst (de Fed verhoogt zelden, dus lang is er geen enkele "gebeurd").
+**Onzeker/ongetest:** nog nooit gedraaid op echte afgewikkelde voorspellingen (die bestaan pas na de eerste horizon, 5 handelsdagen na
+de eerste ronde); de bootstrap is getest op synthetische data. Eén blokgrootte per groep is een vereenvoudiging bij gemengde horizonnen.
+**Bewust niet gedaan:** skill-posterior (heeft een vooraf vastgelegde prior nodig: freeze-item, DD), uitsplitsing per horizon en
+`model_id`, dashboard (5.2). Raakt geen cron, geen trigger, geen QC, geen `run_daily.py`.
+
+### T₀ᵃ verschoven naar op zijn vroegst 12 oktober (01-10) — checkpoint 4
+
+De run van 01-10 was `ok` voor alle zes agents maar niet compleet: sector kreeg 10 van de 12 reeksen (`spy_benchmark`,
+`xlp_consumer_staples` ontbraken; Alpha Vantage, oorzaak onbekend, zelfde bron als de gaten van 28-09 en 29-09). De roadmap
+definieerde "schone dag" nergens. **DD koos de strenge definitie:** alle agents `ok` én geen volledigheidstrigger. Daarmee
+telde 29-09 en 30-09 mee, 01-10 niet, en herstart de telling op 02-10: zeven schone werkdagen zijn op zijn vroegst vol op
+maandag 12 oktober. Mijn eerdere schatting "een dag opschuiven, donderdag 8 oktober" was fout: een niet-schone dag schuift niets
+op, hij zet de teller op nul. De datums van de `--deep-dives`-testrun (13 oktober) en de cron (14 oktober) schuiven mee en de
+begeleide periode overlapt nu de dry-run-week; zie `docs/deployment.md` (voorstel, door DD te bevestigen).
+**Risico:** elke volgende niet-schone dag verschuift T₀ᵃ opnieuw. Alpha Vantage gaf op 3 van de 4 dagen sinds 28-09 gaten.
+Een herhaalpoging per ontbrekende reeks binnen dezelfde run zou dat verkleinen, maar het is een wijziging aan het onbeheerde
+draaien (checkpoint 3) en is nog niet voorgesteld in detail.
+
 ### Probe-uitkomst, DFEDTARU voor de FOMC-doelen en het SPY-archief (1.2/1.4, 4.5, 01-10) — 805 tests groen
 
 **Probe gedraaid op de VPS** (66 aanroepen, geen fouten, 0 sleutels in de uitvoer). Uitkomst en kanttekeningen

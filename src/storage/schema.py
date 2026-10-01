@@ -21,6 +21,7 @@ pas bij de synthesizer opvalt.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
@@ -89,6 +90,27 @@ CREATE TABLE IF NOT EXISTS llm_usage (
     price_note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_llm_usage_called_at ON llm_usage(called_at);
+
+-- Het RUWE antwoord van elke LLM-aanroep, met alles wat erin ging (01-10-2026, DD): zonder dit is
+-- achteraf niet te zien waarom een voorspelling zo uitviel of welke cijfers het model zag. Onveranderlijk:
+-- er is geen update-pad, net als bij predictions. `domain`/`purpose`/`event_id` leggen de koppeling met
+-- een agent_run en met de voorspellingen van die ronde (zelfde `created_at` en agent).
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    called_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    domain TEXT,
+    purpose TEXT,
+    event_id TEXT,
+    request_json TEXT NOT NULL,
+    response_text TEXT,
+    stop_reason TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_called_at ON llm_calls(called_at);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_domain ON llm_calls(domain, purpose, called_at);
 
 CREATE TABLE IF NOT EXISTS trigger_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,7 +206,9 @@ CREATE TABLE IF NOT EXISTS predictions (
     model_id TEXT NOT NULL,
     prompt_version TEXT NOT NULL,
     q10 REAL,
+    q25 REAL,
     q50 REAL,
+    q75 REAL,
     q90 REAL,
     probability REAL,
     event_rule TEXT,
@@ -209,11 +233,14 @@ CREATE TABLE IF NOT EXISTS predictions (
     CHECK (horizon_n > 0),
     CHECK (resolution_method != 'relative_return' OR benchmark_metric_key IS NOT NULL),
     CHECK (
-        (kind = 'quantile' AND q10 IS NOT NULL AND q50 IS NOT NULL AND q90 IS NOT NULL
-             AND probability IS NULL AND event_rule IS NULL AND q10 <= q50 AND q50 <= q90)
+        (kind = 'quantile' AND q10 IS NOT NULL AND q25 IS NOT NULL AND q50 IS NOT NULL
+             AND q75 IS NOT NULL AND q90 IS NOT NULL
+             AND probability IS NULL AND event_rule IS NULL
+             AND q10 <= q25 AND q25 <= q50 AND q50 <= q75 AND q75 <= q90)
         OR
         (kind = 'binary' AND probability IS NOT NULL AND event_rule IS NOT NULL
-             AND probability BETWEEN 0 AND 1 AND q10 IS NULL AND q50 IS NULL AND q90 IS NULL)
+             AND probability BETWEEN 0 AND 1 AND q10 IS NULL AND q25 IS NULL AND q50 IS NULL
+             AND q75 IS NULL AND q90 IS NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS idx_predictions_resolves_at ON predictions(resolves_at);
@@ -230,7 +257,9 @@ CREATE TABLE IF NOT EXISTS evaluations (
     evidence_claim_ids_json TEXT NOT NULL,
     reason TEXT,
     pinball_q10 REAL,
+    pinball_q25 REAL,
     pinball_q50 REAL,
+    pinball_q75 REAL,
     pinball_q90 REAL,
     pinball_mean REAL,
     crps REAL,
@@ -281,6 +310,7 @@ def init_db(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     # Vóór het schema-script: deze migratie ruimt een tabelvorm op die de
     # nieuwe indexen niet aankunnen. Zie zijn docstring.
     _migreer_predictions_resolution_method(conn)
+    _migreer_predictions_kwantielen(conn)
     conn.executescript(_SCHEMA)
     conn.commit()
     _migreer_agent_runs_mode(conn)
@@ -503,6 +533,42 @@ def record_llm_usage(
     )
     conn.commit()
     return cur.lastrowid
+
+
+def record_llm_call(
+    conn: sqlite3.Connection, called_at: datetime, model: str, request: dict,
+    response_text: str | None = None, stop_reason: str | None = None,
+    input_tokens: int | None = None, output_tokens: int | None = None, error: str | None = None,
+    domain: str | None = None, purpose: str | None = None, event_id: str | None = None,
+) -> int:
+    """Legt één LLM-aanroep VOLLEDIG vast: het verzoek (alle parameters, geen sleutel: die zit niet in
+    de aanroep), het antwoord of de fout. Onveranderlijk zodra geschreven."""
+    cur = conn.execute(
+        "INSERT INTO llm_calls (called_at, model, domain, purpose, event_id, request_json, response_text, "
+        "stop_reason, input_tokens, output_tokens, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            called_at.isoformat(), model, domain, purpose, event_id,
+            json.dumps(request, ensure_ascii=False, default=str), response_text, stop_reason,
+            None if input_tokens is None else int(input_tokens),
+            None if output_tokens is None else int(output_tokens), error,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_llm_calls(
+    conn: sqlite3.Connection, domain: str | None = None, purpose: str | None = None, limit: int = 100
+) -> list[dict]:
+    """De opgeslagen aanroepen, nieuwste eerst, als dicts (een logboek, geen contract)."""
+    query, params = "SELECT * FROM llm_calls WHERE 1=1", []
+    for kolom, waarde in (("domain", domain), ("purpose", purpose)):
+        if waarde is not None:
+            query += f" AND {kolom} = ?"
+            params.append(waarde)
+    cur = conn.execute(query + " ORDER BY id DESC LIMIT ?", (*params, limit))
+    namen = [d[0] for d in cur.description]
+    return [dict(zip(namen, rij)) for rij in cur.fetchall()]
 
 
 def llm_usage_since(conn: sqlite3.Connection, since: datetime) -> tuple[float, int, int, int]:
@@ -884,18 +950,18 @@ def _insert_prediction(conn: sqlite3.Connection, prediction: Prediction) -> int:
         """INSERT INTO predictions (
             agent, domain, target_metric_key, kind, horizon_kind, horizon_n,
             created_at, resolves_at, resolution_rule, model_id, prompt_version,
-            q10, q50, q90, probability, event_rule,
+            q10, q25, q50, q75, q90, probability, event_rule,
             cohort, contract_version, graph_version, graph_node,
             causal_chain_json, evidence_claim_ids_json,
             trigger_version, trigger_conditioned, regime_at_creation,
             market_implied_ref, note, resolution_method, benchmark_metric_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             prediction.agent, prediction.domain, prediction.target_metric_key,
             prediction.kind.value, prediction.horizon_kind.value, prediction.horizon_n,
             prediction.created_at.isoformat(), prediction.resolves_at.isoformat(),
             prediction.resolution_rule, prediction.model_id, prediction.prompt_version,
-            prediction.q10, prediction.q50, prediction.q90,
+            prediction.q10, prediction.q25, prediction.q50, prediction.q75, prediction.q90,
             prediction.probability, prediction.event_rule,
             prediction.cohort, prediction.contract_version, prediction.graph_version,
             prediction.graph_node.value if prediction.graph_node else None,
@@ -960,7 +1026,7 @@ def _row_to_prediction(row: tuple) -> Prediction:
     (
         _id, agent, domain, target_metric_key, kind, horizon_kind, horizon_n,
         created_at, resolves_at, resolution_rule, model_id, prompt_version,
-        q10, q50, q90, probability, event_rule, cohort, contract_version,
+        q10, q25, q50, q75, q90, probability, event_rule, cohort, contract_version,
         graph_version, graph_node, causal_chain_json, evidence_claim_ids_json,
         trigger_version, trigger_conditioned, regime_at_creation,
         market_implied_ref, note, resolution_method, benchmark_metric_key,
@@ -972,7 +1038,7 @@ def _row_to_prediction(row: tuple) -> Prediction:
         created_at=datetime.fromisoformat(created_at),
         resolves_at=datetime.fromisoformat(resolves_at),
         resolution_rule=resolution_rule, model_id=model_id, prompt_version=prompt_version,
-        q10=q10, q50=q50, q90=q90, probability=probability, event_rule=event_rule,
+        q10=q10, q25=q25, q50=q50, q75=q75, q90=q90, probability=probability, event_rule=event_rule,
         cohort=cohort, contract_version=contract_version, graph_version=graph_version,
         graph_node=Node(graph_node) if graph_node else None,
         causal_chain=tuple(json.loads(causal_chain_json)),
@@ -1070,6 +1136,74 @@ def _migreer_predictions_resolution_method(conn: sqlite3.Connection) -> bool:
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
     return True
+
+def _migreer_predictions_kwantielen(conn: sqlite3.Connection) -> bool:
+    """Van drie naar vijf kwantielen (contract v0 -> v1, 01-10-2026, DD). Geeft
+    True terug als er gemigreerd is.
+
+    WAAROM HERBOUWEN: een CHECK-constraint (hier: vijf kwantielen verplicht en
+    oplopend) is met ALTER TABLE niet te wijzigen, en een NOT NULL-kolom
+    toevoegen kan niet zonder een verzonnen default. Een oude rij zou dan een
+    q25 en q75 krijgen die niemand heeft uitgesproken.
+
+    TWEE GEVALLEN, en geen van beide mag de dagelijkse run laten crashen
+    (`init_db` draait elke ochtend; een uitzondering hier zou de T₀ᵃ-klok raken):
+    - `predictions` en `evaluations` zijn LEEG (de verwachte stand: de
+      forecast-ronde draait nog nergens in productie). Dan worden ze simpelweg
+      vervangen door de nieuwe vorm.
+    - Er STAAN rijen. Dan worden beide tabellen NIET weggegooid en NIET
+      gerepareerd (dat zou raden zijn), maar hernoemd naar
+      `predictions_legacy_v0` en `evaluations_legacy_v0`, mét hun indexen
+      losgekoppeld, en komt er een verse, lege tabel naast. Niets gaat
+      verloren; de oude rijen zijn in de oude vorm terug te lezen. Dit
+      verschilt bewust van de hard-weigerende migratie van `resolution_method`:
+      daar kon een rij niet bestaan zonder methode, hier is de oude rij
+      gewoon een geldige voorspelling in een andere vorm.
+
+    Draait VÓÓR het schema-script (de nieuwe tabel moet dan vrij zijn)."""
+    huidige = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'predictions'"
+    ).fetchone()
+    if huidige is None or "q25" in huidige[0]:
+        return False
+
+    def tel(tabel: str) -> int:
+        bestaat = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (tabel,)
+        ).fetchone()
+        return conn.execute(f"SELECT COUNT(*) FROM {tabel}").fetchone()[0] if bestaat else 0
+
+    n_voorspellingen, n_evaluaties = tel("predictions"), tel("evaluations")
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with conn:
+            if n_voorspellingen == 0 and n_evaluaties == 0:
+                conn.execute("DROP TABLE IF EXISTS evaluations")
+                conn.execute("DROP TABLE predictions")
+            else:
+                for oud in ("predictions_legacy_v0", "evaluations_legacy_v0"):
+                    if conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE name = ?", (oud,)
+                    ).fetchone():
+                        raise RuntimeError(f"{oud} bestaat al; migratie naar vijf kwantielen niet nog eens uitvoeren")
+                conn.execute("ALTER TABLE evaluations RENAME TO evaluations_legacy_v0")
+                conn.execute("ALTER TABLE predictions RENAME TO predictions_legacy_v0")
+                # Een hernoemde tabel neemt zijn indexen mét NAAM mee; blijven ze staan, dan
+                # slaat `CREATE INDEX IF NOT EXISTS` voor de nieuwe tabel stil over.
+                for (index,) in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL "
+                    "AND tbl_name IN ('predictions_legacy_v0', 'evaluations_legacy_v0')"
+                ).fetchall():
+                    conn.execute(f"DROP INDEX {index}")
+                logging.getLogger(__name__).warning(
+                    "predictions had %d en evaluations %d rij(en) in de oude vorm met drie kwantielen: "
+                    "hernoemd naar predictions_legacy_v0 en evaluations_legacy_v0. Niets verwijderd.",
+                    n_voorspellingen, n_evaluaties,
+                )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    return True
+
 
 def _migreer_trigger_events_versie(conn: sqlite3.Connection) -> bool:
     """Voegt `trigger_events.trigger_version` toe aan een bestaande database
@@ -1199,15 +1333,16 @@ def save_evaluation(
         """INSERT INTO evaluations (
             prediction_id, status, resolved_at, realised_value, realised_at,
             evidence_claim_ids_json, reason,
-            pinball_q10, pinball_q50, pinball_q90, pinball_mean, crps,
+            pinball_q10, pinball_q25, pinball_q50, pinball_q75, pinball_q90, pinball_mean, crps,
             brier, log_loss, within_interval, scorer_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             prediction_id, status, resolved_at.isoformat(), realised_value,
             realised_at.isoformat() if realised_at else None,
             json.dumps(list(claim_ids)), reason,
-            scores.get("pinball_q10"), scores.get("pinball_q50"),
-            scores.get("pinball_q90"), scores.get("pinball_mean"), scores.get("crps"),
+            scores.get("pinball_q10"), scores.get("pinball_q25"), scores.get("pinball_q50"),
+            scores.get("pinball_q75"), scores.get("pinball_q90"),
+            scores.get("pinball_mean"), scores.get("crps"),
             scores.get("brier"), scores.get("log_loss"),
             None if scores.get("within_interval") is None else int(scores["within_interval"]),
             scorer_version,

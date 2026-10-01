@@ -225,7 +225,7 @@ puur "haalt de ingestieklok elke dag zonder tussenkomst echte data op".
 
 **Na 3 schone dagen:** zie het aparte plan hieronder ("Dry-run-plan voor
 `--deep-dives`"). **T₀ᵃ is gehaald** na zeven werkdagen op rij ingestie zonder
-handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober). Een eerdere
+handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober en op 01-10 naar op zijn vroegst 12 oktober, met de strenge definitie van een schone dag: alle agents `ok` én geen volledigheidstrigger). Een eerdere
 versie van deze zin koppelde T₀ᵃ aan zeven dagen mét `--deep-dives`; dat is de
 voorspelmeting (T₀ᵇ), niet de ingestieklok, en is rechtgezet.
 
@@ -478,10 +478,20 @@ en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
 dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
 dry-run.
 
+## De T₀ᵃ-teller (alleen lezen)
+
+```bash
+cd /opt/multi_agent && .venv/bin/python t0a_status.py
+```
+
+Toont per werkdag vanaf 2 oktober `schoon`, `NIET SCHOON` (met de reden, bijvoorbeeld de ontbrekende reeks), `GEEN RUN` of `nog niet`,
+de lopende reeks van zeven en de vroegste datum voor T₀ᵃ. Schoon = alle zes agents ok én geen volledigheidstrigger. Gebruik `--vanaf <datum>`
+als de telling na een nieuwe breuk opnieuw moet beginnen. Het script schrijft niets. "Mogelijk handmatig" betekent: een run buiten 07:00 tot 09:00 UTC; beoordeel zelf.
+
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
-blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op 7 oktober). DD keurde het plan
+blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op zijn vroegst 12 oktober). DD keurde het plan
 goed met één aanpassing: de maandgrens voor LLM-kosten staat op **$200**, niet $20.
 
 ### Wat de vlag aanzet (uit de code, `runtime/daily.py`)
@@ -509,16 +519,18 @@ opgeslagen, en elke agent zit in zijn eigen foutisolatie.
 Tokens zijn geschat uit de promptlengtes in de code (systeemprompts 1.400 tot 2.200
 tekens, plus de claims van het domein): ongeveer 2.000 invoer- en 1.000 uitvoertokens
 per forecast-aanroep, en 1.500 in en 800 uit per deep-dive plus een korte kwaliteitscontrole.
-Tegen de prijs van het huidige model (`claude-sonnet-4-6`, $3 per miljoen invoer- en $15 per
-miljoen uitvoertokens, prijzen van 25-09-2026):
+Tegen de prijs van het huidige model (**sinds 01-10 `claude-sonnet-5-5`**, $2 per miljoen invoer- en $10 per
+miljoen uitvoertokens; was `claude-sonnet-4-6` met $3 en $15; prijzen van 25-09-2026), met denken uitgezet
+(zie hieronder), dus dezelfde tokenaantallen als eerder:
 
 | Onderdeel | Aanroepen per week | Kosten per week |
 |---|---|---|
-| Forecast-ronde | 5 | ~$0,10 |
-| Deep-dives | 2 tot 3 domeinen | ~$0,05 |
-| **Totaal** | ~10 tot 15 | **~$0,15 tot $0,25** |
+| Forecast-ronde | 5 | ~$0,07 |
+| Deep-dives | 2 tot 3 domeinen | ~$0,03 |
+| **Totaal** | ~10 tot 15 | **~$0,10 tot $0,17** |
 
-Dat is ongeveer $8 tot $13 per jaar. De slechtste dag (alle zes de domeinen triggeren)
+Dat is ongeveer $5 tot $9 per jaar. **Zou denken aan komen te staan, dan komen er tokens bij die niet in deze
+schatting zitten; meten in de begeleide testrun.** De slechtste dag (alle zes de domeinen triggeren)
 is ongeveer $0,15. Zelfs met een factor vijf te laag geschat is het tientallen dollars per
 jaar. **Kosten zijn dus niet de reden voor voorzichtigheid; de betrouwbaarheid van de keten is dat.**
 Meten kan pas na de eerste run, in het Anthropic-console onder Usage.
@@ -552,16 +564,18 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
 
 ### Voorwaarden om te beginnen
 
-- [ ] T₀ᵃ gehaald: zeven werkdagen op rij ingestie zonder handmatige actie (op zijn
-      vroegst woensdag 7 oktober, als de reeks op 29-09 begon). **Een handmatige testrun
+- [ ] T₀ᵃ gehaald: zeven schone werkdagen op rij zonder handmatige actie (schoon = alle agents
+      `ok` én geen volledigheidstrigger). Op zijn vroegst **maandag 12 oktober**: de reeks begon op
+      29-09, maar de run van 01-10 was niet schoon (sector 10 van 12 reeksen), dus de telling
+      herstartte op 02-10. **Een handmatige testrun
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
-- [ ] Trigger-versie `v2` in de log en in `trigger_events`.
+- [ ] Trigger-versie `v3` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
 - [x] Een uitgavenlimiet van $200 per maand in het Anthropic-console (ingesteld door DD op 30-09; de
       code-rem van hetzelfde bedrag is de tweede lijn).
 - [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
 
-### Fase 1 — één begeleide testrun (voorstel: donderdag 8 oktober, middag)
+### Fase 1 — één begeleide testrun (voorstel: op zijn vroegst dinsdag 13 oktober, middag; was 8 oktober vóór de verschuiving van T₀ᵃ op 01-10)
 
 De cron van 07:15 heeft dan al gedraaid; monitoring wordt bij een tweede run
 overgeslagen (idempotent). Draai met de hand:
@@ -595,8 +609,16 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    sqlite3 market_intelligence.db "SELECT domain, status, COUNT(*) FROM qc_cases GROUP BY domain, status;"
    ```
    `NEEDS_REVIEW` is een vlag en geen fout (CLAUDE.md, regel 3): lees de tekst voordat je oordeelt.
-6. **Lees minstens twee voorspellingen met de hand** en kijk of de kwantielen (q10 < q50 < q90)
+6. **Lees minstens twee voorspellingen met de hand** en kijk of de vijf kwantielen (q10 ≤ q25 ≤ q50 ≤ q75 ≤ q90)
    en de onderbouwing te volgen zijn. Dit is het enige punt dat geen test kan controleren.
+   **Het ruwe antwoord van het model terugkijken** (nieuw sinds 01-10): elke aanroep staat in `llm_calls`, met het volledige verzoek (inclusief de
+   denkinstelling) en het antwoord. Handig bij een afgewezen voorspelling of een kruisend kwantiel:
+
+   ```bash
+   cd /opt/multi_agent && sqlite3 -header -column market_intelligence.db "SELECT id, purpose, domain, model, stop_reason, input_tokens, output_tokens, substr(response_text, 1, 100) AS begin FROM llm_calls ORDER BY id DESC LIMIT 12;"
+   ```
+
+   Staat er bij een rij `stop_reason = max_tokens` of een lege `response_text`, dan was de limiet te krap (met denken uit zou dat niet moeten gebeuren).
 7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console
    onder Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een factor tien af, of wijken de
    tokens in de database sterk af van het console, stop dan en meld het.
@@ -604,11 +626,11 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
 **Stop en meld het** bij: voorspellingen onder een ander cohort dan `dry_run`; een agent zonder
 enkele voorspelling; een run langer dan tien minuten; kosten een factor tien boven de schatting.
 
-### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf vrijdag 9 oktober)
+### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf woensdag 14 oktober; was 9 oktober)
 
 Alleen als fase 1 schoon was: `--deep-dives` toevoegen aan de cron-regel (`crontab -e`,
 dezelfde regel als in dit document, plus de vlag). Ronden vallen dan op de maandagen
-12, 19 en 26 oktober (plus een inhaalronde op vrijdag 9 oktober voor de lopende week).
+19 en 26 oktober en 2 november (plus een inhaalronde op woensdag 14 oktober voor de lopende week). **De drie weken lopen nu tot 4 november en overlappen de dry-run-week (27 oktober tot 9 november).** Dat is een voorstel dat DD moet bevestigen: of de begeleide periode op twee weken zetten, of de dry-run-week laten beginnen zodra de begeleide periode schoon is.
 
 **Elke dag, twee minuten:** de laatste regels van `daily.log`. Exit 0, of exit 1 met een
 begrijpelijke reden (de ridge-melding op de rondedag is verwacht).
@@ -631,15 +653,27 @@ bevroren worden. Drie weken begeleid draaien ervoor betekent dat de meeste foute
 
 ### Beslissing die vóór fase 3 valt: welk model?
 
-De code gebruikt overal `claude-sonnet-4-6` (`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de
-deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de pseudo-OOS-run uit van een model met
-een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5). Die twee kloppen niet
-met elkaar. Een ander model is geen kostenkwestie (zie boven) maar een codekwestie: de nieuwere
-modellen hebben altijd-aan-denken (dat de 2000 tokens van de forecast-ronde kan opeten), ondersteunen
-geen vaste `tool_choice` en vragen nieuwe promptafstemming. Voorstel: **fase 1 en 2 op het huidige
-model draaien om de keten te toetsen, de modelkeuze los daarvan nemen en tijdig vóór 27 oktober
-doorvoeren.** Dat kan zonder gevolgen voor het cohort, want vóór de freeze is een modelwissel een
-covariaat in `dry_run`, geen vervuiling.
+**[01-10 BESLOTEN door DD: `claude-sonnet-5-5`.]** Tot dan gebruikte de code overal `claude-sonnet-4-6`
+(`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de
+pseudo-OOS-run uit van een model met een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5).
+Sonnet 5.5 zegt van zichzelf een kennisgrens van juni 2026 te hebben; **dat is niet onafhankelijk geverifieerd** (de naslag
+noemt geen kennisgrens). Prijs wel bevestigd: $2/$10, 1M context.
+
+**Wat er voor de wissel is geregeld (`runtime/llm_budget.py`, `agents/base.py`):**
+- **Denken staat op Sonnet 5.5 standaard AAN** (op 4.6 stond het uit). Onze aanroepen hebben een kleine `max_tokens` (500 QC-review,
+  800 deep-dive, 2000 forecast), waar het denken in meetelt: zonder maatregel kunnen antwoorden leeg of afgekapt terugkomen en
+  verzwakt de QC-review stil. `MeteredClient` zet daarom bij elke aanroep naar dit model `thinking={"type": "between_tools"}` mee
+  (de manier om denken uit te zetten; `disabled` geeft een 400). Dit geldt centraal voor alle aanroepen, zonder `src/qc/` aan te raken.
+  **Denken AAN voor de forecast-ronde is een experiment voor de begeleide testrun**, niet iets dat nu is beslist.
+- De QC-review draait nu ook op Sonnet 5.5, via de bestaande `model`-parameter van `default_llm_review` (aangeroepen vanuit `base.py`);
+  `qc.DEFAULT_LLM_REVIEW_MODEL` in `qc.py` staat ONGEWIJZIGD op `claude-sonnet-4-6` (checkpoint 2).
+- Geen `temperature`, `tool_choice` of prefill in onze aanroepen, dus de overige breuken van Sonnet 5.5 raken ons niet.
+- **Nog niet getest tegen de echte API:** of jouw account toegang heeft tot dit model en of `between_tools` door de geïnstalleerde `anthropic`-versie
+  op de VPS wordt doorgegeven. Beide falen zichtbaar (fout in de log, exit 1), niet stil. De begeleide testrun is de eerste echte meting.
+- Een refusal (`stop_reason: "refusal"`, veiligheidsclassifier) is op dit model mogelijk; onze code ziet dat als een lege respons en meldt het als
+  fout. De naslag raadt server-side fallbacks aan; dat is bewust niet ingebouwd (extra model, extra kosten) en een optie als het in de testrun voorkomt.
+- **Het logboek (`llm_calls`)** legt elk verzoek (inclusief de denkinstelling) en elk antwoord vast, zodat de instelling per voorspelling terug te vinden is.
+  De denkinstelling staat dus NIET in `model_id`; het is een covariaat die alleen in dit logboek staat.
 
 ## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
 

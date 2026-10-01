@@ -33,7 +33,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from contract.prediction import Prediction, PredictionKind
+from contract.prediction import QUANTILE_FIELDS, Prediction, PredictionKind
 from contract.resolution import (
     NotYetResolvable,
     Observation,
@@ -149,15 +149,12 @@ def resolve_one(conn, prediction: Prediction) -> Resolution:
 def score_prediction(prediction: Prediction, realised: float) -> dict[str, float]:
     """De scores voor één afgewikkelde voorspelling. Zuivere functie."""
     if prediction.kind is PredictionKind.QUANTILE:
-        verliezen = pinball_losses(prediction.q10, prediction.q50, prediction.q90, realised)
+        waarden = prediction.quantile_values()
+        verliezen = pinball_losses(waarden, realised)
         return {
-            "pinball_q10": verliezen["q10"],
-            "pinball_q50": verliezen["q50"],
-            "pinball_q90": verliezen["q90"],
+            **{f"pinball_{veld}": verliezen[veld] for veld in QUANTILE_FIELDS},
             "pinball_mean": verliezen["mean"],
-            "crps": crps_from_quantiles(
-                prediction.q10, prediction.q50, prediction.q90, realised
-            ),
+            "crps": crps_from_quantiles(waarden, realised),
             "within_interval": within_interval(prediction.q10, prediction.q90, realised),
         }
     gebeurde = realised >= 0.5

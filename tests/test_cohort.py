@@ -53,7 +53,7 @@ def _prediction(**kw) -> Prediction:
         horizon_kind=HorizonKind.TRADING_DAYS, horizon_n=5,
         created_at=NU, resolves_at=NU + timedelta(days=7),
         resolution_rule="regel", resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
-        model_id="m", prompt_version="p", q10=1.0, q50=2.0, q90=3.0,
+        model_id="m", prompt_version="p", q10=1.0, q25=1.5, q50=2.0, q75=2.5, q90=3.0,
     )
     basis.update(kw)
     return Prediction(**basis)
@@ -159,7 +159,7 @@ _DOEL = ForecastTarget(
     horizons=(5,), resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
     resolution_rule="x op of na resolves_at ({horizon_n} handelsdagen)",
 )
-_ANTWOORD = '{"forecasts": [{"metric_key": "x", "horizon_n": 5, "q10": 1.0, "q50": 2.0, "q90": 3.0}]}'
+_ANTWOORD = '{"forecasts": [{"metric_key": "x", "horizon_n": 5, "q10": 1.0, "q25": 1.5, "q50": 2.0, "q75": 2.5, "q90": 3.0}]}'
 
 
 def _historie(conn):

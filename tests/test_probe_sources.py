@@ -90,6 +90,29 @@ def test_de_adviesregel(status, herstelbaar, verwacht):
     assert bepaal_advies(status, herstelbaar) == verwacht
 
 
+def test_nog_niet_onderzocht_is_een_onderzoeksvraag_en_geen_beslissing_voor_dd():
+    """Regressie 01-10-2026: Atlanta Fed en de regionale Fed-enquêtes stonden als
+    'beslissing DD (niet beschikbaar of betaald)', terwijl ze alleen nog niet
+    bekeken waren. Wat wél betaald of niet beschikbaar is, blijft een beslissing."""
+    from sources.probe import ADVIES_UITGESLOTEN, ADVIES_UITZOEKEN, STATUS_BEWUST_NIET
+
+    assert bepaal_advies(STATUS_NIET_GEPROBEERD, HERSTELBAAR_ONBEKEND, "gratis") == ADVIES_UITZOEKEN
+    assert bepaal_advies(STATUS_NIET_GEPROBEERD, HERSTELBAAR_ONBEKEND, "betaald") == ADVIES_BESLISSING
+    assert bepaal_advies(STATUS_NIET_GEPROBEERD, HERSTELBAAR_NEE, "gratis") == ADVIES_BESLISSING
+    assert bepaal_advies(STATUS_BEWUST_NIET, HERSTELBAAR_ONBEKEND, "gratis") == ADVIES_UITGESLOTEN
+
+
+def test_de_statische_rijen_krijgen_het_juiste_advies():
+    from sources.probe import ADVIES_UITGESLOTEN, ADVIES_UITZOEKEN, _niet_geprobeerd
+
+    per_id = {r.id: r.advies for r in _niet_geprobeerd()}
+    assert per_id["atlanta_mpt"] == ADVIES_UITZOEKEN
+    assert per_id["regionale_fed_surveys"] == ADVIES_UITZOEKEN
+    assert per_id["yahoo_tickers"] == ADVIES_UITGESLOTEN
+    for betaald in ("consensus_macro", "fedfunds_futures", "earnings_consensus", "ism_pmi", "cme_cvol", "futures_intraday"):
+        assert per_id[betaald] == ADVIES_BESLISSING, betaald
+
+
 def test_niet_bereikbaar_en_niet_terug_te_halen_is_nooit_archief_nu():
     """Je kunt niet archiveren wat je niet kunt ophalen: dat is een beslissing (vaak een prijs)."""
     assert bepaal_advies(STATUS_NIET_BEREIKBAAR, HERSTELBAAR_NEE) == ADVIES_BESLISSING
@@ -358,9 +381,11 @@ def test_de_niet_terug_te_halen_bron_krijgt_advies_archief_nu():
 def test_betaalde_bronnen_zonder_bron_zijn_een_beslissing_voor_dd():
     resultaten = {r.id: r for r in probe.voer_uit(_ctx(_router()))}
 
-    for id in ("consensus_macro", "fedfunds_futures", "ism_pmi", "yahoo_tickers"):
+    for id in ("consensus_macro", "fedfunds_futures", "ism_pmi"):
         assert resultaten[id].status == STATUS_NIET_GEPROBEERD
         assert resultaten[id].advies == ADVIES_BESLISSING
+    # Yahoo is geen beslissing maar een bewuste uitsluiting (CLAUDE.md regel 2), sinds 01-10-2026.
+    assert resultaten["yahoo_tickers"].advies == "bewust niet (zie reden)"
 
 
 def test_het_callvolume_van_alpha_vantage_blijft_klein():

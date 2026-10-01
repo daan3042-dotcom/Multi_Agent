@@ -292,7 +292,7 @@ def _voorspelling(**kw) -> Prediction:
         horizon_kind=HorizonKind.TRADING_DAYS, horizon_n=5,
         created_at=NU, resolves_at=NU + timedelta(days=7),
         resolution_rule="regel", resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
-        model_id="m", prompt_version="p", q10=1.0, q50=2.0, q90=3.0,
+        model_id="m", prompt_version="p", q10=1.0, q25=1.5, q50=2.0, q75=2.5, q90=3.0,
     )
     basis.update(kw)
     return Prediction(**basis)

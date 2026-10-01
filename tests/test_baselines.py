@@ -116,8 +116,10 @@ def test_persistence_mediaan_is_het_anker_en_spreiding_komt_uit_de_historie(tmp_
     """Hand: veranderingen [-2,-1,0,1,2] acht keer herhaald (40 vensters,
     h=1), beginwaarde 100. Elke cyclus telt op tot 0, dus het anker is 100.
     Gesorteerd: acht keer elk. q10: positie 3,9 -> index 3 en 4, beide -2.
-    q50: positie 19,5 -> index 19 en 20, beide 0. q90: positie 35,1 -> index
-    35 en 36, beide 2. Persistence = anker + (q - q50) = (98, 100, 102)."""
+    q25: positie 9,75 -> index 9 en 10, beide -1. q50: positie 19,5 -> index 19
+    en 20, beide 0. q75: positie 29,25 -> index 29 en 30, beide 1. q90: positie
+    35,1 -> index 35 en 36, beide 2. Persistence = anker + (q - q50) =
+    (98, 99, 100, 101, 102)."""
     conn = _db(tmp_path)
     stappen = [-2, -1, 0, 1, 2] * 8
     waarden = [100.0]
@@ -128,7 +130,7 @@ def test_persistence_mediaan_is_het_anker_en_spreiding_komt_uit_de_historie(tmp_
     uitkomst = baseline_predictions(conn, "monetary_policy", [_doel()], MAANDAG)
 
     p = _per_agent(uitkomst)[PERSISTENCE]
-    assert (p.q10, p.q50, p.q90) == (98.0, 100.0, 102.0)
+    assert (p.q10, p.q25, p.q50, p.q75, p.q90) == (98.0, 99.0, 100.0, 101.0, 102.0)
     assert uitkomst.issues == ()
 
 
@@ -403,7 +405,7 @@ def test_baseline_voorspelt_exact_wat_de_agent_voorspelt(tmp_path):
         assert p.created_at == MAANDAG
         assert p.graph_node is doel.graph_node
         assert p.model_id == "deterministic"
-        assert p.prompt_version == "baseline-v1"
+        assert p.prompt_version == "baseline-v2"
         assert p.q10 <= p.q50 <= p.q90
 
 

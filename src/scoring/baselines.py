@@ -45,11 +45,11 @@ from datetime import datetime
 
 from agents.base import ForecastTarget
 from contract.horizons import ReleaseCadence, resolves_at_for
-from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract.prediction import QUANTILE_FIELDS, QUANTILE_LEVELS, HorizonKind, Prediction, PredictionKind
 from contract.resolution import Observation, ResolutionMethod, eerste_prints
 from scoring.resolver import observations_for
 
-BASELINE_VERSION = "v1"
+BASELINE_VERSION = "v2"  # v2 (01-10-2026): vijf kwantielen i.p.v. drie
 """Versie van de baselines. Gaat mee als `prompt_version` (zelfde rol: een
 wijziging binnen een cohort is een covariaat, maar moet achteraf te zien
 zijn). Verander je hier iets aan de rekenwijze, verhoog dit dan."""
@@ -113,7 +113,7 @@ class BaselineRoundResult:
 def empirical_quantile(sorted_values: list[float], q: float) -> float:
     """Empirisch kwantiel met lineaire interpolatie tussen rangen (de
     gangbare 'type 7'-definitie). Eigen implementatie omdat een
-    numpy-dependency niet nodig is voor drie kwantielen (CLAUDE.md regel 2),
+    numpy-dependency niet nodig is voor vijf kwantielen (CLAUDE.md regel 2),
     en omdat de definitie hier vastligt in plaats van van een versie
     afhangt."""
     if not sorted_values:
@@ -126,13 +126,10 @@ def empirical_quantile(sorted_values: list[float], q: float) -> float:
     return sorted_values[onder] + (positie - onder) * (sorted_values[boven] - sorted_values[onder])
 
 
-def _kwantielen(waarden: list[float]) -> tuple[float, float, float]:
+def _kwantielen(waarden: list[float]) -> tuple[float, ...]:
+    """De empirische kwantielen op alle niveaus van `QUANTILE_LEVELS`."""
     ordered = sorted(waarden)
-    return (
-        empirical_quantile(ordered, 0.10),
-        empirical_quantile(ordered, 0.50),
-        empirical_quantile(ordered, 0.90),
-    )
+    return tuple(empirical_quantile(ordered, niveau) for niveau in QUANTILE_LEVELS)
 
 
 # --------------------------------------------------------------------------
@@ -260,7 +257,7 @@ def _sample(conn, target: ForecastTarget, horizon_n: int, as_of: datetime) -> _S
 # --------------------------------------------------------------------------
 
 
-def persistence_quantiles(sample: _Sample) -> tuple[float, float, float]:
+def persistence_quantiles(sample: _Sample) -> tuple[float, ...]:
     """"Het blijft zoals het is": mediaan = anker, spreiding uit de
     historische veranderingen over de horizon.
 
@@ -270,11 +267,12 @@ def persistence_quantiles(sample: _Sample) -> tuple[float, float, float]:
     verslaat een agent die dat niet weet, om de verkeerde reden. Bij
     relatief rendement is het anker 0: 'de sector blijft even sterk als de
     markt'."""
-    q10, q50, q90 = _kwantielen(sample.deltas)
-    return (sample.anchor + q10 - q50, sample.anchor, sample.anchor + q90 - q50)
+    gecentreerd = _kwantielen(sample.deltas)
+    mediaan = gecentreerd[QUANTILE_LEVELS.index(0.50)]
+    return tuple(sample.anchor + q - mediaan for q in gecentreerd)
 
 
-def climatology_quantiles(sample: _Sample, resolves_at: datetime) -> tuple[tuple[float, float, float], str]:
+def climatology_quantiles(sample: _Sample, resolves_at: datetime) -> tuple[tuple[float, ...], str]:
     """De onvoorwaardelijke historische verdeling, conditioneel op de
     kalendermaand van `resolves_at` zodra daar genoeg waarnemingen voor zijn.
 
@@ -295,9 +293,8 @@ def climatology_quantiles(sample: _Sample, resolves_at: datetime) -> tuple[tuple
 
 def _bouw(
     naam: str, domain: str, target: ForecastTarget, horizon_n: int, now: datetime,
-    kwantielen: tuple[float, float, float], note: str,
+    kwantielen: tuple[float, ...], note: str,
 ) -> Prediction:
-    q10, q50, q90 = kwantielen
     return Prediction(
         agent=naam,
         domain=domain,
@@ -312,7 +309,7 @@ def _bouw(
         benchmark_metric_key=target.benchmark_metric_key,
         model_id=BASELINE_MODEL_ID,
         prompt_version=f"baseline-{BASELINE_VERSION}",
-        q10=q10, q50=q50, q90=q90,
+        **dict(zip(QUANTILE_FIELDS, kwantielen)),
         graph_node=target.graph_node,
         note=note,
     )

@@ -151,12 +151,13 @@ het cohort verdwenen.
 - **Pinball loss** — per kwantiel, asymmetrisch. Bij het 10%-punt is te
   hoog voorspellen negen keer zo duur als te laag. Daardoor loont het om
   je echte 10%-punt op te schrijven en niet een veilige marge.
-- **CRPS** — de drie pinball losses samengevat in één getal.
+- **CRPS** — de vijf pinball losses (q10, q25, q50, q75, q90) samengevat in één getal.
 - **Brier** en **log loss** — voor kansvoorspellingen. Log loss straft
   overmoed veel harder: 99% zeggen en ernaast zitten kost een veelvoud van
   90% zeggen en ernaast zitten.
-- **Binnen het interval?** — over veel voorspellingen hoort dit ~80% te
-  zijn. Zit een agent op 50%, dan is hij overmoedig; zit hij op 98%, dan
+- **Binnen het interval?** — over veel voorspellingen hoort de uitkomst in
+  ~80% van de gevallen tussen q10 en q90 te vallen, en in ~50% tussen q25 en q75
+  (die tweede check is bij weinig data de informatiefste). Zit een agent op 50%, dan is hij overmoedig; zit hij op 98%, dan
   zijn zijn voorspellingen zo breed dat ze niets zeggen. Allebei
   onzichtbaar in een gemiddelde pinball loss.
 

@@ -23,8 +23,13 @@ from __future__ import annotations
 
 import math
 
-SCORER_VERSION = "v1"
+from contract.prediction import QUANTILE_FIELDS, QUANTILE_LEVELS
+
+SCORER_VERSION = "v2"
 """Versie van de scoringsregels. Gaat mee in elke evaluation-rij.
+
+v2 (01-10-2026): vijf kwantielen i.p.v. drie. Nog vóór de eerste echte
+afwikkeling; v1-scores bestaan niet.
 
 Zelfde reden als `prompt_version` bij de predictions: verandert de manier
 van scoren, dan zijn oude en nieuwe scores niet meer op één hoop te gooien.
@@ -54,38 +59,51 @@ def pinball_loss(quantile_level: float, voorspeld: float, werkelijk: float) -> f
     return (quantile_level - 1) * fout
 
 
-def pinball_losses(q10: float, q50: float, q90: float, werkelijk: float) -> dict[str, float]:
-    """De drie pinball losses plus hun gemiddelde."""
+def pinball_losses(kwantielen: tuple[float, ...] | list[float], werkelijk: float) -> dict[str, float]:
+    """De pinball losses per niveau (sleutels `q10`, `q25`, `q50`, `q75`, `q90`)
+    plus hun gemiddelde (`mean`). `kwantielen` staan in de volgorde van
+    `contract.prediction.QUANTILE_LEVELS`; een andere lengte is een bug en wordt
+    geweigerd in plaats van afgekapt."""
+    if len(kwantielen) != len(QUANTILE_LEVELS):
+        raise ValueError(
+            f"{len(QUANTILE_LEVELS)} kwantielen verwacht ({', '.join(QUANTILE_FIELDS)}), "
+            f"kreeg er {len(kwantielen)}"
+        )
     verliezen = {
-        "q10": pinball_loss(0.10, q10, werkelijk),
-        "q50": pinball_loss(0.50, q50, werkelijk),
-        "q90": pinball_loss(0.90, q90, werkelijk),
+        veld: pinball_loss(niveau, waarde, werkelijk)
+        for veld, niveau, waarde in zip(QUANTILE_FIELDS, QUANTILE_LEVELS, kwantielen)
     }
-    verliezen["mean"] = sum(verliezen[k] for k in ("q10", "q50", "q90")) / 3
+    verliezen["mean"] = sum(verliezen[veld] for veld in QUANTILE_FIELDS) / len(QUANTILE_FIELDS)
     return verliezen
 
 
-def crps_from_quantiles(q10: float, q50: float, q90: float, werkelijk: float) -> float:
-    """CRPS, benaderd uit drie kwantielen.
+def crps_from_quantiles(kwantielen: tuple[float, ...] | list[float], werkelijk: float) -> float:
+    """CRPS, benaderd uit vijf kwantielen.
 
     WAT HIER EEN BENADERING IS, EN WAAROM DAT MAG. De echte CRPS is een
     integraal over ALLE kwantielniveaus: CRPS = 2 · ∫ pinball(τ) dτ. Wij
-    hebben er drie, dus de integraal wordt een gemiddelde over die drie --
+    hebben er vijf, dus de integraal wordt een gemiddelde over die vijf --
     een grove kwadratuur. De uitkomst is systematisch iets anders dan de
     echte CRPS.
 
+    GEMETEN OP 01-10-2026 (synthetische data, een voorspeller die de echte
+    verdeling kent): met de vijf niveaus .1 .25 .5 .75 .9 zit het gelijk
+    gewogen gemiddelde 1 tot 2% BENEDEN de echte CRPS (normaal -1,9%, dikke
+    staarten t3 -0,7%). Weging naar kansbreedte zat er 2 tot 2,5% BOVEN, en
+    een trapezium 4 tot 4,5% eronder; gelijk gewogen is dus zowel de dichtste
+    als de eenvoudigste. (Met drie niveaus was het ~11% te laag.)
+
     Dat is aanvaardbaar omdat deze score alleen wordt gebruikt om agents
     ONDERLING en tegen de baselines te vergelijken, en die krijgen
-    allemaal exact dezelfde behandeling op dezelfde drie niveaus. De
+    allemaal exact dezelfde behandeling op dezelfde vijf niveaus. De
     vertekening zit dan in elke score even hard en valt weg in het
     verschil. Wat je met dit getal NIET mag doen, is het vergelijken met
     een CRPS uit de literatuur of uit een ander systeem.
 
-    Drie kwantielen zijn ook een bewuste keuze: het is wat een taalmodel
-    betrouwbaar kan uitspreken. Vijf of negen zou de benadering verbeteren
-    en de kwaliteit van de invoer verslechteren."""
-    verliezen = pinball_losses(q10, q50, q90, werkelijk)
-    return 2 * verliezen["mean"]
+    Vijf en niet meer, bewust: het is wat een taalmodel nog betrouwbaar kan
+    uitspreken zonder dat kwantielen gaan kruisen, en de uiteinden (q05/q95)
+    zijn met onze effectieve n niet te toetsen."""
+    return 2 * pinball_losses(kwantielen, werkelijk)["mean"]
 
 
 def brier_score(kans: float, gebeurde: bool) -> float:

@@ -21,7 +21,8 @@ Vink items af zodra ze klaar zijn én groen zijn in de testsuite.
 | 26-09-2026 | Uitvoeringsvolgorde losgekoppeld van pijlernummering; pijler 4 naar voren | LLM-agents zijn niet eerlijk te backtesten → forward testing is het kritieke pad → kalendertijd is de schaarse resource |
 | 27-09-2026 | Zie hieronder | Externe review van de roadmap (Claude Fable 5.1) |
 | 28-09-2026 | Synthesizer-doelen op verhandelbare instrumenten, instrument-mapping, referentieprijs in de `resolution_rule`, en extra niet-reconstrueerbare data (consensus, expected moves, ruwe headlines). Gemarkeerd met **[28-09]** | Voorbereiding op een mogelijke swing-trading-laag (1–3 dagen) over 1–1,5 jaar, zonder die nu te bouwen. Zie "Beslist op 28-09-2026" |
-| 30-09-2026 | T₀ᵃ-streefdatum van 3 naar **7 oktober** | "7 dagen op rij zonder handmatige actie", en de cron draait alleen maandag tot en met vrijdag. 3 oktober is een zaterdag; als 29-09 dag 1 was, zijn zeven werkdagen vol op woensdag 7 oktober. DD bevestigde dit op 30-09 |
+| 01-10-2026 | T₀ᵃ-streefdatum van 7 oktober naar **12 oktober (op zijn vroegst)**; definitie van een "schone dag" vastgelegd | De run van 01-10 was niet schoon: alle agents `ok`, maar de sector-agent kreeg 10 van de 12 reeksen binnen (`spy_benchmark` en `xlp_consumer_staples` ontbraken, Alpha Vantage), en de volledigheidscheck gaf een trigger. **Een schone dag = alle agents `ok` én geen volledigheidstrigger; een niet-schone dag zet de teller op nul** ("op rij"). 29-09 en 30-09 waren schoon, 01-10 niet, dus de reeks start opnieuw op 02-10 en zeven schone werkdagen zijn op zijn vroegst vol op **maandag 12 oktober**. Dat is vijf kalenderdagen later, niet twee: een niet-schone dag schuift niets op, hij begint de telling opnieuw, en elke volgende niet-schone dag doet dat weer. DD koos op 01-10 de strenge definitie ("wat het beste is voor de multi-agent"), omdat de ingestieklok bewijst dat data betrouwbaar binnenkomt en een ontbrekende SPY-koers dat bewijs aantast |
+| 30-09-2026 | T₀ᵃ-streefdatum van 3 naar **7 oktober** (vervangen op 01-10, zie hierboven) | "7 dagen op rij zonder handmatige actie", en de cron draait alleen maandag tot en met vrijdag. 3 oktober is een zaterdag; als 29-09 dag 1 was, zijn zeven werkdagen vol op woensdag 7 oktober. DD bevestigde dit op 30-09 |
 
 **Mapping oude lettering → nieuwe nummering** (voor code-comments als
 "stap B.1" of "sectie C.1"): A→1, B+C→2, D→2.8, E→2.9, F→3.1, G→5,
@@ -45,7 +46,7 @@ mechaniek erachter:
    episodes.** Vijf voorspellingen per week op één knoop over 63 dagen
    overlappen negen weken lang — dezelfde weddenschap twaalf keer. Effectieve
    n per agent op 63 dagen is ~3–4 episodes in zes maanden, niet ~130.
-   **Besluiten:** (a) kwantielen (q10/q50/q90) i.p.v. binaire richting+
+   **Besluiten:** (a) kwantielen (sinds 01-10 vijf: q10/q25/q50/q75/q90) i.p.v. binaire richting+
    drempel voor numerieke doelen — meer informatie per resolutie; (b) veel
    *onafhankelijke doelen* per agent i.p.v. herhaling op één knoop (de
    sector agent met 11 ETF's is daarom de rijkste testbron); (c) de
@@ -110,8 +111,9 @@ schone runs. De back-fill is voor alle domeinen gedraaid, de triggerregels
 dragen een versienummer (v3: v2 plus DFEDTARU voor de FOMC-doelen), en de code voor het
 voorspellingscontract, de forecast-ronde, de resolver, de scores en de
 baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
-**Open voor T₀ᵃ:** zeven schone werkdagen op rij, op zijn vroegst woensdag
-7 oktober als de reeks op 29-09 begon, en de heartbeat-test (alarmkanaal
+**Open voor T₀ᵃ:** zeven schone werkdagen op rij (schoon = alle agents `ok` én geen
+volledigheidstrigger; zie Herzieningen 01-10), op zijn vroegst **maandag
+12 oktober** omdat de reeks na de niet-schone dag van 01-10 opnieuw begint op 02-10, en de heartbeat-test (alarmkanaal
 getest met een tijdelijke check; de strikte "machine een dag uit"-test na T₀ᵃ).
 Daarna, in volgorde: `--deep-dives` aanzetten met een dry-run-plan (checkpoint
 3), pseudo-OOS-run (4.4), synthesizer als gescoorde agent, en de freeze vóór
@@ -160,7 +162,7 @@ intraday (buiten scope, zie Scope-afbakening).
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
 **Doel:** het systeem haalt elke dag zonder tussenkomst echte data op en
-legt triggers vast. **T₀ᵃ streefdatum 7 oktober** (herzien op 30-09 van 3 oktober: zeven werkdagen op rij, zie Herzieningen).
+legt triggers vast. **T₀ᵃ streefdatum 12 oktober** (op zijn vroegst; herzien op 01-10 van 7 oktober omdat de run van 01-10 niet schoon was, zie Herzieningen).
 
 | Taak | Sectie | Definition of done | Wie |
 |---|---|---|---|
@@ -210,7 +212,7 @@ vanaf cohort v1 verplicht.
 
 - `predictions`-tabel, onveranderlijk; velden in 4.1, inclusief
   `model_id`, `prompt_version`, `contract_version`, `cohort`.
-- **Twee vormen:** kwantielen (q10/q50/q90) voor numerieke doelen,
+- **Twee vormen:** kwantielen (q10/q25/q50/q75/q90) voor numerieke doelen,
   kans op een binaire gebeurtenis (bijv. "FOMC verhoogt") waar geen
   continue waarde bestaat. Richtings- en drempelkansen worden uit
   kwantielen afgeleid, niet apart gevraagd.
@@ -350,7 +352,7 @@ Kelly zijn een beslissingslaag en horen niet in dit systeem.
 
 | Periode | Fase | Uitkomst |
 |---|---|---|
-| 29 sep – 7 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 7 okt: ingestieklok loopt** (was 3 okt) |
+| 29 sep – 12 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 12 okt (op zijn vroegst): ingestieklok loopt** (was 7 okt, daarvoor 3 okt) |
 | 6 – 12 okt | 0b. Back-fill, economic agent lean, runtime-fixes | historie in de DB, groei-knopen bediend |
 | 6 – 19 okt | 2. Contract + forecast-ronde + mensinvoer (**mensinvoer op pauze sinds 30-09**) | agents produceren kwantielen/kansen |
 | 6 – 26 okt | 1. Causale graaf (parallel, partner) | knopen, pijlen, deterministische toets |
@@ -432,8 +434,13 @@ gebouwd wordt staat in deel A, niet hier.
       prediction (resolved_value, outcome, pinball/CRPS, Brier, log
       loss). Apart van `predictions` omdat een prediction
       onveranderlijk is en een evaluation later ontstaat. Zie 4.5.
-- [ ] **[27-09]** Entiteit: node_state — (knoop, agent, datum, richting,
-      sterkte/kans, horizon). Een `graph_node`-label op een claim maakt
+- [ ] **[01-10 UITGESTELD DOOR DD, bewust niet gebouwd]** Entiteit: node_state. Redenen: de roadmap zet het zelf op post-T₀ samen met graaf v1
+      (`graph_node` wordt verplicht vanaf cohort v1); het hangt af van de knopen, en de graaf van DD en zijn partner is nog niet klaar; een nieuwe tabel
+      later toevoegen kost geen migratie. **Eerst te beslissen bij het oppakken:** (A) Python rekent richting en sterkte per knoop uit de cijfers via
+      `GRAPH_MAPPING` (reproduceerbaar, maar vraagt drempels en vensters, dus nieuwe freeze-items), of (B) het LLM spreekt per knoop een richting en sterkte
+      uit naast zijn voorspellingen (extra output: promptwijziging, kosten, meer kans op afgewezen voorspellingen; en niet achteraf te reconstrueren). **Prijs van
+      uitstel:** geen knoopgeschiedenis tijdens cohort 0; raakt alleen de contradictiedetectie (3.1), die toch post-T₀ is. Oorspronkelijke omschrijving: (knoop, agent,
+      datum, richting, sterkte/kans, horizon). Een `graph_node`-label op een claim maakt
       tegenstrijdigheid nog niet meetbaar; twee agents met een
       tegengestelde richting op dezelfde knoop en horizon wél. Dit is
       waar 3.1's contradictie-detectie op draait. Post-T₀, samen met
@@ -617,7 +624,7 @@ gebouwd wordt staat in deel A, niet hier.
       prediction zonder kwantielen/kans, `resolution_rule`, `resolves_at`
       of **[27-09]** `model_id`/`prompt_version` wordt geweigerd, niet
       gevlagd. Ook geweigerd: kwantielen die niet monotoon zijn
-      (q10 > q50) en een release-horizon op een dagreeks of andersom.
+      (elk kwantiel boven het volgende) en een release-horizon op een dagreeks of andersom.
       Dit is de ene plek waar `NEEDS_REVIEW` niet volstaat — een
       onscoorbare voorspelling vervuilt het track record permanent.
 
@@ -1115,6 +1122,21 @@ Elke uitspraak van het systeem wordt een falsifieerbare claim:
 onveranderlijk, met tijdstempel, en met de regel waarmee hij later
 gescoord wordt er al in.
 
+- [x] **[01-10] Vijf kwantielen i.p.v. drie (contract v0 -> v1).** Niveaus **.10 .25 .50 .75 .90**
+      (`QUANTILE_LEVELS` in `contract/prediction.py`, de enige plek). DD koos dit op 01-10 uit vier
+      opties (drie, vijf binnen, vijf breed, zeven): de oude drie blijven staan (oude scores blijven
+      vergelijkbaar) en q25/q75 erbij, omdat het interkwartielgebied bij weinig data het meest oplevert.
+      **Bewust geen q05/q95:** met onze effectieve n zijn de uiteinden niet te toetsen en een taalmodel is
+      daar overmoedig. DD koos eerst zeven (met het oog op staartrisico's) en draaide dat terug; staartrisico
+      blijft dus ondervertegenwoordigd en kan alleen via een nieuw cohort alsnog bij. Menselijke voorspellers
+      vullen geen kwantielen in (4.8 blijft op pauze). **Gebouwd en getest:** contract (alle vijf verplicht,
+      oplopend, kruising in het midden wordt gevangen), schema (CHECK-constraints, nieuwe kolommen),
+      migratie van een bestaande database, scoring v2, baselines v2, ridge v2, prompts v2 (alle vijf agents),
+      kalibratie (zes gebieden, verwacht 10/15/25/25/15/10%). **CRPS-benadering:** gemeten dat gelijk gewogen
+      over deze vijf niveaus het dichtst bij de echte CRPS zit (1 tot 2% eronder); weging naar kansbreedte
+      zat er 2 tot 2,5% boven, dus de formule is niet veranderd. **Een antwoord in de oude vorm (drie
+      kwantielen) wordt geweigerd en nooit aangevuld.**
+
 - [x] **[28-09]** `Prediction`-contract met minimaal deze velden
       (**[27-09]** herzien) — `src/contract/prediction.py`, bevroren
       dataclass, 19 tests:
@@ -1127,7 +1149,7 @@ gescoord wordt er al in.
   | `target_metric_key`, `domain` | wat er voorspeld wordt; resolutie gebeurt hierop |
   | `graph_node` | welke knoop uit 1.10 — optioneel in cohort 0, verplicht vanaf v1 |
   | `kind` | `quantile` (numeriek doel) of `binary` (gebeurtenis) |
-  | `q10`, `q50`, `q90` | **[27-09]** voor `kind=quantile`; richtings- en drempelkansen worden hieruit afgeleid, niet apart gevraagd |
+  | `q10`, `q25`, `q50`, `q75`, `q90` | **[27-09, vijf sinds 01-10]** voor `kind=quantile`; richtings- en drempelkansen worden hieruit afgeleid, niet apart gevraagd |
   | `probability`, `event_rule` | voor `kind=binary`: expliciete kans 0–1 op een machine-uitvoerbare gebeurtenis ("FOMC verhoogt op 2026-12-10") |
   | `horizon_kind`, `horizon_n` | **[27-09]** `trading_days` (5/21/63) voor dagreeksen, `releases` (1/2/3) voor week-/maandreeksen |
   | `causal_chain` | welke pijlen uit de graaf dit onderbouwen (vanaf v1) |
@@ -1249,13 +1271,13 @@ en dat window is nu al beschikbaar.
       niet voor vergelijking met een CRPS uit de literatuur. Richtings- en
       drempelscores worden uit de kwantielen afgeleid, zodat ze
       vergelijkbaar blijven met de oude binaire vorm.
-- [ ] **Kalibratiecurve per agent** — zegt een agent tien keer "70%",
+- [x] **Kalibratiecurve per agent** **[01-10: gebouwd, `scoring/diagnostics.py`; binair als betrouwbaarheidsklassen, kwantielen als verdeling van de uitkomst over de vier gebieden (verwacht 10/40/40/10); rapport `evaluate_scores.py`]** — zegt een agent tien keer "70%",
       gebeurt het dan zeven keer? Voor kwantielen: PIT-histogram.
-- [ ] **Discrimination (AUC) per agent.** Onmisbaar: kalibratie zonder
+- [x] **Discrimination (AUC) per agent** **[01-10: gebouwd; `None` zolang er maar één soort uitkomst is]**. Onmisbaar: kalibratie zonder
       discriminatie is nutteloos. Een agent die altijd het
       basispercentage roept is perfect gekalibreerd en volstrekt
       waardeloos
-- [ ] **[27-09] Effectieve n** naast de nominale n, via block-bootstrap
+- [~] **[27-09] Effectieve n** **[01-10: gebouwd als moving-block bootstrap over voorspelrondes, per (cohort, agent, soort), met een 90%-band op de hoofdscore; één blokgrootte per groep uit de mediane horizon. Nog niet: uitsplitsing per horizon en onzekerheidsband op elke afzonderlijke score. Pas betrouwbaar vanaf 8 rondes en twee blokken; daaronder geeft het rapport bewust geen getal]** naast de nominale n, via block-bootstrap
       over overlappende horizonnen en gecorreleerde doelen. Elke score
       krijgt een onzekerheidsband uit dezelfde bootstrap. Zonder dit
       leest iemand in februari "n=130" en trekt een conclusie uit n≈4.
@@ -1472,9 +1494,12 @@ kalibratie-deel van 5.2.
       (naast de code-rem van hetzelfde bedrag).
 
 - [x] **Dry-run-plan voor `--deep-dives` goedgekeurd** (checkpoint 3), zie
-      `docs/deployment.md`. Drie fasen: één begeleide testrun op donderdag
-      8 oktober, cron aan vanaf vrijdag 9 oktober, drie weken begeleid, dan de
-      dry-run-week (fase 3b). De testrun wacht bewust tot na T₀ᵃ (7 oktober):
+      `docs/deployment.md`. Drie fasen: één begeleide testrun, cron aan de dag erna,
+      drie weken begeleid, dan de dry-run-week (fase 3b). **[01-10] Datums schuiven mee
+      met T₀ᵃ (nu op zijn vroegst 12 oktober): testrun op zijn vroegst dinsdag 13 oktober,
+      cron met `--deep-dives` woensdag 14 oktober; drie weken begeleid loopt dan tot 4 november
+      en overlapt de dry-run-week (27 oktober), zie `docs/deployment.md`. Voorstel, nog door DD
+      te bevestigen.** De testrun wacht bewust tot na T₀ᵃ:
       een handmatige run telt als handmatige actie. **Gebouwd:** time-out van 90
       seconden op de Anthropic-client, tokenverbruik per aanroep vastgelegd
       (`llm_usage`), en een harde maandrem van **$200** (DD: "zet het maximale
@@ -1483,11 +1508,13 @@ kalibratie-deel van 5.2.
       monitoring blijft draaien. Verwachte kosten ~$0,15 tot $0,25 per week, niet
       gemeten. De zin in het bestaande dry-run-plan die T₀ᵃ aan zeven dagen mét
       `--deep-dives` koppelde is rechtgezet: dat is T₀ᵇ.
-- [ ] **Modelkeuze (`model_id`), open, vóór de dry-run-week.** De code gebruikt
-      overal `claude-sonnet-4-6`; de pseudo-OOS-run (4.4) veronderstelt een model
-      met kennisgrens juni 2026. Voorstel: de keten eerst op het huidige model
-      toetsen en de keuze los daarvan nemen, tijdig vóór 27 oktober. Vóór de freeze
-      is een modelwissel een covariaat in `dry_run`.
+- [~] **Modelkeuze (`model_id`): `claude-sonnet-5-5`, besloten door DD op 01-10, nog te bevestigen bij de
+      freeze.** Was `claude-sonnet-4-6`. Een derde goedkoper ($2/$10 tegen $3/$15). De kennisgrens van juni 2026 (nodig
+      voor de pseudo-OOS-run, 4.4) is een eigen uitspraak van het model en niet onafhankelijk geverifieerd. Denken staat op dit
+      model standaard aan en is centraal uitgezet (`between_tools`); zie `docs/deployment.md`, "Beslissing die vóór fase 3 valt".
+      Niet getest tegen de echte API. De QC-review draait mee op dit model zonder `qc.py` te wijzigen.
+- [x] **[01-10] Ruw LLM-logboek (`llm_calls`).** Elk verzoek en elk antwoord wordt onveranderlijk vastgelegd, met agent, doel
+      (`forecast`, `deep_dive`, `qc_review`) en event-id (1.2, audit). Een mislukte schrijfactie kost nooit het antwoord en wordt hard gelogd.
 
 - [x] **Ridge-baseline: weggelaten inputs, optie A (huidige regel).** DD koos op
       30-09 na een uitleg van de twee opties. Een input met minder dan 80% van de

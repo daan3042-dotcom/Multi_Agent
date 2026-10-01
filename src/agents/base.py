@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import json
 
+import contextlib
 import functools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -98,7 +99,7 @@ from typing import Callable
 from contract.horizons import ReleaseCadence, resolves_at_for
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract.prediction import QUANTILE_FIELDS, HorizonKind, Prediction, PredictionKind
 from contract.resolution import ResolutionMethod
 from health.data_health import (
     HealthStatus,
@@ -108,7 +109,7 @@ from health.data_health import (
     evaluate_completeness,
     rollup_quality_status,
 )
-from qc.qc import DEFAULT_LLM_REVIEW_MODEL, QCCaseStatus, apply_qc, decide_qc_outcome, default_llm_review
+from qc.qc import QCCaseStatus, apply_qc, decide_qc_outcome, default_llm_review
 from storage.schema import (
     advance_qc_case,
     has_successful_run,
@@ -129,7 +130,27 @@ from triggers.trigger_engine import (
     evaluate_surprise,
 )
 
-DEFAULT_DEEP_DIVE_MODEL = DEFAULT_LLM_REVIEW_MODEL
+DEFAULT_DEEP_DIVE_MODEL = "claude-sonnet-5-5"
+"""Het model voor de deep-dive, de forecast-ronde en (via `run_deep_dive`) de QC-review. Gekozen door DD op
+01-10-2026: Claude Sonnet 5.5, een derde goedkoper dan Sonnet 4.6 ($2/$10 tegen $3/$15 per miljoen tokens) en
+nieuwer. Tot dan was dit `qc.DEFAULT_LLM_REVIEW_MODEL` (`claude-sonnet-4-6`), die in `qc.py` ONGEWIJZIGD is
+gebleven (checkpoint 2); de QC-review krijgt dit model hieronder via de bestaande `model`-parameter.
+
+Dit is een freeze-item (`model_id`, CLAUDE.md checkpoint 5). Sonnet 5.5 zet denken standaard AAN; dat wordt voor
+alle aanroepen centraal uitgezet in `runtime/llm_budget.py` (`met_denkbeleid`), zie daar waarom."""
+
+
+@contextlib.contextmanager
+def _llm_context(client, domain: str, purpose: str, event_id: str | None):
+    """Meldt aan een `MeteredClient` voor welke agent en welk doel de aanroepen binnen dit blok zijn, zodat ze
+    in `llm_calls` terug te vinden zijn. Een client zonder `context` (een test-dubbel of een kale
+    Anthropic-client) werkt gewoon door."""
+    maak = getattr(client, "context", None)
+    if not callable(maak):
+        yield
+        return
+    with maak(domain=domain, purpose=purpose, event_id=event_id):
+        yield
 
 
 class AlreadyProcessedError(Exception):
@@ -471,12 +492,13 @@ def run_deep_dive(
     )
 
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=800,
-            system=full_system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+        with _llm_context(client, domain, "deep_dive", event_id):
+            response = client.messages.create(
+                model=model,
+                max_tokens=800,
+                system=full_system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
         deep_dive_text = "".join(b.text for b in response.content if b.type == "text").strip()
         if not deep_dive_text:
             raise ValueError("lege respons van het model")
@@ -512,7 +534,10 @@ def run_deep_dive(
             advance_qc_case(conn, qc_case.id, QCCaseStatus.NEEDS_REVIEW, now)
         return output
 
-    qc_result = apply_qc(claims, deep_dive_text, llm_review_fn=functools.partial(default_llm_review, client))
+    with _llm_context(client, domain, "qc_review", event_id):
+        qc_result = apply_qc(
+            claims, deep_dive_text, llm_review_fn=functools.partial(default_llm_review, client, model=model)
+        )
 
     # Roadmap 1.6, DEEL 2: het bestaande qc_result.needs_review-oordeel
     # (Layer 1+2, tekst-vs-cijfers) combineren met een eventueel
@@ -574,8 +599,12 @@ Regels waar je je aan moet houden:
 1. GEEF VOOR ELK GEVRAAGD DOEL EEN VOORSPELLING. Sla er geen over. Weet je het niet, geef \
 dan een brede verdeling -- dat is informatie, geen zwakte. Een ontbrekende voorspelling is \
 een gat in de meting dat niet achteraf te vullen is.
-2. KWANTIELEN MOETEN OPLOPEN: q10 <= q50 <= q90. q10 betekent: 10% kans dat de \
-werkelijke waarde LAGER uitkomt. q90: 10% kans dat hij HOGER uitkomt.
+2. KWANTIELEN MOETEN OPLOPEN: q10 <= q25 <= q50 <= q75 <= q90. q10 betekent: 10% kans dat \
+de werkelijke waarde LAGER uitkomt, q25: 25% kans lager, q50 is je mediaan (even vaak hoger \
+als lager), q75: 25% kans dat hij HOGER uitkomt, q90: 10% kans hoger. Dat zijn vijf getallen \
+die samen één verdeling vormen: de middelste helft van de uitkomsten hoort tussen q25 en \
+q75 te vallen, en de ruimte tussen q25 en q75 hoort dus smaller te zijn dan die tussen q10 \
+en q90.
 3. WEES EERLIJK BREED. Een te smalle verdeling wordt hard afgestraft zodra de uitkomst \
 erbuiten valt. Overmoed is duurder dan twijfel.
 4. GEBRUIK ALLEEN DE AANGELEVERDE CIJFERS als vertrekpunt. Je mag erover redeneren, maar \
@@ -657,7 +686,7 @@ def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim]) ->
         for n in t.horizons:
             eenheid = "handelsdagen" if t.horizon_kind is HorizonKind.TRADING_DAYS else "publicaties"
             if t.kind is PredictionKind.QUANTILE:
-                vorm = '"q10": <getal>, "q50": <getal>, "q90": <getal>'
+                vorm = ", ".join(f'"{veld}": <getal>' for veld in QUANTILE_FIELDS)
             else:
                 vorm = '"probability": <0-1>'
             regels.append(
@@ -726,9 +755,7 @@ def _parse_forecast_response(
                     benchmark_metric_key=target.benchmark_metric_key,
                     model_id=model_id,
                     prompt_version=prompt_version,
-                    q10=entry.get("q10"),
-                    q50=entry.get("q50"),
-                    q90=entry.get("q90"),
+                    **{veld: entry.get(veld) for veld in QUANTILE_FIELDS},
                     probability=entry.get("probability"),
                     event_rule=target.event_rule,
                     graph_node=target.graph_node,
@@ -781,12 +808,13 @@ def run_forecast_round(
     full_system_prompt = f"{FORECAST_SYSTEM_RULES}\n\n{system_prompt}"
 
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=2000,
-            system=full_system_prompt,
-            messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims)}],
-        )
+        with _llm_context(client, domain, "forecast", event_id):
+            response = client.messages.create(
+                model=model,
+                max_tokens=2000,
+                system=full_system_prompt,
+                messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims)}],
+            )
         tekst = "".join(b.text for b in response.content if b.type == "text").strip()
         if not tekst:
             raise ValueError("lege respons van het model")

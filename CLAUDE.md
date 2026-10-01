@@ -27,8 +27,8 @@ geldige weg, en dat kost kalendertijd in plaats van werktijd. Alles wat
 geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
 
 **Herzien op 27-09-2026 (externe review):** twee klokken — T₀ᵃ
-(ingestieklok, streefdatum 7-10-2026, herzien op 30-09 van 3-10: zeven werkdagen op rij) en T₀ᵇ (predictieklok, 10-11-2026);
-kwantielen i.p.v. binaire richting; drie baselines; pseudo-out-of-sample
+(ingestieklok, streefdatum op zijn vroegst 12-10-2026, herzien op 01-10 van 7-10: zeven SCHONE werkdagen op rij, schoon = alle agents ok én geen volledigheidstrigger) en T₀ᵇ (predictieklok, 10-11-2026);
+kwantielen (sinds 01-10 vijf: q10/q25/q50/q75/q90) i.p.v. binaire richting; drie baselines; pseudo-out-of-sample
 vóór T₀ᵇ; economic agent lean vóór T₀; mensen als gescoorde
 voorspellers; `graph_node` optioneel in cohort 0. Alle correcties met
 onderbouwing in `docs/roadmap.md`, "Wat er op 27-09-2026 veranderd is".
@@ -76,11 +76,14 @@ en `docs/project-state.md`.
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |
 | Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
+| **De kwantielniveaus (vijf, één plek) en het predictiecontract** | `src/contract/prediction.py` (`QUANTILE_LEVELS`) |
+| **De T₀ᵃ-teller (schone dagen, alleen lezen)** | `t0a_status.py`, `src/runtime/t0a_status.py` |
+| **Kalibratie, AUC, effectieve n per agent (4.5), alleen lezen** | `evaluate_scores.py`, `src/scoring/diagnostics.py`, `src/scoring/evaluation_report.py` |
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
 | **Trigger-versienummer + vingerafdruk-waakhond (1.5)** | `src/contract/trigger_version.py`, `src/runtime/trigger_guard.py` |
-| **LLM-tokenverbruik en de maandrem ($200, 1.11)** | `src/runtime/llm_budget.py` |
+| **LLM-tokenverbruik, de maandrem ($200, 1.11), het ruwe LLM-logboek (`llm_calls`) en het denkbeleid** | `src/runtime/llm_budget.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)
