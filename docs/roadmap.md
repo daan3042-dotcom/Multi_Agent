@@ -107,7 +107,7 @@ netwerk over de graaf en Black-Litterman/Kelly staan apart en later.
 groen. De VPS draait de dagelijkse cyclus (cron 07:15 UTC, maandag tot en met
 vrijdag) met alle zes agents en een actieve heartbeat; 29 en 30 september waren
 schone runs. De back-fill is voor alle domeinen gedraaid, de triggerregels
-dragen een versienummer (v2, gekalibreerd), en de code voor het
+dragen een versienummer (v3: v2 plus DFEDTARU voor de FOMC-doelen), en de code voor het
 voorspellingscontract, de forecast-ronde, de resolver, de scores en de
 baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
 **Open voor T₀ᵃ:** zeven schone werkdagen op rij, op zijn vroegst woensdag
@@ -480,6 +480,16 @@ gebouwd wordt staat in deel A, niet hier.
       **[30-09] Fase A gebouwd:** `probe_sources.py` (alleen lezen) meet per bron of hij bereikbaar,
       betaald en terug te halen is, en geeft een advies (archief nu, archief later, beslissing DD).
       De uitkomst op de VPS is de invoer voor het ontwerp van het archief.
+      **[01-10] Probe gedraaid op de VPS (66 aanroepen, geen fouten, 0 sleutels in de uitvoer):**
+      1 bron "archief NU" (SPY-samenstelling), 74 terug te halen (alle FRED-reeksen, Cboe, ALFRED,
+      Alpha Vantage-opties en -intraday), 2 met onbekende diepte (Kalshi, Polymarket), 10 voor DD
+      (6 betaald/gelicentieerd, 4 nog niet onderzocht). **De drie ICE BofA-kredietspreads gaan op
+      FRED maar drie jaar terug (vanaf 2023-10-02, vandaag precies drie jaar): ouder dan dat is
+      weg, wat wij zelf opslaan blijft van ons.** `DFEDTARU` bevestigd (dagelijks, 0 dagen achterstand).
+      **[01-10] Fase B gebouwd, na akkoord van DD:** (1) `archive_daily.py`
+      (`src/archive/spy_holdings.py`): eigen proces, geen database, ruw bestand gzip + manifest;
+      **staat nog NIET in de cron** (checkpoint 3: eerst de dry-run uit `docs/deployment.md`,
+      "Het ruwe archief"). (2) De FOMC-doelen draaien op `DFEDTARU`, zie 4.5 en de herziening hieronder.
 - [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
 - [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
       mode=DEEP_DIVE, geen eigen entiteit)
@@ -559,6 +569,10 @@ gebouwd wordt staat in deel A, niet hier.
       `MI_COHORT=cohort_0` zonder bevroren en ongewijzigde regelset
       (exit 2). **De pin is een onderdeel van de freeze:** op T₀ᵇ zet DD
       `FROZEN_TRIGGER_VERSION`; tot dan weigert cohort_0 te starten.
+      **[01-10] v3:** één nieuwe spec erbij, `fed_funds_target_upper` (DFEDTARU, 0,125
+      = halve stap) in de monetary agent; bestaande drempels ongewijzigd. De vingerafdruk
+      in `TRIGGER_FINGERPRINTS` is bijgewerkt. Vuurt op de besluitdag; FEDFUNDS blijft
+      eveneens staan, dus een renteverandering geeft twee triggers (bewust, zoals UNRATE).
 - [~] **Drempels kalibreren tegen de volledige historie (fase 0)** —
       **[29-09] rapport gebouwd (`calibrate_triggers.py`, alleen lezen);
       drempels gekozen en vastgelegd als trigger-versie v1 (5 per jaar per

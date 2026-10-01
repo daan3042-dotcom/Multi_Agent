@@ -104,10 +104,10 @@ hooguit in de tekst — dat is een uitkomst, geen mislukking.
 een melding. Een baseline die met te weinig data toch iets zegt, laat elke
 agent er beter uitzien dan hij is.
 
-**Wat geen baseline voorspelt:** de FEDFUNDS-richting van de monetary agent
-(kans dat de Fed verhoogt). Dat is een gebeurtenis op FOMC-vergaderingen, en
-een basisrate uit maandelijkse rentecijfers zou een andere gebeurtenis
-scoren. Die twee voorspellingen worden alleen tegen de agent zelf gescoord.
+**Wat geen baseline voorspelt:** de richting van de Fed-doelrange (DFEDTARU) van
+de monetary agent (kans dat de Fed verhoogt). Dat is een gebeurtenis op
+FOMC-vergaderingen, en een basisrate uit rentecijfers per dag of per maand zou
+een andere gebeurtenis scoren. Die twee voorspellingen worden alleen tegen de agent zelf gescoord.
 
 **De ridge moet nog gefit worden.** Dat kan pas na de volledige back-fill en
 is een freeze-beslissing: `fit_baselines.py` toont eerst alleen wat er zou
@@ -131,7 +131,7 @@ anders zou het model dat de voorspelling deed, ook bepalen of hij uitkwam.
 | `level_at_or_after` | DGS10, DGS2, VIX, HY-spread, 10Y-2Y, de drie FX-paren | het niveau op de eerste observatie op of na de afloopdatum |
 | `nth_release` | ICSA, UNRATE, PAYEMS, NFCI | de n-de nieuwe publicatie ná het moment van voorspellen |
 | `relative_return` | de elf sector-ETF's | rendement van de ETF minus dat van SPY, over precies dezelfde twee observatiemomenten |
-| `direction_after_fomc` | FEDFUNDS-richting | ligt de rente hoger na de n-de FOMC-vergadering? Gebruikt `FOMC_MEETING_DATES` (besluitdagen 28-10-2026 t/m 8-12-2027, van de officiële Fed-pagina; vergaderingen van vóór oktober 2026 ontbreken nog) |
+| `direction_after_fomc` | richting van de doelrange (DFEDTARU, dagelijks; tot 01-10-2026 FEDFUNDS) | ligt de bovengrens van de doelrange hoger na de n-de FOMC-vergadering? De eerste waarneming NA de besluitdag beslist, dus de uitkomst is er een dag later (met het maandgemiddelde duurde het vijf tot zes weken) Gebruikt `FOMC_MEETING_DATES` (besluitdagen 28-10-2026 t/m 8-12-2027, van de officiële Fed-pagina; vergaderingen van vóór oktober 2026 ontbreken nog) |
 
 **"Eerste print" is geen extra werk maar een gevolg van het ontwerp.**
 Omdat we elke cyclus opslaan wat de bron op dát moment zei, is de
@@ -173,7 +173,7 @@ rol van de synthesizer, die apart gescoord wordt.
 
 | Agent | Doelen | Voorspellingen per ronde |
 |---|---|---|
-| monetary_policy | DGS10, DGS2 (5/21/63 hd), FEDFUNDS-richting (1/2 FOMC) | 8 |
+| monetary_policy | DGS10, DGS2 (5/21/63 hd), richting van de doelrange DFEDTARU (1/2 FOMC) | 8 |
 | financial | HY-spread, VIX, 10Y-2Y (5/21/63 hd), NFCI (1/4/12 weekprints) | 12 |
 | economic | ICSA (1/4 weekprints), UNRATE en PAYEMS (1/3 maandprints) | 6 |
 | currency | EUR/USD, USD/JPY, GBP/USD (5/21/63 hd) | 9 |
@@ -276,6 +276,7 @@ ene agent's verse pulls de andere's veroudering kon verbergen.
 | Metric | FRED-reeks | Bedient welke graafknoop |
 |---|---|---|
 | Fed funds rate | FEDFUNDS | `policy_stance` |
+| Fed funds doelrange (bovengrens) | DFEDTARU | `policy_stance` |
 | 10-jaars Treasury yield | DGS10 | `term_premium` |
 | CPI-index | CPIAUCSL | (input voor `inflation_persistence`) |
 | Werkloosheidspercentage | UNRATE | (input voor `labor_tightness`) |
@@ -284,7 +285,13 @@ ene agent's verse pulls de andere's veroudering kon verbergen.
 | 10-jaars break-even inflatie | T10YIE | `inflation_expectations` |
 | Fed-balanstotaal | WALCL | `liquidity` |
 
-De onderste vier zijn toegevoegd op 28-09-2026. Reden: de causale graaf
+**DFEDTARU (01-10-2026)** is de bovengrens van de doelrange van de Fed, per dag. Hij bedient
+de twee FOMC-vragen ("verhoogt de Fed op de n-de vergadering?") en vuurt op de besluitdag
+zelf (de rente springt in stappen van 0,25; drempel 0,125). FEDFUNDS (het maandgemiddelde van
+de werkelijke rente) blijft staan voor de trend en voor de Taylor Rule; een renteverandering
+geeft daardoor twee triggers, de eerste meteen en de tweede weken later.
+
+De onderste vier uit de tabel zijn toegevoegd op 28-09-2026. Reden: de causale graaf
 (1.10) wees deze agent aan als eigenaar van `policy_expectations`,
 `inflation_expectations` en `liquidity`, maar hij had geen enkele
 waarneming om die knopen uit te schatten. Het onderscheid dat hiermee
