@@ -1027,6 +1027,21 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Ruw LLM-logboek en Sonnet 5.5 (1.2/1.11, 01-10) — 880 tests groen
+
+**Logboek (`llm_calls`, onveranderlijk).** `MeteredClient` legt bij elke LLM-aanroep het volledige verzoek (alle parameters, geen sleutel) en het
+antwoord (tekst, stop_reason, tokens) of de fout vast, met agent, doel en event-id via `client.context(...)`; `agents/base.py` zet dat voor de
+forecast-ronde, de deep-dive en de QC-review. Een mislukte schrijfactie kost het antwoord niet en laat de run niet crashen maar wordt als ERROR gelogd; er is
+geen regel als de maandrem de aanroep tegenhoudt. `list_llm_calls` leest het terug. Een nieuwe tabel: geen migratie.
+
+**Model: `claude-sonnet-5-5` (besluit DD).** Geverifieerd via de naslag: bestaat, $2/$10, 1M context. Gevonden gevaar: **denken staat daar standaard aan** en telt mee in
+onze kleine `max_tokens`; zonder maatregel zouden antwoorden leeg of afgekapt kunnen komen en de QC-review stil verzwakken. Opgelost centraal in `MeteredClient`
+(`thinking={"type": "between_tools"}`, alleen voor dit model; op 4.6 zou het een 400 zijn), dus `src/qc/` is NIET gewijzigd (checkpoint 2); de QC-review krijgt het model
+via de bestaande `model`-parameter. `DEFAULT_DEEP_DIVE_MODEL` staat nu los in `base.py`. Kostenschatting bijgewerkt (~$0,10 tot $0,17 per week, met denken uit).
+**Niet getest tegen de echte API:** modeltoegang van het account, en of de geïnstalleerde `anthropic`-versie `between_tools` doorgeeft (faalt zichtbaar). Denken aan voor de
+forecast-ronde is een experiment voor de testrun. De kennisgrens juni 2026 is niet onafhankelijk geverifieerd.
+**node_state uitgesteld (DD):** vastgelegd in de roadmap (1.2) met de twee ontwerpopties en de prijs van uitstel; niet gebouwd.
+
 ### Vijf kwantielen, optie B (4.1/4.5, 01-10) — 867 tests groen
 
 **Besluit (DD):** niveaus .10 .25 .50 .75 .90. DD koos eerst zeven (optie D) en draaide dat terug naar vijf (optie B). De D-keuze was alleen

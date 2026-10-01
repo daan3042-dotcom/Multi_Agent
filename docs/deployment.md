@@ -519,16 +519,18 @@ opgeslagen, en elke agent zit in zijn eigen foutisolatie.
 Tokens zijn geschat uit de promptlengtes in de code (systeemprompts 1.400 tot 2.200
 tekens, plus de claims van het domein): ongeveer 2.000 invoer- en 1.000 uitvoertokens
 per forecast-aanroep, en 1.500 in en 800 uit per deep-dive plus een korte kwaliteitscontrole.
-Tegen de prijs van het huidige model (`claude-sonnet-4-6`, $3 per miljoen invoer- en $15 per
-miljoen uitvoertokens, prijzen van 25-09-2026):
+Tegen de prijs van het huidige model (**sinds 01-10 `claude-sonnet-5-5`**, $2 per miljoen invoer- en $10 per
+miljoen uitvoertokens; was `claude-sonnet-4-6` met $3 en $15; prijzen van 25-09-2026), met denken uitgezet
+(zie hieronder), dus dezelfde tokenaantallen als eerder:
 
 | Onderdeel | Aanroepen per week | Kosten per week |
 |---|---|---|
-| Forecast-ronde | 5 | ~$0,10 |
-| Deep-dives | 2 tot 3 domeinen | ~$0,05 |
-| **Totaal** | ~10 tot 15 | **~$0,15 tot $0,25** |
+| Forecast-ronde | 5 | ~$0,07 |
+| Deep-dives | 2 tot 3 domeinen | ~$0,03 |
+| **Totaal** | ~10 tot 15 | **~$0,10 tot $0,17** |
 
-Dat is ongeveer $8 tot $13 per jaar. De slechtste dag (alle zes de domeinen triggeren)
+Dat is ongeveer $5 tot $9 per jaar. **Zou denken aan komen te staan, dan komen er tokens bij die niet in deze
+schatting zitten; meten in de begeleide testrun.** De slechtste dag (alle zes de domeinen triggeren)
 is ongeveer $0,15. Zelfs met een factor vijf te laag geschat is het tientallen dollars per
 jaar. **Kosten zijn dus niet de reden voor voorzichtigheid; de betrouwbaarheid van de keten is dat.**
 Meten kan pas na de eerste run, in het Anthropic-console onder Usage.
@@ -609,6 +611,14 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    `NEEDS_REVIEW` is een vlag en geen fout (CLAUDE.md, regel 3): lees de tekst voordat je oordeelt.
 6. **Lees minstens twee voorspellingen met de hand** en kijk of de vijf kwantielen (q10 ≤ q25 ≤ q50 ≤ q75 ≤ q90)
    en de onderbouwing te volgen zijn. Dit is het enige punt dat geen test kan controleren.
+   **Het ruwe antwoord van het model terugkijken** (nieuw sinds 01-10): elke aanroep staat in `llm_calls`, met het volledige verzoek (inclusief de
+   denkinstelling) en het antwoord. Handig bij een afgewezen voorspelling of een kruisend kwantiel:
+
+   ```bash
+   cd /opt/multi_agent && sqlite3 -header -column market_intelligence.db "SELECT id, purpose, domain, model, stop_reason, input_tokens, output_tokens, substr(response_text, 1, 100) AS begin FROM llm_calls ORDER BY id DESC LIMIT 12;"
+   ```
+
+   Staat er bij een rij `stop_reason = max_tokens` of een lege `response_text`, dan was de limiet te krap (met denken uit zou dat niet moeten gebeuren).
 7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console
    onder Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een factor tien af, of wijken de
    tokens in de database sterk af van het console, stop dan en meld het.
@@ -643,15 +653,27 @@ bevroren worden. Drie weken begeleid draaien ervoor betekent dat de meeste foute
 
 ### Beslissing die vóór fase 3 valt: welk model?
 
-De code gebruikt overal `claude-sonnet-4-6` (`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de
-deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de pseudo-OOS-run uit van een model met
-een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5). Die twee kloppen niet
-met elkaar. Een ander model is geen kostenkwestie (zie boven) maar een codekwestie: de nieuwere
-modellen hebben altijd-aan-denken (dat de 2000 tokens van de forecast-ronde kan opeten), ondersteunen
-geen vaste `tool_choice` en vragen nieuwe promptafstemming. Voorstel: **fase 1 en 2 op het huidige
-model draaien om de keten te toetsen, de modelkeuze los daarvan nemen en tijdig vóór 27 oktober
-doorvoeren.** Dat kan zonder gevolgen voor het cohort, want vóór de freeze is een modelwissel een
-covariaat in `dry_run`, geen vervuiling.
+**[01-10 BESLOTEN door DD: `claude-sonnet-5-5`.]** Tot dan gebruikte de code overal `claude-sonnet-4-6`
+(`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de
+pseudo-OOS-run uit van een model met een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5).
+Sonnet 5.5 zegt van zichzelf een kennisgrens van juni 2026 te hebben; **dat is niet onafhankelijk geverifieerd** (de naslag
+noemt geen kennisgrens). Prijs wel bevestigd: $2/$10, 1M context.
+
+**Wat er voor de wissel is geregeld (`runtime/llm_budget.py`, `agents/base.py`):**
+- **Denken staat op Sonnet 5.5 standaard AAN** (op 4.6 stond het uit). Onze aanroepen hebben een kleine `max_tokens` (500 QC-review,
+  800 deep-dive, 2000 forecast), waar het denken in meetelt: zonder maatregel kunnen antwoorden leeg of afgekapt terugkomen en
+  verzwakt de QC-review stil. `MeteredClient` zet daarom bij elke aanroep naar dit model `thinking={"type": "between_tools"}` mee
+  (de manier om denken uit te zetten; `disabled` geeft een 400). Dit geldt centraal voor alle aanroepen, zonder `src/qc/` aan te raken.
+  **Denken AAN voor de forecast-ronde is een experiment voor de begeleide testrun**, niet iets dat nu is beslist.
+- De QC-review draait nu ook op Sonnet 5.5, via de bestaande `model`-parameter van `default_llm_review` (aangeroepen vanuit `base.py`);
+  `qc.DEFAULT_LLM_REVIEW_MODEL` in `qc.py` staat ONGEWIJZIGD op `claude-sonnet-4-6` (checkpoint 2).
+- Geen `temperature`, `tool_choice` of prefill in onze aanroepen, dus de overige breuken van Sonnet 5.5 raken ons niet.
+- **Nog niet getest tegen de echte API:** of jouw account toegang heeft tot dit model en of `between_tools` door de geïnstalleerde `anthropic`-versie
+  op de VPS wordt doorgegeven. Beide falen zichtbaar (fout in de log, exit 1), niet stil. De begeleide testrun is de eerste echte meting.
+- Een refusal (`stop_reason: "refusal"`, veiligheidsclassifier) is op dit model mogelijk; onze code ziet dat als een lege respons en meldt het als
+  fout. De naslag raadt server-side fallbacks aan; dat is bewust niet ingebouwd (extra model, extra kosten) en een optie als het in de testrun voorkomt.
+- **Het logboek (`llm_calls`)** legt elk verzoek (inclusief de denkinstelling) en elk antwoord vast, zodat de instelling per voorspelling terug te vinden is.
+  De denkinstelling staat dus NIET in `model_id`; het is een covariaat die alleen in dit logboek staat.
 
 ## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
 

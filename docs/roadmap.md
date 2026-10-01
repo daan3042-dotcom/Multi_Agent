@@ -434,8 +434,13 @@ gebouwd wordt staat in deel A, niet hier.
       prediction (resolved_value, outcome, pinball/CRPS, Brier, log
       loss). Apart van `predictions` omdat een prediction
       onveranderlijk is en een evaluation later ontstaat. Zie 4.5.
-- [ ] **[27-09]** Entiteit: node_state — (knoop, agent, datum, richting,
-      sterkte/kans, horizon). Een `graph_node`-label op een claim maakt
+- [ ] **[01-10 UITGESTELD DOOR DD, bewust niet gebouwd]** Entiteit: node_state. Redenen: de roadmap zet het zelf op post-T₀ samen met graaf v1
+      (`graph_node` wordt verplicht vanaf cohort v1); het hangt af van de knopen, en de graaf van DD en zijn partner is nog niet klaar; een nieuwe tabel
+      later toevoegen kost geen migratie. **Eerst te beslissen bij het oppakken:** (A) Python rekent richting en sterkte per knoop uit de cijfers via
+      `GRAPH_MAPPING` (reproduceerbaar, maar vraagt drempels en vensters, dus nieuwe freeze-items), of (B) het LLM spreekt per knoop een richting en sterkte
+      uit naast zijn voorspellingen (extra output: promptwijziging, kosten, meer kans op afgewezen voorspellingen; en niet achteraf te reconstrueren). **Prijs van
+      uitstel:** geen knoopgeschiedenis tijdens cohort 0; raakt alleen de contradictiedetectie (3.1), die toch post-T₀ is. Oorspronkelijke omschrijving: (knoop, agent,
+      datum, richting, sterkte/kans, horizon). Een `graph_node`-label op een claim maakt
       tegenstrijdigheid nog niet meetbaar; twee agents met een
       tegengestelde richting op dezelfde knoop en horizon wél. Dit is
       waar 3.1's contradictie-detectie op draait. Post-T₀, samen met
@@ -1503,11 +1508,13 @@ kalibratie-deel van 5.2.
       monitoring blijft draaien. Verwachte kosten ~$0,15 tot $0,25 per week, niet
       gemeten. De zin in het bestaande dry-run-plan die T₀ᵃ aan zeven dagen mét
       `--deep-dives` koppelde is rechtgezet: dat is T₀ᵇ.
-- [ ] **Modelkeuze (`model_id`), open, vóór de dry-run-week.** De code gebruikt
-      overal `claude-sonnet-4-6`; de pseudo-OOS-run (4.4) veronderstelt een model
-      met kennisgrens juni 2026. Voorstel: de keten eerst op het huidige model
-      toetsen en de keuze los daarvan nemen, tijdig vóór 27 oktober. Vóór de freeze
-      is een modelwissel een covariaat in `dry_run`.
+- [~] **Modelkeuze (`model_id`): `claude-sonnet-5-5`, besloten door DD op 01-10, nog te bevestigen bij de
+      freeze.** Was `claude-sonnet-4-6`. Een derde goedkoper ($2/$10 tegen $3/$15). De kennisgrens van juni 2026 (nodig
+      voor de pseudo-OOS-run, 4.4) is een eigen uitspraak van het model en niet onafhankelijk geverifieerd. Denken staat op dit
+      model standaard aan en is centraal uitgezet (`between_tools`); zie `docs/deployment.md`, "Beslissing die vóór fase 3 valt".
+      Niet getest tegen de echte API. De QC-review draait mee op dit model zonder `qc.py` te wijzigen.
+- [x] **[01-10] Ruw LLM-logboek (`llm_calls`).** Elk verzoek en elk antwoord wordt onveranderlijk vastgelegd, met agent, doel
+      (`forecast`, `deep_dive`, `qc_review`) en event-id (1.2, audit). Een mislukte schrijfactie kost nooit het antwoord en wordt hard gelogd.
 
 - [x] **Ridge-baseline: weggelaten inputs, optie A (huidige regel).** DD koos op
       30-09 na een uitleg van de twee opties. Een input met minder dan 80% van de

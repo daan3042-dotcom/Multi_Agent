@@ -32,10 +32,11 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from storage.schema import llm_usage_since, record_llm_usage
+from storage.schema import llm_usage_since, record_llm_call, record_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,28 @@ def maandverbruik(conn, nu: datetime | None = None) -> MaandVerbruik:
     return MaandVerbruik(kosten, n, tin, tuit)
 
 
+DENKEN_UIT = {"type": "between_tools"}
+"""Het `thinking`-verzoek dat denken uitzet op Claude Sonnet 5.5. Op dat model staat denken STANDAARD AAN
+(op Sonnet 4.6 stond het uit als je niets meestuurde), `{"type": "disabled"}` geeft er een 400, en
+`between_tools` is de manier om het uit te zetten (alleen toegestaan bij effort `high` of lager, zonder
+andere velden).
+
+WAAROM DIT HIER STAAT. Onze aanroepen sturen geen `thinking` mee en hebben een kleine `max_tokens` (500 voor
+de QC-review, 800 voor de deep-dive, 2000 voor de forecast-ronde). Met denken aan telt het denken mee voor die
+limiet: het antwoord kan dan leeg of afgekapt terugkomen, en de QC-review zou stil verzwakken. Dit is het
+enige punt waar elke aanroep doorheen loopt, dus één beleid dekt ze allemaal zonder `src/qc/` aan te raken
+(checkpoint 2). Een bewuste keuze, geen eindoordeel: denken AAN voor de forecast-ronde is een
+experiment voor de begeleide testrun (de instelling staat in `llm_calls.request_json`)."""
+MODELLEN_ZONDER_STANDAARD_DENKEN = frozenset({"claude-sonnet-5-5"})
+
+
+def met_denkbeleid(kwargs: dict) -> dict:
+    """Zet denken uit voor modellen waar het standaard aanstaat, tenzij de aanroeper zelf iets koos."""
+    if kwargs.get("model") in MODELLEN_ZONDER_STANDAARD_DENKEN and "thinking" not in kwargs:
+        return {**kwargs, "thinking": dict(DENKEN_UIT)}
+    return kwargs
+
+
 class _Berichten:
     def __init__(self, gemeterd: "MeteredClient"):
         self._g = gemeterd
@@ -137,9 +160,46 @@ class MeteredClient:
         self.messages = _Berichten(self)
         self.aanroepen_deze_run = 0
         self.kosten_deze_run = 0.0
+        self._context: dict = {}
 
     def __getattr__(self, naam):
         return getattr(self._client, naam)
+
+    @contextmanager
+    def context(self, domain: str | None = None, purpose: str | None = None, event_id: str | None = None):
+        """Legt vast voor WELKE agent, WELK doel en WELK event de aanroepen binnen dit blok zijn
+        (komt in `llm_calls`). Binnen elkaar te gebruiken; het binnenste wint."""
+        vorige = self._context
+        self._context = {"domain": domain, "purpose": purpose, "event_id": event_id}
+        try:
+            yield self
+        finally:
+            self._context = vorige
+
+    def _leg_aanroep_vast(self, nu, kwargs, antwoord=None, fout=None) -> None:
+        """Schrijft het ruwe verzoek en antwoord weg. Een mislukte schrijfactie mag NOOIT het antwoord van het
+        model kosten (de aanroep is al betaald) en nooit de run laten crashen, maar wordt wel hard gelogd:
+        een gat in het logboek mag niet onzichtbaar zijn."""
+        try:
+            tekst = stop = tin = tuit = None
+            if antwoord is not None:
+                tekst = "".join(
+                    getattr(b, "text", "") or "" for b in (getattr(antwoord, "content", None) or [])
+                    if getattr(b, "type", None) == "text"
+                )
+                stop = getattr(antwoord, "stop_reason", None)
+                gebruik = getattr(antwoord, "usage", None)
+                tin = getattr(gebruik, "input_tokens", None)
+                tuit = getattr(gebruik, "output_tokens", None)
+            record_llm_call(
+                self._conn, nu, str(kwargs.get("model") or "onbekend"), kwargs,
+                response_text=tekst, stop_reason=stop if isinstance(stop, str) else None,
+                input_tokens=tin if isinstance(tin, (int, float)) else None,
+                output_tokens=tuit if isinstance(tuit, (int, float)) else None,
+                error=fout, **self._context,
+            )
+        except Exception as e:  # noqa: BLE001 -- bewust breed: dit logboek mag de run nooit breken
+            logger.error("LLM-aanroep kon niet in het logboek (llm_calls) worden vastgelegd: %s: %s", type(e).__name__, e)
 
     def _create(self, **kwargs):
         nu = self._nu()
@@ -151,7 +211,13 @@ class MeteredClient:
                 f"of tot de grens bewust is verhoogd"
             )
 
-        antwoord = self._client.messages.create(**kwargs)
+        kwargs = met_denkbeleid(kwargs)
+        try:
+            antwoord = self._client.messages.create(**kwargs)
+        except Exception as e:
+            self._leg_aanroep_vast(nu, kwargs, fout=f"{type(e).__name__}: {e}")
+            raise
+        self._leg_aanroep_vast(nu, kwargs, antwoord=antwoord)
 
         model = kwargs.get("model") or getattr(antwoord, "model", None) or "onbekend"
         gebruik = getattr(antwoord, "usage", None)

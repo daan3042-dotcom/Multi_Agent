@@ -91,6 +91,27 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_usage_called_at ON llm_usage(called_at);
 
+-- Het RUWE antwoord van elke LLM-aanroep, met alles wat erin ging (01-10-2026, DD): zonder dit is
+-- achteraf niet te zien waarom een voorspelling zo uitviel of welke cijfers het model zag. Onveranderlijk:
+-- er is geen update-pad, net als bij predictions. `domain`/`purpose`/`event_id` leggen de koppeling met
+-- een agent_run en met de voorspellingen van die ronde (zelfde `created_at` en agent).
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    called_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    domain TEXT,
+    purpose TEXT,
+    event_id TEXT,
+    request_json TEXT NOT NULL,
+    response_text TEXT,
+    stop_reason TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_called_at ON llm_calls(called_at);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_domain ON llm_calls(domain, purpose, called_at);
+
 CREATE TABLE IF NOT EXISTS trigger_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     domain TEXT NOT NULL,
@@ -512,6 +533,42 @@ def record_llm_usage(
     )
     conn.commit()
     return cur.lastrowid
+
+
+def record_llm_call(
+    conn: sqlite3.Connection, called_at: datetime, model: str, request: dict,
+    response_text: str | None = None, stop_reason: str | None = None,
+    input_tokens: int | None = None, output_tokens: int | None = None, error: str | None = None,
+    domain: str | None = None, purpose: str | None = None, event_id: str | None = None,
+) -> int:
+    """Legt één LLM-aanroep VOLLEDIG vast: het verzoek (alle parameters, geen sleutel: die zit niet in
+    de aanroep), het antwoord of de fout. Onveranderlijk zodra geschreven."""
+    cur = conn.execute(
+        "INSERT INTO llm_calls (called_at, model, domain, purpose, event_id, request_json, response_text, "
+        "stop_reason, input_tokens, output_tokens, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            called_at.isoformat(), model, domain, purpose, event_id,
+            json.dumps(request, ensure_ascii=False, default=str), response_text, stop_reason,
+            None if input_tokens is None else int(input_tokens),
+            None if output_tokens is None else int(output_tokens), error,
+        ),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_llm_calls(
+    conn: sqlite3.Connection, domain: str | None = None, purpose: str | None = None, limit: int = 100
+) -> list[dict]:
+    """De opgeslagen aanroepen, nieuwste eerst, als dicts (een logboek, geen contract)."""
+    query, params = "SELECT * FROM llm_calls WHERE 1=1", []
+    for kolom, waarde in (("domain", domain), ("purpose", purpose)):
+        if waarde is not None:
+            query += f" AND {kolom} = ?"
+            params.append(waarde)
+    cur = conn.execute(query + " ORDER BY id DESC LIMIT ?", (*params, limit))
+    namen = [d[0] for d in cur.description]
+    return [dict(zip(namen, rij)) for rij in cur.fetchall()]
 
 
 def llm_usage_since(conn: sqlite3.Connection, since: datetime) -> tuple[float, int, int, int]:

@@ -83,7 +83,7 @@ en `docs/project-state.md`.
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
 | **Trigger-versienummer + vingerafdruk-waakhond (1.5)** | `src/contract/trigger_version.py`, `src/runtime/trigger_guard.py` |
-| **LLM-tokenverbruik en de maandrem ($200, 1.11)** | `src/runtime/llm_budget.py` |
+| **LLM-tokenverbruik, de maandrem ($200, 1.11), het ruwe LLM-logboek (`llm_calls`) en het denkbeleid** | `src/runtime/llm_budget.py` |
 | Tests | `tests/` |
 
 ## Eerst kijken of iemand het al bouwt (verplicht, niet optioneel)
