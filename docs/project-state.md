@@ -1065,7 +1065,7 @@ onze kleine `max_tokens`; zonder maatregel zouden antwoorden leeg of afgekapt ku
 (`thinking={"type": "between_tools"}`, alleen voor dit model; op 4.6 zou het een 400 zijn), dus `src/qc/` is NIET gewijzigd (checkpoint 2); de QC-review krijgt het model
 via de bestaande `model`-parameter. `DEFAULT_DEEP_DIVE_MODEL` staat nu los in `base.py`. Kostenschatting bijgewerkt (~$0,10 tot $0,17 per week, met denken uit).
 **Niet getest tegen de echte API:** modeltoegang van het account, en of de geïnstalleerde `anthropic`-versie `between_tools` doorgeeft (faalt zichtbaar). Denken aan voor de
-forecast-ronde is een experiment voor de testrun. De kennisgrens juni 2026 is niet onafhankelijk geverifieerd.
+forecast-ronde is een experiment voor de testrun. De kennisgrens juni 2026 is bevestigd in het Anthropic-modeloverzicht (01-10); uittreding niet eerder dan 28-09-2027.
 **node_state uitgesteld (DD):** vastgelegd in de roadmap (1.2) met de twee ontwerpopties en de prijs van uitstel; niet gebouwd.
 
 ### Vijf kwantielen, optie B (4.1/4.5, 01-10) — 867 tests groen
@@ -1094,6 +1094,10 @@ niet veranderd. Voor drie niveaus was het ~11% en voor zeven gelijk gewogen 16 t
 meting; meer dan 5% afgewezen kruisingen is het signaal om te heroverwegen); de migratie is niet op de echte VPS-database gedraaid (alleen tegen de oude tabelvorm uit git).
 Staartrisico's (q05/q95) zijn bewust niet vastgelegd. **Op de VPS vóór het uitrollen:** `SELECT COUNT(*) FROM predictions;` (verwacht 0). Is het meer dan 0, dan werkt de migratie
 nog steeds, maar de rijen belanden in de legacy-tabellen. **Dit is een contractwijziging en dus een freeze-item (checkpoint 5), vóór de eerste echte voorspelling.**
+
+### Freeze-overzicht en waakhond (roadmap T₀ᵇ-checklist, 01-10) — 926 tests groen
+
+**`freeze_status.py` (alleen lezen)** toont alle freeze-punten met huidige waarde en status; voert de freeze niet uit (geen pin, geen ridge-freeze, geen `MI_COHORT`). **Waakhond:** doelenlijst (`TARGETS_VERSION v1`, afdruk `52b89e72c6ea2743`) en evidence-sheet (`EVIDENCE_SHEET_VERSION v1`, `94e8923819c07998`) dragen versienummer + vingerafdruk (`contract/freeze_versions.py`, `runtime/freeze_guard.py`). De prompt-afdruk bevat nu de evidence-sheet, dus de vijf `FORECAST_PROMPT_VERSION`-afdrukken in `test_forecast_prompt_version.py` zijn vernieuwd (versies blijven v3, niets gewijzigd voor de agents). Mutatietests bewezen: een wijziging in evidence-sheet-tekst of een resolutieregel laat de tests falen.
 
 ### T₀ᵃ-teller, roadmap.html en probe-advies (1.11, 01-10) — 842 tests groen
 

@@ -488,6 +488,18 @@ Toont per werkdag vanaf 2 oktober `schoon`, `NIET SCHOON` (met de reden, bijvoor
 de lopende reeks van zeven en de vroegste datum voor T₀ᵃ. Schoon = alle zes agents ok én geen volledigheidstrigger. Gebruik `--vanaf <datum>`
 als de telling na een nieuwe breuk opnieuw moet beginnen. Het script schrijft niets. "Mogelijk handmatig" betekent: een run buiten 07:00 tot 09:00 UTC; beoordeel zelf.
 
+## Het freeze-overzicht (alleen lezen)
+
+```bash
+cd /opt/multi_agent && .venv/bin/python freeze_status.py
+```
+
+Toont elk freeze-punt (contract, kwantielen, graaf, doelenlijst, resolver, scorer, trigger-regels en pin, model, prompts, evidence-sheet,
+baselines, ridge, cohort, prior, voorspellingen per cohort) met de huidige waarde uit code en database en een status: `BEVROREN`, `TE BEVESTIGEN`,
+`OPEN BESLISSING`, `WIJZIGING ZONDER VERSIE` of `LET OP`. Het script schrijft niets, zet geen pin, fit geen ridge en raakt `MI_COHORT` niet aan:
+**het is een overzicht, geen freeze.** Wijzigt iemand de doelenlijst of de evidence-sheet zonder het versienummer in
+`src/contract/freeze_versions.py` op te hogen, dan faalt `tests/test_freeze_guard.py` (en voor de evidence-sheet ook de prompt-test).
+
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
@@ -680,8 +692,7 @@ bevroren worden. Drie weken begeleid draaien ervoor betekent dat de meeste foute
 **[01-10 BESLOTEN door DD: `claude-sonnet-5-5`.]** Tot dan gebruikte de code overal `claude-sonnet-4-6`
 (`qc.DEFAULT_LLM_REVIEW_MODEL`, hergebruikt voor de deep-dive en de forecast-ronde). De roadmap (4.4) gaat voor de
 pseudo-OOS-run uit van een model met een kennisgrens in juni 2026, en `model_id` is een freeze-punt (checkpoint 5).
-Sonnet 5.5 zegt van zichzelf een kennisgrens van juni 2026 te hebben; **dat is niet onafhankelijk geverifieerd** (de naslag
-noemt geen kennisgrens). Prijs wel bevestigd: $2/$10, 1M context.
+De kennisgrens van juni 2026 is **bevestigd in het Anthropic-modeloverzicht** (01-10-2026; uittreding niet eerder dan 28-09-2027). Prijs wel bevestigd: $2/$10, 1M context.
 
 **Wat er voor de wissel is geregeld (`runtime/llm_budget.py`, `agents/base.py`):**
 - **Denken staat op Sonnet 5.5 standaard AAN** (op 4.6 stond het uit). Onze aanroepen hebben een kleine `max_tokens` (500 QC-review,

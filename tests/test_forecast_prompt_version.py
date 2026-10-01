@@ -45,15 +45,16 @@ AGENTS = {
 }
 
 # Vastgelegd op 28-09-2026 (v1) en bijgewerkt op 01-10-2026 (v2: vijf kwantielen in
-# FORECAST_SYSTEM_RULES, contract v1; v3: regel 6 over de context + de evidence-sheet).
+# FORECAST_SYSTEM_RULES, contract v1; v3: regel 6 over de context + de evidence-sheet;
+# 02-10-2026: de hash bevat nu ook de vingerafdruk van de evidence-sheet, zie runtime/freeze_guard.py).
 # Versie + hash horen bij elkaar: verandert de prompt, dan verandert de
 # hash, en dan hoort de versie mee te veranderen.
 VERWACHT = {
-    "monetary_policy": ("v3", "777927fe60bc9785"),
-    "currency": ("v3", "a2b220cd5c3c2444"),
-    "financial": ("v3", "440b67229b72448f"),
-    "sector": ("v3", "4646ee200ae0bf3d"),
-    "economic": ("v3", "cf7b6ad2be05146d"),
+    "monetary_policy": ("v3", "0a7fd2010f1e18fe"),
+    "currency": ("v3", "603aef030d01c3c8"),
+    "financial": ("v3", "35b9c3f6d622bf2d"),
+    "sector": ("v3", "4c61a11a74a11437"),
+    "economic": ("v3", "c73f8f5ac5651b61"),
 }
 
 
@@ -63,7 +64,11 @@ def _forecast_prompt(module) -> str:
 
 
 def _hash(module) -> str:
-    return hashlib.sha256(_forecast_prompt(module).encode()).hexdigest()[:16]
+    """Systeemprompt + evidence-sheet (sinds 02-10-2026): verandert de context die een agent krijgt, dan verandert deze
+    hash, en moet FORECAST_PROMPT_VERSION omhoog. De ene definitie staat in runtime/freeze_guard.py."""
+    from runtime.freeze_guard import forecast_prompt_hash
+
+    return forecast_prompt_hash(module)
 
 
 @pytest.mark.parametrize("domain", sorted(AGENTS))
