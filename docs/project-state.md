@@ -1027,6 +1027,40 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Voorstel: zeven kwantielen (4.1/4.5, 01-10) — BESLOTEN door DD, NOG NIET GEBOUWD
+
+**Besluit (DD, 01-10):** niveaus .05 .10 .25 .50 .75 .90 .95 (optie D). Redenen: staartrisico's (stopafstanden, sizing) worden uiteindelijk gebruikt;
+menselijke voorspellers vullen geen kwantielen in; extra complexiteit en een groter risico op een afgewezen voorspelling zijn geaccepteerd.
+Een meting op synthetische data (dezelfde voorspeller met een te smalle of te brede schaal) liet zien dat de rangorde bij 3, 5 en 7 niveaus
+gelijk blijft; het argument is dus staartinformatie en vormcontrole, niet scherpere rangschikking.
+
+**Wat het raakt (geteld op 01-10):** 63 regels in `src/` en 43 in `tests/` noemen `q10`/`q90` (`prediction.py`, `schema.py`, `base.py`, `scores.py`,
+`resolver.py`, `baselines.py`, `ridge.py`, `diagnostics.py`, `evaluation_report.py`; tests voor prediction, schema, forecast-ronde, resolver, baselines, ridge,
+cohort, runtime, diagnostics, trigger-versie).
+
+**Voorstel per onderdeel:**
+1. **Schema:** zeven benoemde kolommen (`q05`..`q95`) met controle op oplopen, tabel herbouwd zoals bij `resolution_method`. Voor zover bekend staan er nog geen
+   voorspellingen in de VPS-database (de `--deep-dives`-testrun is nog niet gedaan), dus nu is het goedkoopst: er is niets te migreren.
+2. **Contract/validatie:** `Prediction` vereist alle zeven, strikt niet-dalend; contractversie v0 -> v1 (nog voor de freeze, dus geen nieuw cohort).
+3. **Scoring (scorer v2):** pinball per niveau; **CRPS gewogen naar kansbreedte** (gewichten .075 .10 .20 .25 .20 .10 .075). Gemeten: gelijk gewogen over zeven niveaus geeft een CRPS die
+   16 tot 19% te laag is (slechter dan de huidige 11% met drie), gewogen naar kansbreedte slechts 1 tot 2% ernaast. Dit moet dus gewogen. `within_interval` blijft op 80% (q10-q90),
+   er komt een 50%- (q25-q75) en 90%-interval (q05-q95) bij.
+4. **Kalibratie (`diagnostics.py`):** uitkomst over acht gebieden i.p.v. vier; verwacht 5/5/15/25/25/15/5/5%. **Bij weinig data zijn de staarten onmeetbaar**: het rapport zegt dat
+   (met n=130 valt q05 ongeveer 6,5 keer), en geeft geen oordeel op de uiteinden onder een minimum aantal gebeurtenissen.
+5. **Baselines:** empirische kwantielen op zeven niveaus. `MIN_SAMPLES` staat op 30 (circa 1,5 waarneming in de q05-staart) en moet omhoog (voorstel 60); te controleren of elke baseline dan nog
+   genoeg vensters heeft. De ridge (nog niet bevroren) bewaart de residu-kwantielen op zeven niveaus; opnieuw fitten bij de bevriezing.
+6. **Prompt en controle:** `FORECAST_SYSTEM_RULES` en de JSON-vorm krijgen zeven getallen; `FORECAST_PROMPT_VERSION` v1 -> v2 voor alle vijf agents en de hashes in
+   `test_forecast_prompt_version.py`. Een kruisend kwantiel blijft geweigerd (geen stille sortering: een inconsistente verdeling is zelf informatie). **Open ontwerpvraag:**
+   zeven absolute getallen verhogen de kans op kruisen. Plan: eerst meten in de begeleide testrun; is meer dan 5% van de doelen afgewezen, dan vragen we de mediaan plus zes niet-negatieve
+   afstanden, waarmee kruisen per constructie onmogelijk is (de opgeslagen kwantielen blijven gelijk, dus dat is een promptwijziging en geen contractwijziging).
+7. **Evaluations:** `pinball_q10/q50/q90` vervangen door één `pinball_json` met alle niveaus (plus `pinball_mean` en `crps`); ook hier een herbouw omdat er nog niets in staat.
+8. **Mensen (4.8):** blijft op pauze; invoer wordt hooguit binair. Niet blokkerend.
+
+**Onzeker:** of een taalmodel zeven kwantielen betrouwbaar en gekalibreerd uitspreekt (niet gemeten; de testrun is de eerste echte meting); of de baselines overal genoeg data hebben voor de staarten;
+de staartkalibratie is met onze n voor lange tijd niet toetsbaar, dus de extra niveaus leveren vooral vorm en staartinformatie, geen bewijs.
+**Eén opmerking:** dit is een contractwijziging, dus een freeze-item (checkpoint 5). **Timing:** bouwen vóór de begeleide `--deep-dives`-testrun (op zijn vroegst 13-10), zodat de eerste echte
+voorspellingen al in de definitieve vorm staan.
+
 ### T₀ᵃ-teller, roadmap.html en probe-advies (1.11, 01-10) — 842 tests groen
 
 **`t0a_status.py` + `src/runtime/t0a_status.py` (alleen lezen, database `mode=ro`).** Rekent uit `agent_runs` en `trigger_events` per werkdag
