@@ -195,3 +195,21 @@ def test_archief_raakt_de_database_nooit_aan():
     dus geen schrijfactie in market_intelligence.db mogelijk."""
     bron = Path(sh.__file__).read_text(encoding="utf-8")
     assert "storage" not in bron and "sqlite3" not in bron
+
+
+def test_gitignore_negeert_alleen_de_datamap_en_niet_de_code():
+    """Regressie 01-10-2026: de regel `archive/` in .gitignore gold ook voor
+    `src/archive/`, waardoor de module nooit gecommit werd. Lokaal werkte alles
+    (het bestand bestond), op de VPS faalde de import. De datamap is alleen
+    `/archive/` in de root."""
+    import subprocess
+    root = Path(__file__).resolve().parent.parent
+    try:
+        def genegeerd(pad):
+            return subprocess.run(["git", "check-ignore", "-q", pad], cwd=root).returncode == 0
+        code = genegeerd("src/archive/spy_holdings.py")
+        data = genegeerd("archive/spy_holdings/manifest.jsonl")
+    except FileNotFoundError:
+        pytest.skip("git niet beschikbaar")
+    assert not code, "src/archive/ wordt door .gitignore genegeerd: de code komt niet in git"
+    assert data, "de datamap archive/ hoort wel genegeerd te worden"
