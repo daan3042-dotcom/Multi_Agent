@@ -1251,13 +1251,13 @@ en dat window is nu al beschikbaar.
       niet voor vergelijking met een CRPS uit de literatuur. Richtings- en
       drempelscores worden uit de kwantielen afgeleid, zodat ze
       vergelijkbaar blijven met de oude binaire vorm.
-- [ ] **Kalibratiecurve per agent** — zegt een agent tien keer "70%",
+- [x] **Kalibratiecurve per agent** **[01-10: gebouwd, `scoring/diagnostics.py`; binair als betrouwbaarheidsklassen, kwantielen als verdeling van de uitkomst over de vier gebieden (verwacht 10/40/40/10); rapport `evaluate_scores.py`]** — zegt een agent tien keer "70%",
       gebeurt het dan zeven keer? Voor kwantielen: PIT-histogram.
-- [ ] **Discrimination (AUC) per agent.** Onmisbaar: kalibratie zonder
+- [x] **Discrimination (AUC) per agent** **[01-10: gebouwd; `None` zolang er maar één soort uitkomst is]**. Onmisbaar: kalibratie zonder
       discriminatie is nutteloos. Een agent die altijd het
       basispercentage roept is perfect gekalibreerd en volstrekt
       waardeloos
-- [ ] **[27-09] Effectieve n** naast de nominale n, via block-bootstrap
+- [~] **[27-09] Effectieve n** **[01-10: gebouwd als moving-block bootstrap over voorspelrondes, per (cohort, agent, soort), met een 90%-band op de hoofdscore; één blokgrootte per groep uit de mediane horizon. Nog niet: uitsplitsing per horizon en onzekerheidsband op elke afzonderlijke score. Pas betrouwbaar vanaf 8 rondes en twee blokken; daaronder geeft het rapport bewust geen getal]** naast de nominale n, via block-bootstrap
       over overlappende horizonnen en gecorreleerde doelen. Elke score
       krijgt een onzekerheidsband uit dezelfde bootstrap. Zonder dit
       leest iemand in februari "n=130" en trekt een conclusie uit n≈4.

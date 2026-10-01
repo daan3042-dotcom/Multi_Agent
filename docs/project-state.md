@@ -1027,6 +1027,23 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Kalibratie, AUC en effectieve n (4.5, 01-10) — 826 tests groen
+
+Nieuw: `src/scoring/diagnostics.py` (zuivere rekenregels, alleen stdlib, vaste seed), `src/scoring/evaluation_report.py`
+(leest `evaluations` + `predictions`, schrijft niets) en `evaluate_scores.py` (opent de database `mode=ro`; een test bewijst dat
+het bestand ongewijzigd blijft). **Cohorten en soorten (kwantiel/binair) staan altijd in aparte regels**: CRPS en Brier liggen op
+andere schalen, en `dry_run`, `pseudo_oos` en `cohort_0` mogen nooit gemiddeld worden. Per groep: n, n_eff, hoofdscore met 90%-band,
+kalibratie (kwantiel: waar de uitkomst viel; binair: voorspeld versus gebeurd per klasse) en AUC.
+**Effectieve n:** rondegemiddelden, moving-block bootstrap met blokken van `horizon / afstand tussen rondes`, ontwerpeffect =
+variantie met blokken gedeeld door variantie zonder; n_eff = n / ontwerpeffect, nooit boven nominaal. Een test bewijst het punt:
+een gladde (overlappende) reeks geeft minder dan de helft van de effectieve n van witte ruis. **Bewust eerlijk bij weinig data:** onder
+8 rondes of twee blokken is `n_effective=None` en staat er "NIET BETROUWBAAR", want een getal dat vertrouwen wekt zonder grond is erger
+dan geen getal. AUC is `None` bij één soort uitkomst (de Fed verhoogt zelden, dus lang is er geen enkele "gebeurd").
+**Onzeker/ongetest:** nog nooit gedraaid op echte afgewikkelde voorspellingen (die bestaan pas na de eerste horizon, 5 handelsdagen na
+de eerste ronde); de bootstrap is getest op synthetische data. Eén blokgrootte per groep is een vereenvoudiging bij gemengde horizonnen.
+**Bewust niet gedaan:** skill-posterior (heeft een vooraf vastgelegde prior nodig: freeze-item, DD), uitsplitsing per horizon en
+`model_id`, dashboard (5.2). Raakt geen cron, geen trigger, geen QC, geen `run_daily.py`.
+
 ### T₀ᵃ verschoven naar op zijn vroegst 12 oktober (01-10) — checkpoint 4
 
 De run van 01-10 was `ok` voor alle zes agents maar niet compleet: sector kreeg 10 van de 12 reeksen (`spy_benchmark`,

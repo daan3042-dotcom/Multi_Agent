@@ -76,6 +76,7 @@ en `docs/project-state.md`.
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |
 | Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
+| **Kalibratie, AUC, effectieve n per agent (4.5), alleen lezen** | `evaluate_scores.py`, `src/scoring/diagnostics.py`, `src/scoring/evaluation_report.py` |
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
