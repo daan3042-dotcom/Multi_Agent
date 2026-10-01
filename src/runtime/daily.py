@@ -67,7 +67,6 @@ from scoring.baselines import BaselineRoundResult
 from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
-    load_latest_claims,
     load_monitoring_claims,
     load_trigger_events_for_day,
     record_trigger_event,
@@ -526,7 +525,12 @@ def _run_forecast_round(conn, agents, result, client, now, week_id) -> None:
         if not _forecast_due(conn, spec, now, week_id):
             continue
         try:
-            claims = load_latest_claims(conn, spec.domain)
+            # LET OP: `load_monitoring_claims` (de laatste cyclus: één waarde per reeks) en NIET
+            # `load_latest_claims`, die ondanks zijn naam de VOLLEDIGE historie van het domein geeft. Met de
+            # back-fill is dat ~51.000 claims voor de monetary agent: een prompt van ruim een miljoen tokens
+            # die niet in het contextvenster past en, als hij wel paste, ~$2,70 per aanroep kostte. Gevonden
+            # op 01-10-2026, vóór de eerste echte forecast-ronde. Zie tests/test_runtime_daily.py.
+            claims = load_monitoring_claims(conn, spec.domain)
             uitkomst = run_forecast_round(
                 conn, client, spec.domain, spec.forecast_system_prompt,
                 list(spec.forecast_targets), claims,

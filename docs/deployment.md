@@ -571,6 +571,7 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
 - [ ] Trigger-versie `v3` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
+- [ ] **Ook de reparatie van de forecast-prompt staat op de VPS** (volgende PR na #25): zonder die zou elke ronde falen op een prompt van ruim een miljoen tokens (zie project-state, 01-10).
 - [ ] **De code van PR #25 staat op de VPS** (vijf kwantielen, `llm_calls`, Sonnet 5.5), `pytest` geeft `880 passed`, en de databasemigratie
       is gedraaid (`SELECT COUNT(*) FROM predictions;` geeft `0`, en `.schema predictions` bevat `q25` en `q75`).
 - [ ] **`ANTHROPIC_API_KEY` staat in `.env` op de VPS** (tot nu toe was dat nergens nodig; `run_daily.sh` zonder `--deep-dives` gebruikt hem niet).

@@ -1027,6 +1027,19 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### BUG gevonden vóór de eerste echte ronde: de forecast-prompt bevatte de volledige historie (2.0/1.11, 01-10) — 882 tests groen
+
+**Wat.** `runtime/daily.py::_run_forecast_round` gebruikte `load_latest_claims(conn, domain)`. Die functie geeft ondanks zijn naam de VOLLEDIGE claims-historie van het domein
+terug (de trigger-laag heeft dat nodig; de docstring waarschuwt er zelf voor). De deep-dive gebruikt wel de juiste (`load_monitoring_claims`, alleen de laatste cyclus). Tot de
+back-fill van 29-09 viel dit niet op: er was weinig historie. Met de back-fill is de monetary-prompt naar schatting ~51.000 claims, ~4 miljoen tekens, ruim 1,3 miljoen tokens: **te
+groot voor het contextvenster van 1 miljoen**, dus elke ronde zou zijn mislukt (zichtbaar, geen kosten), en als het wel paste ~$2,70 per aanroep. Nooit gebeurd: `--deep-dives` staat nog niet aan.
+**Mijn eerdere uitleg ("de agent krijgt alleen de laatste waarde per reeks") was dus onjuist voor de code zoals die stond; ze klopt pas sinds deze reparatie.**
+
+**Reparatie.** `load_monitoring_claims` (laatste cyclus). Regressietest met een back-fill van 400 oude claims: de prompt moet precies één regel per reeks bevatten (met de oude code: 401).
+**Tweede vangrail:** `MeteredClient` weigert een verzoek groter dan `MAX_VERZOEK_TEKENS` (100.000 tekens; een normaal verzoek is 5.000 tot 15.000) met `VerzoekTeGroot`, zichtbaar en vóór er iets is uitgegeven;
+de maandrem ziet zo'n verzoek niet aankomen. Verhoogbaar zodra een rijkere evidence-sheet dat bewust nodig maakt.
+**Les:** de tests gebruikten kleine databases. Een test met een realistisch gevulde database (back-fill) had dit vroeger gevangen; die staat er nu.
+
 ### Ruw LLM-logboek en Sonnet 5.5 (1.2/1.11, 01-10) — 880 tests groen
 
 **Logboek (`llm_calls`, onveranderlijk).** `MeteredClient` legt bij elke LLM-aanroep het volledige verzoek (alle parameters, geen sleutel) en het
