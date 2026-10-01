@@ -571,6 +571,21 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
 - [ ] Trigger-versie `v3` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
+- [ ] **Ook de reparatie van de forecast-prompt staat op de VPS** (volgende PR na #25): zonder die zou elke ronde falen op een prompt van ruim een miljoen tokens (zie project-state, 01-10).
+- [ ] **De code van PR #25 staat op de VPS** (vijf kwantielen, `llm_calls`, Sonnet 5.5), `pytest` geeft `880 passed`, en de databasemigratie
+      is gedraaid (`SELECT COUNT(*) FROM predictions;` geeft `0`, en `.schema predictions` bevat `q25` en `q75`).
+- [ ] **`ANTHROPIC_API_KEY` staat in `.env` op de VPS** (tot nu toe was dat nergens nodig; `run_daily.sh` zonder `--deep-dives` gebruikt hem niet).
+      Controleren zonder de sleutel te tonen: `grep -c '^ANTHROPIC_API_KEY=.\+' /opt/multi_agent/.env` moet `1` geven.
+- [ ] **Voorcontrole van het model (kost een fractie van een cent, schrijft niets, raakt de cron niet):** één minimale aanroep met precies de
+      instellingen die de testrun gebruikt, zodat een toegangs- of parameterfout nu zichtbaar wordt en niet midden in de testrun:
+
+      ```bash
+      cd /opt/multi_agent && set -a && . ./.env && set +a && .venv/bin/python -c "import anthropic; r = anthropic.Anthropic().messages.create(model='claude-sonnet-5-5', max_tokens=20, thinking={'type': 'between_tools'}, messages=[{'role': 'user', 'content': 'Zeg alleen: ok'}]); print(r.stop_reason, [b.type for b in r.content], r.usage.input_tokens, r.usage.output_tokens)"
+      ```
+
+      Verwacht: `end_turn ['text'] <getal> <getal>`. Een `404` betekent geen toegang tot het model, een `400` over `thinking` betekent dat de
+      geïnstalleerde `anthropic`-versie of het model de instelling niet accepteert (`.venv/bin/pip show anthropic` toont de versie).
+      Stop dan en meld het; draai de testrun niet.
 - [x] Een uitgavenlimiet van $200 per maand in het Anthropic-console (ingesteld door DD op 30-09; de
       code-rem van hetzelfde bedrag is de tweede lijn).
 - [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
@@ -598,7 +613,7 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    ```bash
    sqlite3 market_intelligence.db "SELECT DISTINCT agent, model_id, prompt_version, trigger_version FROM predictions;"
    ```
-   Agents: het modelnummer, `v1`, `v2`. Baselines: `deterministic`.
+   Agents: `claude-sonnet-5-5`, prompt-versie `v3`, trigger-versie `v3`. Baselines: `deterministic`.
 4. **De runs zelf:**
    ```bash
    sqlite3 market_intelligence.db "SELECT domain, mode, success, error FROM agent_runs WHERE mode IN ('forecast','deep_dive') ORDER BY run_at DESC LIMIT 15;"
@@ -617,6 +632,15 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    ```bash
    cd /opt/multi_agent && sqlite3 -header -column market_intelligence.db "SELECT id, purpose, domain, model, stop_reason, input_tokens, output_tokens, substr(response_text, 1, 100) AS begin FROM llm_calls ORDER BY id DESC LIMIT 12;"
    ```
+
+   **Precies zien wat een agent kreeg** (de cijfers plus de berekende context), bijvoorbeeld voor de monetary agent:
+
+   ```bash
+   cd /opt/multi_agent && sqlite3 market_intelligence.db "SELECT json_extract(request_json, '$.messages[0].content') FROM llm_calls WHERE purpose = 'forecast' AND domain = 'monetary_policy' ORDER BY id DESC LIMIT 1;"
+   ```
+
+   Controleer of de context klopt met wat je zelf weet: datum en ouderdom van de laatste waarden, het bereik van een jaar, de FOMC-besluitdagen (28-10 en 09-12).
+   Zie je bij een reeks "geen opgeslagen waarnemingen" of "niet te berekenen", dan ontbrak er historie of was de reeks te oud: dat is dan een bevinding.
 
    Staat er bij een rij `stop_reason = max_tokens` of een lege `response_text`, dan was de limiet te krap (met denken uit zou dat niet moeten gebeuren).
 7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console

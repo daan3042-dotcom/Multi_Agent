@@ -30,6 +30,7 @@ geteld: liever te vroeg remmen dan te laat.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from contextlib import contextmanager
@@ -39,6 +40,14 @@ from datetime import datetime, timezone
 from storage.schema import llm_usage_since, record_llm_call, record_llm_usage
 
 logger = logging.getLogger(__name__)
+
+MAX_VERZOEK_TEKENS = 100_000
+"""Grootste verzoek dat een aanroep mag sturen, in tekens van het hele verzoek (systeemprompt en berichten). Een
+normale aanroep is nu 5.000 tot 15.000 tekens; dit is ruim tien keer zoveel. Waarom het bestaat: op 01-10-2026
+bleek de forecast-ronde per ongeluk de VOLLEDIGE claims-historie mee te sturen (~4 miljoen tekens). De maandrem
+telt alleen wat er al is uitgegeven en ziet zo'n verzoek niet aankomen. Zegt de prompt-opbouw ooit weer iets
+onverwachts groots, dan stopt de aanroep zichtbaar (zoals de maandrem) in plaats van duur of onleesbaar door te
+gaan. Bewust verhoogbaar zodra een rijkere evidence-sheet dat nodig maakt: dan is het een beslissing, geen bijwerking."""
 
 MAX_MAANDBEDRAG_ENV = "MI_MAX_MAANDBEDRAG_USD"
 STANDAARD_MAX_MAANDBEDRAG_USD = 200.0
@@ -61,6 +70,10 @@ PRIJZEN_USD_PER_MILJOEN: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.0, 5.0),
 }
 DUURSTE_PRIJS = max(PRIJZEN_USD_PER_MILJOEN.values())
+
+
+class VerzoekTeGroot(Exception):
+    """Het verzoek is groter dan `MAX_VERZOEK_TEKENS`. Er is niets verstuurd en er is niets uitgegeven."""
 
 
 class BudgetExceeded(RuntimeError):
@@ -212,6 +225,13 @@ class MeteredClient:
             )
 
         kwargs = met_denkbeleid(kwargs)
+        omvang = len(json.dumps(kwargs, ensure_ascii=False, default=str))
+        if omvang > MAX_VERZOEK_TEKENS:
+            raise VerzoekTeGroot(
+                f"verzoek van {omvang:,} tekens is groter dan de grens van {MAX_VERZOEK_TEKENS:,}; niet verstuurd. "
+                f"Waarschijnlijk stuurt een agent te veel claims mee (een volledige historie in plaats van de laatste "
+                f"cyclus)."
+            )
         try:
             antwoord = self._client.messages.create(**kwargs)
         except Exception as e:

@@ -1082,3 +1082,114 @@ def test_de_verwachte_weekdagen_komen_overeen_met_de_cron_in_de_deployment_doc()
     python_dagen = {(d - 1) % 7 for d in cron_dagen}
 
     assert python_dagen == set(EXPECTED_RUN_WEEKDAYS)
+
+
+# --------------------------------------------------------------------------
+# De forecast-prompt mag nooit de volledige historie bevatten (gevonden 01-10-2026)
+# --------------------------------------------------------------------------
+
+
+def _agent_die_zijn_cyclus_opslaat(domain="testdomain"):
+    """Een agent zoals de echte: `run_monitoring` slaat zijn eigen output op in de database."""
+    from storage.schema import save_domain_output
+
+    basis = _forecast_agent(domain)
+
+    def monitor(conn, now=None, event_id=None):
+        output = _output(domain, now)
+        save_domain_output(conn, output)
+        return output, []
+
+    return AgentSpec(
+        domain, monitor, forecast_targets=basis.forecast_targets,
+        forecast_system_prompt=basis.forecast_system_prompt, prompt_version=basis.prompt_version,
+    )
+
+
+def test_de_forecast_prompt_bevat_alleen_de_laatste_cyclus_en_niet_de_backfill_historie(tmp_path):
+    """REGRESSIE. De forecast-ronde gebruikte `load_latest_claims`, die ondanks zijn naam de VOLLEDIGE historie van het
+    domein teruggeeft. Na de back-fill (~51.000 claims voor de monetary agent) werd de prompt ruim een miljoen tokens:
+    te groot voor het contextvenster, en ~$2,70 per aanroep als hij wel paste. Alleen met kleine testdatabases zag je dat
+    niet. Hier staat een back-fill van 400 oude claims in de database; de prompt moet precies één regel bevatten."""
+    from storage.schema import save_domain_output
+
+    conn = _db(tmp_path)
+    oud = datetime(2006, 1, 1, tzinfo=timezone.utc)
+    historie = [
+        Claim(
+            domain="testdomain", claim="Testmetric", value=float(i), source="test", confidence=Confidence.HIGH,
+            analysis_time=oud + timedelta(days=i), source_time=oud + timedelta(days=i), metric_key="testmetric",
+        )
+        for i in range(400)
+    ]
+    save_domain_output(conn, DomainOutput(domain="testdomain", mode=Mode.MONITORING, generated_at=oud, claims=historie))
+    client = _forecast_client()
+
+    run_daily(conn, agents=[_agent_die_zijn_cyclus_opslaat()], now=MAANDAG, client=client)
+
+    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
+    assert prompt.count("(metric_key: testmetric") == 1, "meer dan één waarde per reeks: de historie lekt door"
+    assert len(prompt) < 3_000
+
+
+def test_een_te_groot_verzoek_wordt_zichtbaar_tegengehouden_voordat_het_geld_kost(tmp_path):
+    import pytest
+
+    """Tweede verdedigingslinie: ook als de prompt-opbouw ooit weer iets groots meestuurt."""
+    from runtime.llm_budget import MAX_VERZOEK_TEKENS, MeteredClient, VerzoekTeGroot
+
+    conn = _db(tmp_path)
+    echt = _forecast_client()
+    g = MeteredClient(echt, conn, 200.0)
+    with pytest.raises(VerzoekTeGroot, match="niet verstuurd"):
+        g.messages.create(model="claude-sonnet-5-5", max_tokens=10, messages=[{"role": "user", "content": "x" * (MAX_VERZOEK_TEKENS + 1)}])
+    echt.messages.create.assert_not_called()  # niets verstuurd
+    assert conn.execute("SELECT COUNT(*) FROM llm_usage").fetchone()[0] == 0  # niets uitgegeven
+    # Een normaal verzoek gaat gewoon door.
+    g.messages.create(model="claude-sonnet-5-5", max_tokens=10, messages=[{"role": "user", "content": "hallo"}])
+    echt.messages.create.assert_called_once()
+
+
+# --------------------------------------------------------------------------
+# De context (evidence-sheet) in de forecast-ronde (01-10-2026, optie B)
+# --------------------------------------------------------------------------
+
+
+def test_de_forecast_ronde_geeft_de_agent_de_berekende_context_mee(tmp_path):
+    """Met historie in de database krijgt de agent spreiding, bereik en ouderdom te zien, niet alleen het laatste getal."""
+    from storage.schema import save_domain_output
+
+    conn = _db(tmp_path)
+    oud = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    dagen = [oud + timedelta(days=i) for i in range(280)]
+    historie = [
+        Claim(domain="testdomain", claim="Testmetric", value=1.0 + 0.01 * i, source="test", confidence=Confidence.HIGH,
+              analysis_time=d, source_time=d, metric_key="testmetric")
+        for i, d in enumerate(dagen)
+    ]
+    save_domain_output(conn, DomainOutput(domain="testdomain", mode=Mode.MONITORING, generated_at=oud, claims=historie))
+    client = _forecast_client()
+
+    run_daily(conn, agents=[_agent_die_zijn_cyclus_opslaat()], now=MAANDAG, client=client)
+
+    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
+    assert "Context per reeks" in prompt and "standaarddeviatie" in prompt and "laatste 52 weken" in prompt
+    assert prompt.index("Huidige, al berekende cijfers") < prompt.index("Context per reeks") < prompt.index("Geef voor ELK")
+
+
+def test_een_fout_bij_het_bouwen_van_de_context_breekt_de_ronde_van_die_agent_zichtbaar_af(tmp_path, monkeypatch):
+    """Liever een zichtbare fout dan een agent die stilletjes blind voorspelt: dan zijn zijn voorspellingen niet
+    vergelijkbaar met die van de anderen."""
+    from runtime import daily
+
+    def kapot(*a, **k):
+        raise RuntimeError("historie onleesbaar")
+
+    monkeypatch.setattr(daily, "build_evidence_sheet", kapot)
+    conn = _db(tmp_path)
+    client = _forecast_client()
+    result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=client)
+
+    assert result.forecast_results[0].predictions == ()
+    assert any("ronde afgebroken" in i and "historie onleesbaar" in i for i in result.forecast_issues)
+    client.messages.create.assert_not_called()  # niets betaald voor een blinde voorspelling

@@ -164,7 +164,7 @@ FORECAST_TARGETS = tuple(
 # de sleutel zegt WELKE reeks, de regel zegt WAT ermee gebeurt.
 
 
-FORECAST_PROMPT_VERSION = "v2"
+FORECAST_PROMPT_VERSION = "v3"
 """Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
 prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
 `agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.

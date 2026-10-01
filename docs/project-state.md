@@ -1027,6 +1027,32 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Evidence-sheet: de agent krijgt berekende context (2.0/4.1, 01-10, optie B) — 903 tests groen
+
+**Besluit DD:** de agent krijgt meer dan het laatste getal ("beter voor de toekomst van de agent"). `scoring/evidence_sheet.py::build_evidence_sheet(conn, targets, claims, as_of)` is een zuivere
+functie (geen LLM, alleen lezen) die per reeks de ouderdom, de verandering over 1 en 3 maanden, het 52-wekenbereik en per kwantieldoel en horizon de standaarddeviatie van de verandering geeft (laatste 5 jaar en
+laatste jaar), en voor de FOMC-doelen de laatste en recente veranderingen plus de komende besluitdagen. Hergebruikt `baselines._history/_sample`, dus **dezelfde vensters en dezelfde point-in-time-regel**
+als de persistence-baseline en de resolutie. Vier voorzorgen: (1) **geen kant-en-klare kwantielen** (zou kopiëren uitnodigen; een test bewaakt dat er geen "q10", "kwantiel" of "mediaan" in staat);
+(2) point-in-time, getest met toekomstige en later-gezien waarnemingen; (3) ontbrekende of verouderde data wordt benoemd (nooit stil weggelaten); (4) een fout bij het bouwen breekt de ronde van die
+agent zichtbaar af, zodat niemand stilletjes blind voorspelt. `FORECAST_SYSTEM_RULES` kreeg regel 6 (gebruik de context; wijk alleen af met reden), zonder omrekentabel naar kwantielen; **prompt v3** voor alle vijf agents.
+Gecontroleerd dat de tests falen bij een bewuste fout (verkeerd venster, point-in-time uit, kwantielen in de tekst).
+**Onzeker/ongetest:** nooit met echte data of een echt model; de keuze van de velden is van mij en moet door DD beoordeeld worden aan de hand van een echte prompt uit `llm_calls`; of het model de spreiding
+daadwerkelijk gebruikt, is de eerste meting van de testrun. **Bewust niet:** releasekalender van CPI en banen (bestaat niet), FOMC-uitkomsten van vóór oktober 2026, historische kans op een verhoging per vergadering.
+**Gevolg voor de vergelijking:** de agent en de baselines krijgen nu vergelijkbare informatie; een nieuwe (kleine) vorm van lekkage is dat de agent de spreiding kent die de persistence-baseline ook gebruikt, dat is de bedoeling.
+
+### BUG gevonden vóór de eerste echte ronde: de forecast-prompt bevatte de volledige historie (2.0/1.11, 01-10) — 882 tests groen
+
+**Wat.** `runtime/daily.py::_run_forecast_round` gebruikte `load_latest_claims(conn, domain)`. Die functie geeft ondanks zijn naam de VOLLEDIGE claims-historie van het domein
+terug (de trigger-laag heeft dat nodig; de docstring waarschuwt er zelf voor). De deep-dive gebruikt wel de juiste (`load_monitoring_claims`, alleen de laatste cyclus). Tot de
+back-fill van 29-09 viel dit niet op: er was weinig historie. Met de back-fill is de monetary-prompt naar schatting ~51.000 claims, ~4 miljoen tekens, ruim 1,3 miljoen tokens: **te
+groot voor het contextvenster van 1 miljoen**, dus elke ronde zou zijn mislukt (zichtbaar, geen kosten), en als het wel paste ~$2,70 per aanroep. Nooit gebeurd: `--deep-dives` staat nog niet aan.
+**Mijn eerdere uitleg ("de agent krijgt alleen de laatste waarde per reeks") was dus onjuist voor de code zoals die stond; ze klopt pas sinds deze reparatie.**
+
+**Reparatie.** `load_monitoring_claims` (laatste cyclus). Regressietest met een back-fill van 400 oude claims: de prompt moet precies één regel per reeks bevatten (met de oude code: 401).
+**Tweede vangrail:** `MeteredClient` weigert een verzoek groter dan `MAX_VERZOEK_TEKENS` (100.000 tekens; een normaal verzoek is 5.000 tot 15.000) met `VerzoekTeGroot`, zichtbaar en vóór er iets is uitgegeven;
+de maandrem ziet zo'n verzoek niet aankomen. Verhoogbaar zodra een rijkere evidence-sheet dat bewust nodig maakt.
+**Les:** de tests gebruikten kleine databases. Een test met een realistisch gevulde database (back-fill) had dit vroeger gevangen; die staat er nu.
+
 ### Ruw LLM-logboek en Sonnet 5.5 (1.2/1.11, 01-10) — 880 tests groen
 
 **Logboek (`llm_calls`, onveranderlijk).** `MeteredClient` legt bij elke LLM-aanroep het volledige verzoek (alle parameters, geen sleutel) en het

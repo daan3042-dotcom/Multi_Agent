@@ -64,10 +64,10 @@ from manager.manager import DispatchPlan, dispatch
 from runtime.notifications import Notification, Notifier, build_notification, log_notifier
 from scoring.baseline_round import baseline_run_domain, run_baseline_round
 from scoring.baselines import BaselineRoundResult
+from scoring.evidence_sheet import build_evidence_sheet
 from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
-    load_latest_claims,
     load_monitoring_claims,
     load_trigger_events_for_day,
     record_trigger_event,
@@ -526,11 +526,21 @@ def _run_forecast_round(conn, agents, result, client, now, week_id) -> None:
         if not _forecast_due(conn, spec, now, week_id):
             continue
         try:
-            claims = load_latest_claims(conn, spec.domain)
+            # LET OP: `load_monitoring_claims` (de laatste cyclus: één waarde per reeks) en NIET
+            # `load_latest_claims`, die ondanks zijn naam de VOLLEDIGE historie van het domein geeft. Met de
+            # back-fill is dat ~51.000 claims voor de monetary agent: een prompt van ruim een miljoen tokens
+            # die niet in het contextvenster past en, als hij wel paste, ~$2,70 per aanroep kostte. Gevonden
+            # op 01-10-2026, vóór de eerste echte forecast-ronde. Zie tests/test_runtime_daily.py.
+            claims = load_monitoring_claims(conn, spec.domain)
+            # De context (spreiding, bereik, FOMC-kalender) rekent Python uit de eigen historie, point-in-time.
+            # Een fout hier laat de ronde van DEZE agent zichtbaar afbreken (de omringende try/except) in plaats
+            # van hem stilletjes blind te laten voorspellen: dan zijn zijn voorspellingen niet vergelijkbaar.
+            evidence = build_evidence_sheet(conn, list(spec.forecast_targets), claims, now)
             uitkomst = run_forecast_round(
                 conn, client, spec.domain, spec.forecast_system_prompt,
                 list(spec.forecast_targets), claims,
                 prompt_version=spec.prompt_version, now=now, event_id=week_id,
+                evidence=evidence,
             )
             result.forecast_results.append(uitkomst)
             logger.info(

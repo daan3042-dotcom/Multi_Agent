@@ -45,15 +45,15 @@ AGENTS = {
 }
 
 # Vastgelegd op 28-09-2026 (v1) en bijgewerkt op 01-10-2026 (v2: vijf kwantielen in
-# FORECAST_SYSTEM_RULES, contract v1).
+# FORECAST_SYSTEM_RULES, contract v1; v3: regel 6 over de context + de evidence-sheet).
 # Versie + hash horen bij elkaar: verandert de prompt, dan verandert de
 # hash, en dan hoort de versie mee te veranderen.
 VERWACHT = {
-    "monetary_policy": ("v2", "f2ff1d90c540a094"),
-    "currency": ("v2", "f069e4e19fa35060"),
-    "financial": ("v2", "eb80abb5438bf013"),
-    "sector": ("v2", "f3d05f8f240b23e6"),
-    "economic": ("v2", "0e1ecc1e52f8d107"),
+    "monetary_policy": ("v3", "777927fe60bc9785"),
+    "currency": ("v3", "a2b220cd5c3c2444"),
+    "financial": ("v3", "440b67229b72448f"),
+    "sector": ("v3", "4646ee200ae0bf3d"),
+    "economic": ("v3", "cf7b6ad2be05146d"),
 }
 
 
