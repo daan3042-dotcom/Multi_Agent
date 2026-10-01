@@ -300,6 +300,7 @@ Secties 4.5, 4.6.
 - [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
+- [x] **[01-10] Freeze-overzicht (`freeze_status.py`, alleen lezen) en waakhond voor de doelenlijst en de evidence-sheet.** Het overzicht toont elk freeze-punt met zijn huidige waarde en status (BEVROREN / TE BEVESTIGEN / OPEN BESLISSING / WIJZIGING ZONDER VERSIE / LET OP); het voert de freeze NIET uit. De waakhond (`contract/freeze_versions.py`, `runtime/freeze_guard.py`, `tests/test_freeze_guard.py`) geeft de doelenlijst en de evidence-sheet een versienummer + vingerafdruk, naar het patroon van de trigger-versie; de prompt-afdruk bevat nu ook de evidence-sheet, want die verandert wat het model ziet.
 - [ ] **[29-09] `MI_COHORT=cohort_0` gezet in `.env` op de VPS, NA de freeze**, en gecontroleerd: het log van de eerstvolgende run zegt "ECHT COHORT", en `SELECT cohort, COUNT(*) FROM predictions GROUP BY cohort` toont nieuwe rijen onder `cohort_0`. Vergeten = de eerste weken van het echte cohort staan onder `dry_run`
 - [ ] Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1 (1.10)
 
@@ -1510,7 +1511,7 @@ kalibratie-deel van 5.2.
       `--deep-dives` koppelde is rechtgezet: dat is T₀ᵇ.
 - [~] **Modelkeuze (`model_id`): `claude-sonnet-5-5`, besloten door DD op 01-10, nog te bevestigen bij de
       freeze.** Was `claude-sonnet-4-6`. Een derde goedkoper ($2/$10 tegen $3/$15). De kennisgrens van juni 2026 (nodig
-      voor de pseudo-OOS-run, 4.4) is een eigen uitspraak van het model en niet onafhankelijk geverifieerd. Denken staat op dit
+      voor de pseudo-OOS-run, 4.4) staat in het Anthropic-modeloverzicht (geraadpleegd 01-10-2026); uittreding niet eerder dan 28-09-2027, dus ruim over de cohortduur van zes maanden heen. Denken staat op dit
       model standaard aan en is centraal uitgezet (`between_tools`); zie `docs/deployment.md`, "Beslissing die vóór fase 3 valt".
       Niet getest tegen de echte API. De QC-review draait mee op dit model zonder `qc.py` te wijzigen.
 - [x] **[01-10] Evidence-sheet voor de forecast-ronde (optie B, besluit DD): de agent krijgt berekende context i.p.v. alleen het laatste getal.** Python rekent

@@ -83,6 +83,7 @@ en `docs/project-state.md`.
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
+| **Het freeze-overzicht (alleen lezen) + versie/vingerafdruk van doelenlijst en evidence-sheet** | `freeze_status.py`, `src/runtime/freeze_status.py`, `src/runtime/freeze_guard.py`, `src/contract/freeze_versions.py` |
 | **Trigger-versienummer + vingerafdruk-waakhond (1.5)** | `src/contract/trigger_version.py`, `src/runtime/trigger_guard.py` |
 | **LLM-tokenverbruik, de maandrem ($200, 1.11), het ruwe LLM-logboek (`llm_calls`) en het denkbeleid** | `src/runtime/llm_budget.py` |
 | Tests | `tests/` |
@@ -178,6 +179,7 @@ van dubbel werk.
   Dat is geen bug in de test. Onder `MI_COHORT=cohort_0` weigert
   `run_daily.py` te starten als de versie niet bevroren (checkpoint 5) of niet
   ongewijzigd is.
+- **Doelenlijst en evidence-sheet dragen versienummer (01-10-2026).** Verander je een forecast-doel (reeks, horizon, resolutieregel) of de tekst die de evidence-sheet aan het model toont, dan faalt `tests/test_freeze_guard.py` totdat je `TARGETS_VERSION`/`EVIDENCE_SHEET_VERSION` in `contract/freeze_versions.py` ophoogt en de nieuwe vingerafdruk toevoegt; een evidence-wijziging vraagt ook een `FORECAST_PROMPT_VERSION`-bump. `freeze_status.py` toont de stand maar voert de freeze nooit uit.
 - **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
   (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
   trigger-drempels zonder versienummer.** Elke zo'n wijziging start
