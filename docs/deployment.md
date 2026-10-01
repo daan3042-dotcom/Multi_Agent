@@ -613,7 +613,7 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    ```bash
    sqlite3 market_intelligence.db "SELECT DISTINCT agent, model_id, prompt_version, trigger_version FROM predictions;"
    ```
-   Agents: `claude-sonnet-5-5`, prompt-versie `v2`, trigger-versie `v3`. Baselines: `deterministic`.
+   Agents: `claude-sonnet-5-5`, prompt-versie `v3`, trigger-versie `v3`. Baselines: `deterministic`.
 4. **De runs zelf:**
    ```bash
    sqlite3 market_intelligence.db "SELECT domain, mode, success, error FROM agent_runs WHERE mode IN ('forecast','deep_dive') ORDER BY run_at DESC LIMIT 15;"
@@ -632,6 +632,15 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    ```bash
    cd /opt/multi_agent && sqlite3 -header -column market_intelligence.db "SELECT id, purpose, domain, model, stop_reason, input_tokens, output_tokens, substr(response_text, 1, 100) AS begin FROM llm_calls ORDER BY id DESC LIMIT 12;"
    ```
+
+   **Precies zien wat een agent kreeg** (de cijfers plus de berekende context), bijvoorbeeld voor de monetary agent:
+
+   ```bash
+   cd /opt/multi_agent && sqlite3 market_intelligence.db "SELECT json_extract(request_json, '$.messages[0].content') FROM llm_calls WHERE purpose = 'forecast' AND domain = 'monetary_policy' ORDER BY id DESC LIMIT 1;"
+   ```
+
+   Controleer of de context klopt met wat je zelf weet: datum en ouderdom van de laatste waarden, het bereik van een jaar, de FOMC-besluitdagen (28-10 en 09-12).
+   Zie je bij een reeks "geen opgeslagen waarnemingen" of "niet te berekenen", dan ontbrak er historie of was de reeks te oud: dat is dan een bevinding.
 
    Staat er bij een rij `stop_reason = max_tokens` of een lege `response_text`, dan was de limiet te krap (met denken uit zou dat niet moeten gebeuren).
 7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console

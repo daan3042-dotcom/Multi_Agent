@@ -1513,6 +1513,12 @@ kalibratie-deel van 5.2.
       voor de pseudo-OOS-run, 4.4) is een eigen uitspraak van het model en niet onafhankelijk geverifieerd. Denken staat op dit
       model standaard aan en is centraal uitgezet (`between_tools`); zie `docs/deployment.md`, "Beslissing die vóór fase 3 valt".
       Niet getest tegen de echte API. De QC-review draait mee op dit model zonder `qc.py` te wijzigen.
+- [x] **[01-10] Evidence-sheet voor de forecast-ronde (optie B, besluit DD): de agent krijgt berekende context i.p.v. alleen het laatste getal.** Python rekent
+      per reeks de ouderdom van de laatste waarde, de verandering over 1 en 3 maanden, het 52-wekenbereik en de standaarddeviatie van de verandering over elke gevraagde horizon (laatste 5 jaar en
+      laatste jaar, zelfde vensters als de baselines en de resolutie), plus voor de FOMC-vragen de laatste en recente veranderingen en de komende besluitdagen. **Bewust spreiding en geen kant-en-klare
+      kwantielen** (anders meet de test of het model kan kopiëren). Point-in-time, dus bruikbaar voor de pseudo-OOS-run (4.4). Een fout bij het bouwen breekt de ronde van die agent zichtbaar af. Prompt v3 voor alle
+      vijf agents. `scoring/evidence_sheet.py`. **Nog niet getest met echte data of een echt model.** De keuze van de velden is door mij gedaan en door DD te beoordelen aan de hand van een echte prompt uit
+      `llm_calls` (zie `docs/deployment.md`).
 - [x] **[01-10] Ruw LLM-logboek (`llm_calls`).** Elk verzoek en elk antwoord wordt onveranderlijk vastgelegd, met agent, doel
       (`forecast`, `deep_dive`, `qc_review`) en event-id (1.2, audit). Een mislukte schrijfactie kost nooit het antwoord en wordt hard gelogd.
 

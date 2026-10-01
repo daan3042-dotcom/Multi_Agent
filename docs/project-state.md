@@ -1027,6 +1027,19 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Evidence-sheet: de agent krijgt berekende context (2.0/4.1, 01-10, optie B) — 903 tests groen
+
+**Besluit DD:** de agent krijgt meer dan het laatste getal ("beter voor de toekomst van de agent"). `scoring/evidence_sheet.py::build_evidence_sheet(conn, targets, claims, as_of)` is een zuivere
+functie (geen LLM, alleen lezen) die per reeks de ouderdom, de verandering over 1 en 3 maanden, het 52-wekenbereik en per kwantieldoel en horizon de standaarddeviatie van de verandering geeft (laatste 5 jaar en
+laatste jaar), en voor de FOMC-doelen de laatste en recente veranderingen plus de komende besluitdagen. Hergebruikt `baselines._history/_sample`, dus **dezelfde vensters en dezelfde point-in-time-regel**
+als de persistence-baseline en de resolutie. Vier voorzorgen: (1) **geen kant-en-klare kwantielen** (zou kopiëren uitnodigen; een test bewaakt dat er geen "q10", "kwantiel" of "mediaan" in staat);
+(2) point-in-time, getest met toekomstige en later-gezien waarnemingen; (3) ontbrekende of verouderde data wordt benoemd (nooit stil weggelaten); (4) een fout bij het bouwen breekt de ronde van die
+agent zichtbaar af, zodat niemand stilletjes blind voorspelt. `FORECAST_SYSTEM_RULES` kreeg regel 6 (gebruik de context; wijk alleen af met reden), zonder omrekentabel naar kwantielen; **prompt v3** voor alle vijf agents.
+Gecontroleerd dat de tests falen bij een bewuste fout (verkeerd venster, point-in-time uit, kwantielen in de tekst).
+**Onzeker/ongetest:** nooit met echte data of een echt model; de keuze van de velden is van mij en moet door DD beoordeeld worden aan de hand van een echte prompt uit `llm_calls`; of het model de spreiding
+daadwerkelijk gebruikt, is de eerste meting van de testrun. **Bewust niet:** releasekalender van CPI en banen (bestaat niet), FOMC-uitkomsten van vóór oktober 2026, historische kans op een verhoging per vergadering.
+**Gevolg voor de vergelijking:** de agent en de baselines krijgen nu vergelijkbare informatie; een nieuwe (kleine) vorm van lekkage is dat de agent de spreiding kent die de persistence-baseline ook gebruikt, dat is de bedoeling.
+
 ### BUG gevonden vóór de eerste echte ronde: de forecast-prompt bevatte de volledige historie (2.0/1.11, 01-10) — 882 tests groen
 
 **Wat.** `runtime/daily.py::_run_forecast_round` gebruikte `load_latest_claims(conn, domain)`. Die functie geeft ondanks zijn naam de VOLLEDIGE claims-historie van het domein

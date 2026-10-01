@@ -167,6 +167,16 @@ Bij alle vier geldt: **lager is beter.**
 call: dat is duurder en maakt de voorspellingen onderling inconsistent,
 terwijl een agent zijn eigen doelen juist samenhangend hoort te zien.
 
+**Wat de agent te zien krijgt (sinds 01-10-2026).** Per reeks de laatste waarde, en daarbij **context die Python uit onze eigen
+historie berekent** (geen LLM): de datum van de laatste waarde en hoe oud die is (CPI is van augustus, een yield van gisteren); de
+verandering ten opzichte van ongeveer een en drie maanden eerder; het bereik van de laatste 52 weken en waar de waarde daarin staat; en
+per kwantieldoel en horizon de **standaarddeviatie van de verandering** over de laatste vijf jaar en het laatste jaar. Voor de FOMC-vragen:
+de laatste verandering van de doelrange, de veranderingen van de afgelopen twee jaar en de eerstvolgende besluitdagen. Alles is
+point-in-time (alleen wat er op de dag zelf bekend was). **Bewust geen kant-en-klare kwantielen:** alleen spreiding, zodat de agent zelf
+van spreiding naar kwantielen moet en de test niet meet of het model de baseline kan kopiëren. Er staat bewust niets in over releasedata
+van CPI of banen (er is geen kalender van) en niets over FOMC-uitkomsten van vóór oktober 2026. Vensters overlappen, dus het getal `n`
+in de context is geen aantal onafhankelijke waarnemingen; dat staat er ook bij.
+
 **De agent ziet alleen zijn eigen domein-claims.** Bewust niet alle
 domeinen — dat maakt agents sterker maar volledig gecorreleerd, en dan
 meet de scoring straks zeven keer dezelfde synthesizer. Cross-domein is de

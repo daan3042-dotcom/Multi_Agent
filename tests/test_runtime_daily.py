@@ -1148,3 +1148,48 @@ def test_een_te_groot_verzoek_wordt_zichtbaar_tegengehouden_voordat_het_geld_kos
     # Een normaal verzoek gaat gewoon door.
     g.messages.create(model="claude-sonnet-5-5", max_tokens=10, messages=[{"role": "user", "content": "hallo"}])
     echt.messages.create.assert_called_once()
+
+
+# --------------------------------------------------------------------------
+# De context (evidence-sheet) in de forecast-ronde (01-10-2026, optie B)
+# --------------------------------------------------------------------------
+
+
+def test_de_forecast_ronde_geeft_de_agent_de_berekende_context_mee(tmp_path):
+    """Met historie in de database krijgt de agent spreiding, bereik en ouderdom te zien, niet alleen het laatste getal."""
+    from storage.schema import save_domain_output
+
+    conn = _db(tmp_path)
+    oud = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    dagen = [oud + timedelta(days=i) for i in range(280)]
+    historie = [
+        Claim(domain="testdomain", claim="Testmetric", value=1.0 + 0.01 * i, source="test", confidence=Confidence.HIGH,
+              analysis_time=d, source_time=d, metric_key="testmetric")
+        for i, d in enumerate(dagen)
+    ]
+    save_domain_output(conn, DomainOutput(domain="testdomain", mode=Mode.MONITORING, generated_at=oud, claims=historie))
+    client = _forecast_client()
+
+    run_daily(conn, agents=[_agent_die_zijn_cyclus_opslaat()], now=MAANDAG, client=client)
+
+    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
+    assert "Context per reeks" in prompt and "standaarddeviatie" in prompt and "laatste 52 weken" in prompt
+    assert prompt.index("Huidige, al berekende cijfers") < prompt.index("Context per reeks") < prompt.index("Geef voor ELK")
+
+
+def test_een_fout_bij_het_bouwen_van_de_context_breekt_de_ronde_van_die_agent_zichtbaar_af(tmp_path, monkeypatch):
+    """Liever een zichtbare fout dan een agent die stilletjes blind voorspelt: dan zijn zijn voorspellingen niet
+    vergelijkbaar met die van de anderen."""
+    from runtime import daily
+
+    def kapot(*a, **k):
+        raise RuntimeError("historie onleesbaar")
+
+    monkeypatch.setattr(daily, "build_evidence_sheet", kapot)
+    conn = _db(tmp_path)
+    client = _forecast_client()
+    result = run_daily(conn, agents=[_forecast_agent()], now=MAANDAG, client=client)
+
+    assert result.forecast_results[0].predictions == ()
+    assert any("ronde afgebroken" in i and "historie onleesbaar" in i for i in result.forecast_issues)
+    client.messages.create.assert_not_called()  # niets betaald voor een blinde voorspelling

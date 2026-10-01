@@ -609,7 +609,12 @@ en q90.
 erbuiten valt. Overmoed is duurder dan twijfel.
 4. GEBRUIK ALLEEN DE AANGELEVERDE CIJFERS als vertrekpunt. Je mag erover redeneren, maar \
 verzin geen data die er niet staat.
-5. ANTWOORD UITSLUITEND MET JSON, zonder tekst eromheen en zonder code-fences."""
+5. ANTWOORD UITSLUITEND MET JSON, zonder tekst eromheen en zonder code-fences.
+6. GEBRUIK DE CONTEXT. Bij de cijfers staat per reeks context die Python uit de opgeslagen historie heeft \
+berekend: de datum en ouderdom van de laatste waarde, recente veranderingen, het bereik van de laatste \
+52 weken en de standaarddeviatie van de verandering over de gevraagde horizon. Gebruik die spreiding als \
+maat voor hoe breed je verdeling hoort te zijn, en wijk er alleen van af als je daar een inhoudelijke reden \
+voor hebt. Een oude waarde (veel dagen oud) zegt minder over nu dan een verse."""
 
 
 @dataclass(frozen=True)
@@ -676,7 +681,7 @@ class ForecastRoundResult:
         return not self.issues
 
 
-def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim]) -> str:
+def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim], evidence: str | None = None) -> str:
     claims_summary = (
         "\n".join(f"- {c.claim}: {c.value} (metric_key: {c.metric_key}, bron: {c.source})" for c in claims)
         or "(geen recente claims beschikbaar)"
@@ -695,8 +700,10 @@ def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim]) ->
                 + (f'; gebeurtenis: "{t.event_rule}"' if t.event_rule else "")
             )
 
+    context = f"{evidence}\n\n" if evidence else ""
     return (
         f"Huidige, al berekende cijfers voor jouw domein:\n{claims_summary}\n\n"
+        f"{context}"
         f"Geef voor ELK van de onderstaande doelen een voorspelling. "
         f"Antwoord met exact deze structuur:\n\n"
         '{"forecasts": [\n' + ",\n".join(regels) + "\n]}"
@@ -784,6 +791,7 @@ def run_forecast_round(
     now=None,
     event_id: str | None = None,
     trigger_conditioned: bool = False,
+    evidence: str | None = None,
 ) -> ForecastRoundResult:
     """De derde modus naast monitoring en deep-dive (roadmap 2.0).
 
@@ -813,7 +821,7 @@ def run_forecast_round(
                 model=model,
                 max_tokens=2000,
                 system=full_system_prompt,
-                messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims)}],
+                messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims, evidence)}],
             )
         tekst = "".join(b.text for b in response.content if b.type == "text").strip()
         if not tekst:
