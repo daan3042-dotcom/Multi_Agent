@@ -225,7 +225,7 @@ puur "haalt de ingestieklok elke dag zonder tussenkomst echte data op".
 
 **Na 3 schone dagen:** zie het aparte plan hieronder ("Dry-run-plan voor
 `--deep-dives`"). **T₀ᵃ is gehaald** na zeven werkdagen op rij ingestie zonder
-handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober). Een eerdere
+handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober en op 01-10 naar op zijn vroegst 12 oktober, met de strenge definitie van een schone dag: alle agents `ok` én geen volledigheidstrigger). Een eerdere
 versie van deze zin koppelde T₀ᵃ aan zeven dagen mét `--deep-dives`; dat is de
 voorspelmeting (T₀ᵇ), niet de ingestieklok, en is rechtgezet.
 
@@ -481,7 +481,7 @@ dry-run.
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
-blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op 7 oktober). DD keurde het plan
+blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op zijn vroegst 12 oktober). DD keurde het plan
 goed met één aanpassing: de maandgrens voor LLM-kosten staat op **$200**, niet $20.
 
 ### Wat de vlag aanzet (uit de code, `runtime/daily.py`)
@@ -552,16 +552,18 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
 
 ### Voorwaarden om te beginnen
 
-- [ ] T₀ᵃ gehaald: zeven werkdagen op rij ingestie zonder handmatige actie (op zijn
-      vroegst woensdag 7 oktober, als de reeks op 29-09 begon). **Een handmatige testrun
+- [ ] T₀ᵃ gehaald: zeven schone werkdagen op rij zonder handmatige actie (schoon = alle agents
+      `ok` én geen volledigheidstrigger). Op zijn vroegst **maandag 12 oktober**: de reeks begon op
+      29-09, maar de run van 01-10 was niet schoon (sector 10 van 12 reeksen), dus de telling
+      herstartte op 02-10. **Een handmatige testrun
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
-- [ ] Trigger-versie `v2` in de log en in `trigger_events`.
+- [ ] Trigger-versie `v3` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
 - [x] Een uitgavenlimiet van $200 per maand in het Anthropic-console (ingesteld door DD op 30-09; de
       code-rem van hetzelfde bedrag is de tweede lijn).
 - [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
 
-### Fase 1 — één begeleide testrun (voorstel: donderdag 8 oktober, middag)
+### Fase 1 — één begeleide testrun (voorstel: op zijn vroegst dinsdag 13 oktober, middag; was 8 oktober vóór de verschuiving van T₀ᵃ op 01-10)
 
 De cron van 07:15 heeft dan al gedraaid; monitoring wordt bij een tweede run
 overgeslagen (idempotent). Draai met de hand:
@@ -604,11 +606,11 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
 **Stop en meld het** bij: voorspellingen onder een ander cohort dan `dry_run`; een agent zonder
 enkele voorspelling; een run langer dan tien minuten; kosten een factor tien boven de schatting.
 
-### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf vrijdag 9 oktober)
+### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf woensdag 14 oktober; was 9 oktober)
 
 Alleen als fase 1 schoon was: `--deep-dives` toevoegen aan de cron-regel (`crontab -e`,
 dezelfde regel als in dit document, plus de vlag). Ronden vallen dan op de maandagen
-12, 19 en 26 oktober (plus een inhaalronde op vrijdag 9 oktober voor de lopende week).
+19 en 26 oktober en 2 november (plus een inhaalronde op woensdag 14 oktober voor de lopende week). **De drie weken lopen nu tot 4 november en overlappen de dry-run-week (27 oktober tot 9 november).** Dat is een voorstel dat DD moet bevestigen: of de begeleide periode op twee weken zetten, of de dry-run-week laten beginnen zodra de begeleide periode schoon is.
 
 **Elke dag, twee minuten:** de laatste regels van `daily.log`. Exit 0, of exit 1 met een
 begrijpelijke reden (de ridge-melding op de rondedag is verwacht).

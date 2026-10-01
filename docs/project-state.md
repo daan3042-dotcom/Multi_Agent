@@ -1027,6 +1027,19 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### T₀ᵃ verschoven naar op zijn vroegst 12 oktober (01-10) — checkpoint 4
+
+De run van 01-10 was `ok` voor alle zes agents maar niet compleet: sector kreeg 10 van de 12 reeksen (`spy_benchmark`,
+`xlp_consumer_staples` ontbraken; Alpha Vantage, oorzaak onbekend, zelfde bron als de gaten van 28-09 en 29-09). De roadmap
+definieerde "schone dag" nergens. **DD koos de strenge definitie:** alle agents `ok` én geen volledigheidstrigger. Daarmee
+telde 29-09 en 30-09 mee, 01-10 niet, en herstart de telling op 02-10: zeven schone werkdagen zijn op zijn vroegst vol op
+maandag 12 oktober. Mijn eerdere schatting "een dag opschuiven, donderdag 8 oktober" was fout: een niet-schone dag schuift niets
+op, hij zet de teller op nul. De datums van de `--deep-dives`-testrun (13 oktober) en de cron (14 oktober) schuiven mee en de
+begeleide periode overlapt nu de dry-run-week; zie `docs/deployment.md` (voorstel, door DD te bevestigen).
+**Risico:** elke volgende niet-schone dag verschuift T₀ᵃ opnieuw. Alpha Vantage gaf op 3 van de 4 dagen sinds 28-09 gaten.
+Een herhaalpoging per ontbrekende reeks binnen dezelfde run zou dat verkleinen, maar het is een wijziging aan het onbeheerde
+draaien (checkpoint 3) en is nog niet voorgesteld in detail.
+
 ### Probe-uitkomst, DFEDTARU voor de FOMC-doelen en het SPY-archief (1.2/1.4, 4.5, 01-10) — 805 tests groen
 
 **Probe gedraaid op de VPS** (66 aanroepen, geen fouten, 0 sleutels in de uitvoer). Uitkomst en kanttekeningen
