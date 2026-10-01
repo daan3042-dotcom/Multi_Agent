@@ -114,8 +114,9 @@ baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
 7 oktober als de reeks op 29-09 begon, en de heartbeat-test (alarmkanaal
 getest met een tijdelijke check; de strikte "machine een dag uit"-test na T₀ᵃ).
 Daarna, in volgorde: `--deep-dives` aanzetten met een dry-run-plan (checkpoint
-3), pseudo-OOS-run (4.4), menselijke voorspellers (4.8), synthesizer als
-gescoorde agent, en de freeze vóór T₀ᵇ (checkpoint 5).
+3), pseudo-OOS-run (4.4), synthesizer als gescoorde agent, en de freeze vóór
+T₀ᵇ (checkpoint 5). **Menselijke voorspellers (4.8) staan sinds 30-09 bewust op
+pauze; DD pakt dat zelf weer op.**
 
 ## De agents van cohort 0
 
@@ -135,7 +136,7 @@ geen groei-knopen heeft.
 | commodity | alleen monitoring | AV-commodity-endpoint is maandelijks (40 dagen vers) — niet resolvbaar op korte horizon; predictions vanaf cohort v1 met dagelijkse bron |
 | equity (adapter) | buiten cohort 0 | Company Intelligence, eigen spoor via `analyst_agent.ai`; kwartaalfundamentals passen niet op 5/21/63 |
 | synthesizer | wordt gescoord | zelfde doelen als de domain agents, cross-domein; **[28-09]** plus log-rendement NQ, ZN, CL, 6E over 5 hd (kwantielen) |
-| DD, partner | worden gescoord | wekelijks, vrije keuze uit dezelfde doelen (4.8) |
+| DD, partner | worden gescoord — **[30-09] op pauze, DD komt er zelf op terug** | wekelijks, vrije keuze uit dezelfde doelen (4.8) |
 
 Wat er bewust NIET bij komt vóór T₀, en waar het wél thuishoort: news
 (2.8, eerste post-T₀), NQ daily bias (2.9, conditionele verdeling),
@@ -290,9 +291,9 @@ Secties 4.5, 4.6.
       bevroor wél de doelenlijst, de drempels en de prompts, maar nergens
       de monitoring-scope waaruit die doelen gekozen worden
 - [x] Back-fill klaar; triggerdrempels gekalibreerd tegen de volledige historie, per regel bekend hoe vaak hij gevuurd zou hebben (1.5/4.2) **[29-09: back-fill van alle domeinen, trigger-versie v2 (v1 gecontroleerd met het rapport); HY-spread heeft maar drie jaar, CPI en payrolls zijn bewust niet gekalibreerd, zie "Open beslissingen"]**
-- [ ] Economic agent lean gebouwd en gekoppeld (2.7)
+- [x] Economic agent lean gebouwd en gekoppeld (2.7) **[28-09: gebouwd, checkpoint 1 door DD goedgekeurd; draait sinds 29-09 mee in de dagelijkse cyclus, `economic=ok` in de log]**
 - [x] **[28-09]** `predictions`-tabel met verplichte kwantielen/kans, `resolution_rule` incl. vintage, `resolution_method`, `model_id`, `prompt_version` (1.2/4.1)
-- [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer + menselijke invoer nog niet (2.0/4.8)
+- [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer nog niet; menselijke invoer bewust op pauze (2.0/4.8, DD 30-09)
 - [~] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5) **[28-09: gebouwd en getest; nog niet tegen echte afgelopen voorspellingen gedraaid — dat kan pas als de eerste horizon verstrijkt]**
 - [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
 - [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
@@ -351,7 +352,7 @@ Kelly zijn een beslissingslaag en horen niet in dit systeem.
 |---|---|---|
 | 29 sep – 7 okt | 0a. VPS, back-up, heartbeat, quota | **T₀ᵃ 7 okt: ingestieklok loopt** (was 3 okt) |
 | 6 – 12 okt | 0b. Back-fill, economic agent lean, runtime-fixes | historie in de DB, groei-knopen bediend |
-| 6 – 19 okt | 2. Contract + forecast-ronde + mensinvoer | agents en mensen produceren kwantielen/kansen |
+| 6 – 19 okt | 2. Contract + forecast-ronde + mensinvoer (**mensinvoer op pauze sinds 30-09**) | agents produceren kwantielen/kansen |
 | 6 – 26 okt | 1. Causale graaf (parallel, partner) | knopen, pijlen, deterministische toets |
 | 13 okt – 2 nov | 3. Resolver, scores, drie baselines, trigger-kalibratie | alles wordt gescoord |
 | 27 okt – 9 nov | 3b. Pseudo-OOS + dry-run + freeze | bugs eruit vóór de klok loopt |
@@ -359,7 +360,7 @@ Kelly zijn een beslissingslaag en horen niet in dit systeem.
 | nov – apr | 4. Verdiepen | news, dashboard, contradictie, graaf v1, regime |
 | **mei 2027** | 5. Gewogen pool | gewichten uit echt track record |
 
-Rolverdeling: DD fase 0a en de mensinvoer, partner fase 1, Claude Code
+Rolverdeling: DD fase 0a (de mensinvoer staat sinds 30-09 op pauze), partner fase 1, Claude Code
 fase 0b/2/3/3b onder de checkpoints uit `CLAUDE.md`.
 
 ## Herzieningsmomenten
@@ -437,7 +438,7 @@ gebouwd wordt staat in deel A, niet hier.
       tegengestelde richting op dezelfde knoop en horizon wél. Dit is
       waar 3.1's contradictie-detectie op draait. Post-T₀, samen met
       graaf v1.
-- [ ] **[27-09]** Entiteit: human_forecasters — DD en partner als
+- [ ] **[27-09; 30-09 op pauze, zie 4.8]** Entiteit: human_forecasters — DD en partner als
       voorspellers in dezelfde `predictions`-tabel (`agent='human:dd'`),
       zie 4.8. Geen aparte tabel; alleen een agent-naamruimte plus een
       invoerpad.
@@ -473,6 +474,12 @@ gebouwd wordt staat in deel A, niet hier.
         sizing in een eventuele trading-laag.
       Beide alleen waar een gratis/goedkope bron bestaat (1.4); welke
       bron is nog open. Niet T₀-blokkerend.
+      **[30-09]** DD's uitgebreide onderzoek naar niet-terug-te-halen data (twee lagen:
+      breed ruw archief en een smalle set per agent) is beoordeeld en in fases gezet in
+      `docs/data-archive.md`. Eerst een probe van de bronnen, dan pas bouwen.
+      **[30-09] Fase A gebouwd:** `probe_sources.py` (alleen lezen) meet per bron of hij bereikbaar,
+      betaald en terug te halen is, en geeft een advies (archief nu, archief later, beslissing DD).
+      De uitkomst op de VPS is de invoer voor het ontwerp van het archief.
 - [ ] Entiteit: evidence (brondocumenten/citaten bij een claim)
 - [ ] Entiteit: deep_dives (nu impliciet: een DomainOutput met
       mode=DEEP_DIVE, geen eigen entiteit)
@@ -916,6 +923,11 @@ aangeraakt als de kalibratie laat zien welk domein zwak is.
 - [x] Afwijking t.o.v. 6-maands voortschrijdend gemiddelde
       (`src/analysis/moving_average_deviation.py`) — alternatieve, al
       geïmplementeerde methode; onderstaande zijn de eigenlijke doelmodellen
+- [ ] **[30-09] GEMETEN:** het commodity-endpoint is niet live, ook niet met het betaalde
+      plan. WTI heeft `interval=daily` maar de nieuwste waarneming liep 8 dagen achter (22-09
+      op 30-09); koper geeft ondanks `interval=daily` alleen maandcijfers, twee maanden achter.
+      Zie `docs/data-sources.md`. Verse dagdata voor commodity kan alleen via ETF's op
+      grondstoffen (`GLOBAL_QUOTE`), en dat is een keuze voor de reeksenlijst.
 - [ ] **[27-09]** In cohort 0 alleen monitoring, geen predictions: het
       Alpha Vantage-commodity-endpoint is maandelijks (40 dagen vers),
       dus een 5/21/63-daagse voorspelling is er niet tegen te resolven.
@@ -1309,7 +1321,35 @@ bekijkt.
       van overfit worden, precies wat de bevriezingsafspraak (zie "Wat
       NIET te doen zonder te vragen" in `CLAUDE.md`) probeert te voorkomen.
 
-### 4.8 Menselijke voorspellers — **[27-09]**, fase 2, pre-T₀
+### 4.8 Menselijke voorspellers — **[27-09]**, fase 2, pre-T₀ — **[30-09] BEWUST OP PAUZE, DD komt er zelf op terug**
+
+**Besluit van DD op 30-09.** De menselijke invoer wordt nu niet gebouwd. Reden: DD's
+eigen expertise ligt bij daytrading en deels bij macro, terwijl de doelen van
+cohort 0 breder zijn (rentes, valuta, sectoren, arbeidsmarkt). **Eigenaar: DD.** Hij
+neemt het initiatief om dit weer op te pakken; Claude Code bouwt het niet uit zichzelf.
+
+**Wat dit kost, en wat niet.** DD is zich ervan bewust dat gemiste weken niet
+inhaalbaar zijn: een menselijke voorspelling van vandaag is niet achteraf te maken,
+want dan weet je al wat er gebeurde. Elke week zonder invoer is dus een week zonder
+vergelijking tussen menselijk oordeel en agents. Wat het **niet** kost: er verandert
+niets aan het contract, de tabel of de scoring. `human:dd` en `human:partner` bestaan als
+naamruimte in `predictions.agent`, dus een latere start vraagt geen migratie en geen
+nieuw cohort, en de scoring vergelijkt dan over de weken waarin beide bestaan. T₀ᵇ
+wordt niet geblokkeerd door dit punt.
+
+**Wat al is uitgedacht (voor als DD terugkomt), niets hiervan is gebouwd:**
+- *Kernset, geen 57 doelen:* de agents doen samen 57 voorspellingen per week (elk met drie
+  getallen); voor een mens ongeveer 170 getallen per week. Voorstel: een kernset van ~12
+  doelen die bij DD's expertise passen, in plaats van "een vrije keuze uit alles".
+- *Alleen op de dag van de agents-ronde* (maandag): wie later in de week voorspelt, weet
+  al wat er op dinsdag en woensdag gebeurde, en dat is geen eerlijke vergelijking.
+- *Blind:* de voorspellingen van de agents zijn niet zichtbaar vóór de invoer; alleen de
+  laatste waarde en het doel.
+- *Bevestigen vóór opslaan:* voorspellingen zijn onveranderlijk, dus een samenvatting en een
+  waarschuwing bij een onwaarschijnlijke waarde (bijv. een 10-jaars rente van 45 in plaats van 4,5).
+- *Mogelijke andere invalshoek:* omdat DD's expertise bij daytrading ligt, kan de invoer
+  beter aansluiten op de verhandelbare doelen van de synthesizer (NQ, ZN, CL, 6E, 5 dagen)
+  dan op de macro-reeksen. Dat is een keuze voor als DD terugkomt.
 
 DD en zijn partner zijn de analisten van TCE. Hun oordeel hoort in
 dezelfde tabel als dat van de agents — niet als "de waarheid", maar als
@@ -1407,6 +1447,15 @@ kalibratie-deel van 5.2.
       andere agents voedt.
 
 ## Beslist op 30-09-2026
+
+- [x] **4.8 Menselijke voorspelinvoer bewust op pauze.** DD: zijn expertise ligt bij
+      daytrading en deels bij macro, dus dit gaat er nu even uit; hij komt er zelf op
+      terug. Gemiste weken zijn niet in te halen en DD weet dat. Geen wijziging aan
+      contract of scoring nodig, en T₀ᵇ wordt er niet door geblokkeerd. De
+      ontwerpvragen en voorstellen staan bij 4.8. Bij terugkomst: eerst kiezen welke
+      doelen, en overwegen de invoer op de verhandelbare doelen van de synthesizer te richten.
+- [x] **Anthropic-console: uitgavenlimiet van $200 per maand ingesteld door DD**
+      (naast de code-rem van hetzelfde bedrag).
 
 - [x] **Dry-run-plan voor `--deep-dives` goedgekeurd** (checkpoint 3), zie
       `docs/deployment.md`. Drie fasen: één begeleide testrun op donderdag

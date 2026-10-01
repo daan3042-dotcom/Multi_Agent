@@ -557,8 +557,8 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
 - [ ] Trigger-versie `v2` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
-- [ ] Een uitgavenlimiet van $200 per maand in het Anthropic-console (DD's handeling; de code-rem
-      van hetzelfde bedrag is de tweede lijn).
+- [x] Een uitgavenlimiet van $200 per maand in het Anthropic-console (ingesteld door DD op 30-09; de
+      code-rem van hetzelfde bedrag is de tweede lijn).
 - [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
 
 ### Fase 1 — één begeleide testrun (voorstel: donderdag 8 oktober, middag)
