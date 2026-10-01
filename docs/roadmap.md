@@ -1117,15 +1117,6 @@ Elke uitspraak van het systeem wordt een falsifieerbare claim:
 onveranderlijk, met tijdstempel, en met de regel waarmee hij later
 gescoord wordt er al in.
 
-- [ ] **[01-10] BESLOTEN, NOG NIET GEBOUWD: zeven kwantielen i.p.v. drie** (contractwijziging
-      vóór de freeze, daarna een nieuw cohort). Niveaus **.05 .10 .25 .50 .75 .90 .95**. DD koos dit
-      boven drie en vijf omdat de output uiteindelijk ook voor staartrisico's wordt gebruikt;
-      menselijke voorspellers vullen geen kwantielen in (4.8 blijft op pauze en wordt dan hooguit
-      binair). Dit keert de bewuste keuze van 28-09 om ("drie kwantielen is wat een taalmodel
-      betrouwbaar kan uitspreken", `scoring/scores.py`). **Het voorstel met alle gevolgen, en de punten
-      waarover DD nog moet beslissen, staat in `docs/project-state.md`, "Voorstel: zeven kwantielen".**
-      Pas afvinken als schema, prompt, controle, baselines, scoring en tests gebouwd en groen zijn.
-
 - [x] **[28-09]** `Prediction`-contract met minimaal deze velden
       (**[27-09]** herzien) — `src/contract/prediction.py`, bevroren
       dataclass, 19 tests:
