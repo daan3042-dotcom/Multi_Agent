@@ -478,6 +478,16 @@ en de heartbeat is juist nuttig TIJDENS de dry-run (vangt op als jij een
 dag vergeet te checken). Beide dus gewoon nu opzetten, parallel aan de
 dry-run.
 
+## De T₀ᵃ-teller (alleen lezen)
+
+```bash
+cd /opt/multi_agent && .venv/bin/python t0a_status.py
+```
+
+Toont per werkdag vanaf 2 oktober `schoon`, `NIET SCHOON` (met de reden, bijvoorbeeld de ontbrekende reeks), `GEEN RUN` of `nog niet`,
+de lopende reeks van zeven en de vroegste datum voor T₀ᵃ. Schoon = alle zes agents ok én geen volledigheidstrigger. Gebruik `--vanaf <datum>`
+als de telling na een nieuwe breuk opnieuw moet beginnen. Het script schrijft niets. "Mogelijk handmatig" betekent: een run buiten 07:00 tot 09:00 UTC; beoordeel zelf.
+
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat

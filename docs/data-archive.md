@@ -130,8 +130,9 @@ dezelfde minuut als de cron van 07:15 draaien.
 - **`av_options_realtime` gaf 4 contracten**: een zwakke meting, zegt niets over het echte aanbod.
 - **De valutareeksen van de Fed (DEX*, DTWEXBGS) lopen 6 dagen achter** (wekelijkse H.10-release). Normaal, maar
   de currency agent werkt dus op data van maximaal een week oud.
-- Het script labelt "nog niet onderzocht" als "beslissing DD (niet beschikbaar of betaald)". Dat is onjuist
-  voor Atlanta Fed, regionale Fed-enquêtes en Yahoo; het zijn open onderzoeksvragen, geen beslissingen.
+- Het script labelde "nog niet onderzocht" als "beslissing DD (niet beschikbaar of betaald)". **[01-10 gecorrigeerd]**
+  Atlanta Fed en de regionale Fed-enquêtes heten nu "eerst uitzoeken (nog niet onderzocht)" en Yahoo "bewust niet
+  (zie reden)"; "beslissing DD" blijft voor wat betaald of niet beschikbaar is.
 
 **Fase B, goedkoop en meteen nuttig (FRED, geen nieuwe bron).** **[01-10: DFEDTARU gedaan, zie hieronder;
 SPY-holdings gebouwd, nog niet in de cron.]**

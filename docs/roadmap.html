@@ -99,15 +99,15 @@
 <main id="main"></main>
 
 <footer>
-  Handleiding gegenereerd uit <code>docs/roadmap.md</code> deel A (herziening 27-09-2026). Sectienummers verwijzen naar deel B. Wie: <b>DD</b> = handwerk/beslissing van DD, <b>partner</b> = handwerk partner, <b>CC</b> = Claude Code onder de checkpoints uit <code>CLAUDE.md</code>. Een oranje rand = blokkeert een volgende stap.
+  Handleiding gegenereerd uit <code>docs/roadmap.md</code> deel A (herziening 27-09-2026; bijgewerkt 01-10-2026: T₀ᵃ, schone dag, reeksenlijst). Sectienummers verwijzen naar deel B. Wie: <b>DD</b> = handwerk/beslissing van DD, <b>partner</b> = handwerk partner, <b>CC</b> = Claude Code onder de checkpoints uit <code>CLAUDE.md</code>. Een oranje rand = blokkeert een volgende stap.
 </footer>
 </div>
 
 <script>
 const PHASES = [
 {
-  id:"0a", title:"Fase 0a — Deblokkeren", when:"29 sep – 5 okt 2026",
-  goal:"Het systeem haalt elke dag zonder tussenkomst echte data op. <em>Uitkomst: T₀ᵃ, de ingestieklok loopt (streefdatum 3 oktober).</em>",
+  id:"0a", title:"Fase 0a — Deblokkeren", when:"29 sep – 12 okt 2026",
+  goal:"Het systeem haalt elke dag zonder tussenkomst echte data op. <em>Uitkomst: T₀ᵃ, de ingestieklok loopt (op zijn vroegst 12 oktober; was 3 en daarna 7 oktober).</em>",
   tasks:[
     {id:"0a-1", who:"DD", sec:"1.11", blocked:true, t:"VPS-provider kiezen en instance bestellen",
      dod:"Machine bereikbaar via SSH, Python 3.12+, tijdzone UTC.",
@@ -128,7 +128,7 @@ const PHASES = [
      dod:"Een externe dienst alarmeert bij UITBLIJVEN van de dagelijkse ping; getest door de VPS bewust één dag uit te zetten.",
      why:"<code>run_daily()</code> ziet gaten alleen bij de eerstvolgende run die wél draait. Staat de machine drie weken uit, hoort niemand iets."},
     {id:"0a-7", who:"—", sec:"1.11", t:"T₀ᵃ: de ingestieklok loopt",
-     dod:"7 dagen op rij data zonder handmatige actie; triggers zichtbaar in <code>trigger_events</code>.",
+     dod:"7 SCHONE werkdagen op rij zonder handmatige actie. Schoon = alle zes agents ok én geen volledigheidstrigger (een ontbrekende reeks); een niet-schone dag zet de teller op nul. De reeks begon op 29-09, brak op 01-10 (sector 10 van 12 reeksen) en herstartte op 02-10: op zijn vroegst klaar op maandag 12 oktober. Controle op de VPS: <code>cd /opt/multi_agent &amp;&amp; .venv/bin/python t0a_status.py</code> (alleen lezen).",
      why:"Elke dag zonder VPS is een verloren dag point-in-time-data voor de Alpha Vantage-reeksen — die zijn niet retroactief te reconstrueren."}
   ]
 },
@@ -278,12 +278,13 @@ const PHASES = [
     {id:"t0-5", who:"—", sec:"1.5 / 4.2", t:"Back-fill klaar; drempels gekalibreerd tegen de volledige historie", dod:""},
     {id:"t0-6", who:"—", sec:"2.7", t:"Economic agent lean gebouwd en gekoppeld", dod:""},
     {id:"t0-7", who:"—", sec:"1.2 / 4.1", t:"predictions-tabel met kwantielen/kans, resolution_rule incl. vintage, model_id, prompt_version", dod:""},
-    {id:"t0-8", who:"—", sec:"2.0 / 4.8", t:"Forecast-ronde draait wekelijks voor vijf agents + synthesizer; menselijke invoer werkt", dod:""},
+    {id:"t0-8", who:"—", sec:"2.0 / 4.8", t:"Forecast-ronde draait wekelijks voor vijf agents; synthesizer nog niet; menselijke invoer bewust op pauze (DD pakt dat zelf weer op)", dod:""},
     {id:"t0-9", who:"—", sec:"4.5", t:"Resolver heeft minstens één cohort correct afgewikkeld, incl. een release-horizon", dod:""},
     {id:"t0-10", who:"—", sec:"4.6", t:"Drie baselines draaien mee", dod:""},
     {id:"t0-11", who:"—", sec:"4.4", t:"Pseudo-OOS-run uitgevoerd en bevindingen verwerkt", dod:""},
     {id:"t0-12", who:"—", sec:"CLAUDE.md", t:"Dry-run-week doorlopen, freeze vastgelegd met versienummers", dod:""},
-    {id:"t0-13", who:"—", sec:"1.10", t:"Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1", dod:""}
+    {id:"t0-13", who:"—", sec:"1.10", t:"Causale graaf: v0 vastgelegd óf expliciet uitgesteld naar cohort v1", dod:""},
+    {id:"t0-14", who:"DD", sec:"1.4 / 2.x", t:"Reeksenlijst per agent definitief: elke graafknoop bediend óf expliciet uitgesteld", dod:"Valt VÓÓR de drempelkalibratie, niet bij de freeze: een reeks die je later toevoegt heeft minder maanden data dan de rest. Open vragen: loonstijging (CES0500000003) en core CPI (CPILFESL) voor de economic agent of uitstellen (veilig: FRED-reeksen zijn achteraf te halen); eigenaar van werkloosheid/inflatie (monetary of economic); wat je zelf mist uit je macrokennis; commodity-ETF-proxies vóór T₀ᵇ of in fase 4. Zie <code>docs/roadmap.md</code>, T₀ᵇ-checklist."}
   ]
 },
 {

@@ -1027,6 +1027,17 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### T₀ᵃ-teller, roadmap.html en probe-advies (1.11, 01-10) — 842 tests groen
+
+**`t0a_status.py` + `src/runtime/t0a_status.py` (alleen lezen, database `mode=ro`).** Rekent uit `agent_runs` en `trigger_events` per werkdag
+vanaf 02-10 uit of die schoon was (alle zes agents `ok` én geen volledigheidstrigger), de lopende reeks, en de vroegste datum voor T₀ᵃ. Een dag
+zonder run is "GEEN RUN" en breekt de reeks; vandaag-nog-niet-gedraaid breekt niets; eenmaal gehaald blijft gehaald. Markeert een run buiten
+het cron-venster als "mogelijk handmatig" (vermoeden, telt niet als niet-schoon) en een wisselende trigger-versie. De lijst van zes agents komt uit
+`runtime.daily.default_agents()`. **Kan niet bewijzen dat er geen handmatige actie was; nog nooit gedraaid op de echte database.**
+**`docs/roadmap.html`:** T₀ᵃ op zijn vroegst 12 oktober met de nieuwe definitie, `t0-8` (synthesizer nog niet, menselijke invoer op pauze) en
+een nieuw punt `t0-14` voor de reeksenlijst; alle bestaande ID's gelijk, dus afvinkingen blijven staan; de JavaScript is syntactisch gecontroleerd.
+**Probe-advies:** "nog niet onderzocht" (Atlanta Fed, regionale Fed-enquêtes) is nu "eerst uitzoeken", Yahoo "bewust niet"; betaald blijft "beslissing DD".
+
 ### Kalibratie, AUC en effectieve n (4.5, 01-10) — 826 tests groen
 
 Nieuw: `src/scoring/diagnostics.py` (zuivere rekenregels, alleen stdlib, vaste seed), `src/scoring/evaluation_report.py`

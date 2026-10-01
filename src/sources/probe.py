@@ -53,26 +53,39 @@ STATUS_GEEN_TOEGANG = "geen toegang (plan)"
 STATUS_FOUT = "fout"
 STATUS_NIET_BEREIKBAAR = "niet bereikbaar"
 STATUS_NIET_GEPROBEERD = "niet geprobeerd"
+STATUS_BEWUST_NIET = "bewust niet"
 
 ADVIES_NU = "archief NU (niet terug te halen)"
 ADVIES_LATER = "archief later (terug te halen, geen haast)"
 ADVIES_BESLISSING = "beslissing DD (niet beschikbaar of betaald)"
 ADVIES_METEN = "eerst diepte meten (herstelbaarheid onbekend)"
-ALLE_ADVIEZEN = (ADVIES_NU, ADVIES_LATER, ADVIES_METEN, ADVIES_BESLISSING)
+ADVIES_UITZOEKEN = "eerst uitzoeken (nog niet onderzocht)"
+ADVIES_UITGESLOTEN = "bewust niet (zie reden)"
+ALLE_ADVIEZEN = (ADVIES_NU, ADVIES_LATER, ADVIES_METEN, ADVIES_UITZOEKEN, ADVIES_UITGESLOTEN, ADVIES_BESLISSING)
 
 HERSTELBAAR_JA = "ja"
 HERSTELBAAR_NEE = "nee"
 HERSTELBAAR_ONBEKEND = "onbekend"
 
 
-def bepaal_advies(status: str, herstelbaar: str) -> str:
+def bepaal_advies(status: str, herstelbaar: str, kosten: str = "onbekend") -> str:
     """De ene adviesregel, bewust deterministisch en klein.
 
     - Niet gelukt te meten (of niet te krijgen): een beslissing voor DD, vaak met een
       prijs erbij. Geen advies om te archiveren wat er niet is.
     - Bereikbaar en NIET terug te halen: archief nu. Elke dag zonder is verloren.
     - Bereikbaar en terug te halen: archief later. Geen haast, geen testperiode kwijt.
-    - Bereikbaar en onbekend: eerst de diepte meten, in plaats van te gokken."""
+    - Bereikbaar en onbekend: eerst de diepte meten, in plaats van te gokken.
+
+    Twee gevallen die vroeger ten onrechte "beslissing DD (niet beschikbaar of betaald)" heetten
+    (gecorrigeerd 01-10-2026, na het eerste rapport van de VPS): een bron die we nog nooit
+    hebben bekeken (Atlanta Fed, regionale Fed-enquêtes) is geen beslissing maar een
+    onderzoeksvraag, en een bron die we bewust uitsluiten (Yahoo, CLAUDE.md regel 2) is geen
+    open vraag. Wat WEL betaald of niet beschikbaar is, blijft een beslissing voor DD."""
+    if status == STATUS_BEWUST_NIET:
+        return ADVIES_UITGESLOTEN
+    if status == STATUS_NIET_GEPROBEERD and herstelbaar == HERSTELBAAR_ONBEKEND and kosten != "betaald":
+        return ADVIES_UITZOEKEN
     if status != STATUS_OK:
         return ADVIES_BESLISSING
     if herstelbaar == HERSTELBAAR_NEE:
@@ -102,11 +115,11 @@ class ProbeResult:
         # Alles wat naar buiten gaat, gaat door de sleutelfilter. Ook als een aanroeper
         # vergeet het zelf te doen: dit is de laatste verdediging.
         self.detail = redact_secrets(self.detail)[:300]
-        self.advies = bepaal_advies(self.status, self.herstelbaar)
+        self.advies = bepaal_advies(self.status, self.herstelbaar, self.kosten)
 
     def hersteld_via_meting(self, herstelbaar: str) -> None:
         self.herstelbaar = herstelbaar
-        self.advies = bepaal_advies(self.status, self.herstelbaar)
+        self.advies = bepaal_advies(self.status, self.herstelbaar, self.kosten)
 
 
 @dataclass
@@ -512,9 +525,16 @@ NIET_GEPROBEERD: tuple[tuple[str, str, str, str, str, str], ...] = (
 )
 
 
+BEWUST_NIET = frozenset({"yahoo_tickers"})
+"""Bronnen die we met opzet niet gebruiken, met de reden in de detailtekst."""
+
+
 def _niet_geprobeerd() -> list[ProbeResult]:
     return [
-        ProbeResult(id=i, categorie=c, bron=b, status=STATUS_NIET_GEPROBEERD, detail=reden, kosten=kosten, herstelbaar=h)
+        ProbeResult(
+            id=i, categorie=c, bron=b, status=STATUS_BEWUST_NIET if i in BEWUST_NIET else STATUS_NIET_GEPROBEERD,
+            detail=reden, kosten=kosten, herstelbaar=h,
+        )
         for i, c, b, reden, h, kosten in NIET_GEPROBEERD
     ]
 
