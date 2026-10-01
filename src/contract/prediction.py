@@ -23,7 +23,8 @@ achteraf FOUT kan blijken. Alles hieronder dient dat ene doel:
 
 TWEE VORMEN, en de keuze ertussen is niet vrij (27-09-2026):
 
-- `kind=QUANTILE` voor numerieke doelen: q10/q50/q90. Richtings- en
+- `kind=QUANTILE` voor numerieke doelen: vijf kwantielen, q10/q25/q50/q75/q90
+  (sinds 01-10-2026, DD; zie `QUANTILE_LEVELS`). Richtings- en
   drempelkansen worden hieruit AFGELEID, niet apart gevraagd -- kwantielen
   bevatten meer informatie per resolutie, en dat is precies wat er te kort
   is (zie deel A, correctie 2: effectieve n per agent op 63 dagen is ~3-4
@@ -55,13 +56,32 @@ from contract.graph import GRAPH_VERSION, Node
 from contract.resolution import ResolutionMethod
 from contract.trigger_version import current_trigger_version
 
-CONTRACT_VERSION = "v0"
-"""Versie van DIT contract. Een wijziging hieraan start een nieuw cohort in
+CONTRACT_VERSION = "v1"
+"""Versie van DIT contract. v0 had drie kwantielen (q10/q50/q90); v1 heeft er
+vijf (01-10-2026, vóór de freeze en vóór de eerste echte voorspelling, dus
+zonder gevolgen voor een cohort). De bump staat er zodat een rij in de oude
+vorm achteraf altijd herkenbaar is.
+
+Versie van DIT contract. Een wijziging hieraan start een nieuw cohort in
 de scoring (roadmap 4.5) -- anders vergelijk je voorspellingen die onder
 verschillende regels tot stand kwamen. Een modelwissel of promptwijziging
 is daarentegen een COVARIAAT binnen hetzelfde cohort (`model_id`,
 `prompt_version`), want anders zijn er in mei acht cohorten van drie
 weken."""
+
+QUANTILE_LEVELS: tuple[float, ...] = (0.10, 0.25, 0.50, 0.75, 0.90)
+"""De kwantielniveaus van een voorspelling, in oplopende volgorde. DE ENIGE
+PLEK waar dit staat: prompt, validatie, scoring, baselines en kalibratie lezen
+het hier, zodat een volgende wijziging één regel is en niet 63.
+
+Keuze van DD op 01-10-2026 (optie B van vier): q10/q50/q90 uit v0 blijven
+staan (oude scores blijven vergelijkbaar), q25 en q75 erbij. Het
+interkwartielgebied is bij weinig data veel informatiever dan de uiteinden:
+met een effectieve n van enkele cijfers zegt 'valt de uitkomst 10% van de
+tijd onder q10' vrijwel niets. Bewust GEEN q05/q95: die zijn met onze n
+onmeetbaar, en een taalmodel is in de staarten overmoedig."""
+QUANTILE_FIELDS: tuple[str, ...] = tuple(f"q{round(p * 100):02d}" for p in QUANTILE_LEVELS)
+"""('q10', 'q25', 'q50', 'q75', 'q90'): de veldnamen, afgeleid uit de niveaus."""
 
 COHORT_0 = "cohort_0"
 """Het eerste echte cohort, dat vanaf T0-b loopt. Nooit hardcoden als
@@ -148,7 +168,9 @@ class Prediction:
 
     # Kwantielen (kind=QUANTILE)
     q10: float | None = None
+    q25: float | None = None
     q50: float | None = None
+    q75: float | None = None
     q90: float | None = None
 
     # Binaire gebeurtenis (kind=BINARY)
@@ -216,15 +238,15 @@ class Prediction:
             self._valideer_binair()
 
     def _valideer_kwantielen(self) -> None:
-        ontbrekend = [n for n in ("q10", "q50", "q90") if getattr(self, n) is None]
+        ontbrekend = [n for n in QUANTILE_FIELDS if getattr(self, n) is None]
         if ontbrekend:
             raise ValueError(
-                f"kind=quantile vereist q10, q50 en q90; ontbreekt: {', '.join(ontbrekend)}"
+                f"kind=quantile vereist {', '.join(QUANTILE_FIELDS)}; ontbreekt: {', '.join(ontbrekend)}"
             )
-        if not (self.q10 <= self.q50 <= self.q90):
-            raise ValueError(
-                f"kwantielen moeten oplopen: q10={self.q10}, q50={self.q50}, q90={self.q90}"
-            )
+        waarden = self.quantile_values()
+        if any(a > b for a, b in zip(waarden, waarden[1:])):
+            opgave = ", ".join(f"{n}={getattr(self, n)}" for n in QUANTILE_FIELDS)
+            raise ValueError(f"kwantielen moeten oplopen: {opgave}")
         if self.probability is not None or self.event_rule is not None:
             raise ValueError(
                 "kind=quantile mag geen probability/event_rule hebben -- richtings- en "
@@ -242,8 +264,13 @@ class Prediction:
                 "kind=binary vereist een machine-uitvoerbare event_rule "
                 '(bijv. "FOMC target range hoger op 2026-12-10")'
             )
-        if any(getattr(self, n) is not None for n in ("q10", "q50", "q90")):
+        if any(getattr(self, n) is not None for n in QUANTILE_FIELDS):
             raise ValueError("kind=binary mag geen kwantielen hebben")
+
+    def quantile_values(self) -> tuple[float, ...]:
+        """De kwantielwaarden in de volgorde van `QUANTILE_LEVELS`. Alleen
+        zinvol voor kind=quantile."""
+        return tuple(getattr(self, n) for n in QUANTILE_FIELDS)
 
     def to_dict(self) -> dict:
         d = asdict(self)

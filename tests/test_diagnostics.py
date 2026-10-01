@@ -23,6 +23,7 @@ from scoring.diagnostics import (
     quantile_coverage,
     reliability_bins,
 )
+from scoring.diagnostics import QuantileCoverage
 from scoring.evaluation_report import build_report, format_report
 from storage.schema import init_db, save_prediction
 
@@ -55,18 +56,26 @@ def test_reliability_weigert_kans_buiten_bereik():
         reliability_bins([1.2], [True])
 
 
-def test_quantile_coverage_gekalibreerd_en_scheef():
-    # 10 uitkomsten: 1 onder q10, 4 tot q50, 4 tot q90, 1 erboven.
-    rijen = [(0, 5, 10, w) for w in (-1, 1, 2, 3, 4, 6, 7, 8, 9, 11)]
-    c = quantile_coverage(rijen)
-    assert (c.below_q10, c.q10_to_q50, c.q50_to_q90, c.above_q90) == (0.1, 0.4, 0.4, 0.1)
+def test_quantile_coverage_verwachting_en_gekalibreerd_en_scheef():
+    assert QuantileCoverage.expected() == pytest.approx((0.10, 0.15, 0.25, 0.25, 0.15, 0.10))
+    # 20 uitkomsten rond q = (0, 2.5, 5, 7.5, 10): 2 eronder, 3, 5, 5, 3 en 2 erboven.
+    uitkomsten = [-1, -2] + [1, 2, 2.4] + [3, 3.5, 4, 4.5, 5] + [6, 6.5, 7, 7.2, 7.5] + [8, 9, 10] + [11, 12]
+    c = quantile_coverage([(0, 2.5, 5, 7.5, 10, w) for w in uitkomsten])
+    assert c.shares == pytest.approx(QuantileCoverage.expected())
+    assert c.central_share() == pytest.approx(0.50) and c.within_80() == pytest.approx(0.80)
     # Een agent die steeds te laag zit: alles boven q90.
-    assert quantile_coverage([(0, 5, 10, 50)] * 4).above_q90 == 1.0
+    scheef = quantile_coverage([(0, 2.5, 5, 7.5, 10, 50)] * 4)
+    assert scheef.above_q90 == 1.0 and scheef.central_share() == 0.0
 
 
 def test_quantile_coverage_precies_op_een_kwantiel_telt_naar_binnen():
-    c = quantile_coverage([(0, 5, 10, 0), (0, 5, 10, 10)])
+    c = quantile_coverage([(0, 2.5, 5, 7.5, 10, 0), (0, 2.5, 5, 7.5, 10, 10)])
     assert c.below_q10 == 0.0 and c.above_q90 == 0.0
+
+
+def test_quantile_coverage_weigert_een_verkeerd_aantal_waarden():
+    with pytest.raises(ValueError, match="5 kwantielen"):
+        quantile_coverage([(0, 5, 10, 4)])  # de oude vorm met drie kwantielen
 
 
 def test_quantile_coverage_leeg_is_none():
@@ -186,7 +195,7 @@ def _voorspel_en_beoordeel(conn, *, agent, cohort, i, kind, realised, **kw):
         resolution_rule="regel", model_id="claude-x", prompt_version="v1", cohort=cohort,
     )
     if kind == "quantile":
-        basis.update(kind=PredictionKind.QUANTILE, q10=3.9, q50=4.1, q90=4.4,
+        basis.update(kind=PredictionKind.QUANTILE, q10=3.9, q25=4.0, q50=4.1, q75=4.25, q90=4.4,
                      resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER)
     else:
         basis.update(kind=PredictionKind.BINARY, probability=kw.get("probability", 0.7), event_rule="hoger",
@@ -237,6 +246,7 @@ def test_tekst_zegt_eerlijk_dat_er_niets_te_rapporteren_valt_en_waarschuwt_bij_k
         _voorspel_en_beoordeel(conn, agent="a", cohort="dry_run", i=i, kind="quantile", realised=4.0, crps=0.1, pinball=0.1)
     tekst = format_report(build_report(conn))
     assert "NIET BETROUWBAAR" in tekst and "n.v.t." in tekst
+    assert "binnen q25-q75" in tekst and "verwacht 50%" in tekst
 
 
 def test_script_opent_de_database_alleen_lezen(tmp_path, capsys):

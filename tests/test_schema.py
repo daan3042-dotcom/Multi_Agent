@@ -640,7 +640,7 @@ def _een_voorspelling(conn) -> int:
         created_at=nu, resolves_at=nu + timedelta(days=21),
         resolution_rule="regel", resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         model_id="claude-x", prompt_version="mp-v1",
-        q10=3.9, q50=4.1, q90=4.4,
+        q10=3.9, q25=4, q50=4.1, q75=4.25, q90=4.4,
     ))
 
 def test_evaluations_weigert_een_resolved_rij_zonder_uitkomst(tmp_path):

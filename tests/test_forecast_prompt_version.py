@@ -44,15 +44,16 @@ AGENTS = {
     "economic": economic_agent,
 }
 
-# Vastgelegd op 28-09-2026, bij het inbouwen van de wekelijkse ronde.
+# Vastgelegd op 28-09-2026 (v1) en bijgewerkt op 01-10-2026 (v2: vijf kwantielen in
+# FORECAST_SYSTEM_RULES, contract v1).
 # Versie + hash horen bij elkaar: verandert de prompt, dan verandert de
 # hash, en dan hoort de versie mee te veranderen.
 VERWACHT = {
-    "monetary_policy": ("v1", "98f8a384d7029ba4"),
-    "currency": ("v1", "6b464eb22f6b7ba4"),
-    "financial": ("v1", "4825153bfc23f9fc"),
-    "sector": ("v1", "c3dac524fb1027e2"),
-    "economic": ("v1", "0e886a0582b5cfaa"),
+    "monetary_policy": ("v2", "f2ff1d90c540a094"),
+    "currency": ("v2", "f069e4e19fa35060"),
+    "financial": ("v2", "eb80abb5438bf013"),
+    "sector": ("v2", "f3d05f8f240b23e6"),
+    "economic": ("v2", "0e1ecc1e52f8d107"),
 }
 
 

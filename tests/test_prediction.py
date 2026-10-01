@@ -37,7 +37,7 @@ def _kwantiel(**overrides) -> Prediction:
         resolution_rule="eerste print van DGS10 op resolves_at + 3 dagen",
         resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         model_id="claude-x", prompt_version="mp-v1",
-        q10=3.9, q50=4.1, q90=4.4,
+        q10=3.9, q25=4, q50=4.1, q75=4.25, q90=4.4,
     )
     basis.update(overrides)
     return Prediction(**basis)
@@ -110,7 +110,7 @@ def test_zonder_model_id_of_prompt_version_geweigerd():
 
 def test_kwantielen_moeten_oplopen():
     with pytest.raises(ValueError, match="oplopen"):
-        _kwantiel(q10=4.4, q50=4.1, q90=3.9)
+        _kwantiel(q10=4.4, q25=4.25, q50=4.1, q75=4, q90=3.9)
 
 
 def test_kwantielvorm_mag_geen_losse_kans_hebben():
@@ -227,3 +227,41 @@ def test_database_weigert_ongeldige_vorm_ook_buiten_het_contract_om(tmp_path):
             ) VALUES ('a','b','c','quantile','trading_days',5,'2026-10-01','2026-10-22',
                       'regel','m','p', 9.0, 5.0, 1.0, 'cohort_0', 'v0', 'v0', '[]', '[]')""",
         )
+
+
+# --------------------------------------------------------------------------
+# Vijf kwantielen (contract v1, 01-10-2026)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("veld", ["q10", "q25", "q50", "q75", "q90"])
+def test_elk_van_de_vijf_kwantielen_is_verplicht(veld):
+    with pytest.raises(ValueError, match=veld):
+        _kwantiel(**{veld: None})
+
+
+def test_een_kruising_in_het_midden_wordt_ook_gevangen():
+    """q10 <= q50 <= q90 volstond bij drie kwantielen; met vijf kan q25 boven q50 liggen terwijl de
+    buitenste drie kloppen."""
+    with pytest.raises(ValueError, match="oplopen"):
+        _kwantiel(q10=3.9, q25=4.3, q50=4.1, q75=4.2, q90=4.4)
+
+
+def test_gelijke_kwantielen_zijn_toegestaan_maar_dalende_niet():
+    assert _kwantiel(q10=4.0, q25=4.0, q50=4.0, q75=4.0, q90=4.0).quantile_values() == (4.0,) * 5
+
+
+def test_binaire_vorm_mag_geen_q25_of_q75_hebben():
+    with pytest.raises(ValueError, match="geen kwantielen"):
+        _binair(q25=1.0)
+    with pytest.raises(ValueError, match="geen kwantielen"):
+        _binair(q75=1.0)
+
+
+def test_het_contract_staat_op_v1_en_de_niveaus_op_een_plek():
+    from contract.prediction import QUANTILE_FIELDS, QUANTILE_LEVELS
+
+    assert CONTRACT_VERSION == "v1"
+    assert QUANTILE_LEVELS == (0.10, 0.25, 0.50, 0.75, 0.90)
+    assert QUANTILE_FIELDS == ("q10", "q25", "q50", "q75", "q90")
+    assert _kwantiel().contract_version == "v1"

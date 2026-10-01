@@ -67,7 +67,7 @@ def _kwantiel(**overrides) -> Prediction:
         resolution_rule="DGS10 eerste print op of na resolves_at",
         resolution_method=ResolutionMethod.LEVEL_AT_OR_AFTER,
         model_id="claude-x", prompt_version="mp-v1",
-        q10=3.9, q50=4.1, q90=4.4,
+        q10=3.9, q25=4, q50=4.1, q75=4.25, q90=4.4,
     )
     basis.update(overrides)
     return Prediction(**basis)
@@ -127,7 +127,7 @@ def test_binaire_voorspelling_krijgt_brier_en_log_loss(tmp_path):
         kind=PredictionKind.BINARY,
         horizon_kind=HorizonKind.RELEASES, horizon_n=1,
         resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
-        q10=None, q50=None, q90=None,
+        q10=None, q25=None, q50=None, q75=None, q90=None,
         probability=0.7, event_rule="FEDFUNDS hoger na de volgende vergadering",
     ))
 
@@ -211,7 +211,7 @@ def test_ontbrekende_fomc_kalender_is_meteen_onafwikkelbaar(tmp_path, monkeypatc
         target_metric_key="fed_funds_target_upper",
         kind=PredictionKind.BINARY, horizon_kind=HorizonKind.RELEASES, horizon_n=1,
         resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
-        q10=None, q50=None, q90=None,
+        q10=None, q25=None, q50=None, q75=None, q90=None,
         probability=0.7, event_rule="hoger",
     ))
 

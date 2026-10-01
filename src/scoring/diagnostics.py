@@ -11,7 +11,8 @@ WAAROM DIT NAAST DE SCORES. Pinball, CRPS en Brier zeggen hoe goed een agent
 scoorde, niet WAAROM. Drie dingen die een gemiddelde score verbergt:
 
 1. KALIBRATIE. Zegt een agent tien keer "70%", gebeurt het dan zeven keer?
-   Bij kwantielen: valt de uitkomst in 10% van de gevallen onder q10?
+   Bij kwantielen: valt de uitkomst in 10% van de gevallen onder q10, en de helft van de
+   tijd tussen q25 en q75?
 2. DISCRIMINATIE (AUC). Een agent die altijd het basispercentage roept is
    perfect gekalibreerd en volstrekt waardeloos. Alleen AUC ziet dat.
 3. EFFECTIEVE N. Wekelijkse voorspellingen met een horizon van 63 dagen
@@ -32,6 +33,8 @@ import random
 import statistics
 from dataclasses import dataclass
 from datetime import datetime
+
+from contract.prediction import QUANTILE_LEVELS
 
 
 # --------------------------------------------------------------------------
@@ -79,30 +82,57 @@ def reliability_bins(
 
 @dataclass(frozen=True)
 class QuantileCoverage:
-    """Waar de uitkomst viel ten opzichte van de drie kwantielen. Verwacht bij
-    een gekalibreerde agent: 10% / 40% / 40% / 10%."""
+    """Waar de uitkomst viel ten opzichte van de vijf kwantielen: zes gebieden,
+    van 'onder q10' tot 'boven q90'. `shares[i]` hoort bij `expected()[i]`."""
 
     n: int
-    below_q10: float
-    q10_to_q50: float
-    q50_to_q90: float
-    above_q90: float
+    shares: tuple[float, ...]
 
-    EXPECTED = (0.10, 0.40, 0.40, 0.10)
+    @staticmethod
+    def expected() -> tuple[float, ...]:
+        """Wat een perfect gekalibreerde agent haalt: de verschillen tussen
+        opeenvolgende niveaus, 10/15/25/25/15/10%."""
+        niveaus = (0.0, *QUANTILE_LEVELS, 1.0)
+        return tuple(b - a for a, b in zip(niveaus, niveaus[1:]))
+
+    @property
+    def below_q10(self) -> float:
+        return self.shares[0]
+
+    @property
+    def above_q90(self) -> float:
+        return self.shares[-1]
+
+    def central_share(self) -> float:
+        """Aandeel binnen q25-q75 (verwacht 50%): de informatiefste kalibratiecheck
+        bij weinig data."""
+        return self.shares[2] + self.shares[3]
+
+    def within_80(self) -> float:
+        """Aandeel binnen q10-q90 (verwacht 80%)."""
+        return 1.0 - self.shares[0] - self.shares[-1]
 
 
-def quantile_coverage(rows: list[tuple[float, float, float, float]]) -> QuantileCoverage | None:
-    """`rows`: (q10, q50, q90, werkelijk). Een uitkomst precies OP een kwantiel
-    telt naar de binnenkant, zodat een agent die het exact raakt niet voor
-    een mis wordt aangerekend. `None` bij lege invoer: geen gok."""
+def quantile_coverage(rows: list[tuple[float, ...]]) -> QuantileCoverage | None:
+    """`rows`: (q10, q25, q50, q75, q90, werkelijk). Een uitkomst precies OP een
+    kwantiel telt naar de binnenkant van het gebied eronder, zodat een agent die
+    het exact raakt niet voor een mis wordt aangerekend. `None` bij lege invoer:
+    geen gok."""
     if not rows:
         return None
+    k = len(QUANTILE_LEVELS)
+    tellers = [0] * (k + 1)
+    for rij in rows:
+        if len(rij) != k + 1:
+            raise ValueError(f"{k} kwantielen plus de uitkomst verwacht, kreeg {len(rij)} waarden")
+        *q, werkelijk = rij
+        gebied = next((i for i, waarde in enumerate(q) if werkelijk <= waarde), k)
+        # Gelijk aan het eerste kwantiel hoort bij het gebied ONDER q10 alleen als het strikt lager is.
+        if gebied == 0 and werkelijk == q[0]:
+            gebied = 1
+        tellers[gebied] += 1
     n = len(rows)
-    onder = sum(1 for q10, _, _, w in rows if w < q10)
-    tot_mediaan = sum(1 for q10, q50, _, w in rows if q10 <= w <= q50)
-    tot_q90 = sum(1 for _, q50, q90, w in rows if q50 < w <= q90)
-    boven = sum(1 for _, _, q90, w in rows if w > q90)
-    return QuantileCoverage(n, onder / n, tot_mediaan / n, tot_q90 / n, boven / n)
+    return QuantileCoverage(n, tuple(t / n for t in tellers))
 
 
 # --------------------------------------------------------------------------

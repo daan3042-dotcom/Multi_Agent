@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from agents.base import ForecastTarget
-from contract.prediction import Prediction, PredictionKind
+from contract.prediction import QUANTILE_LEVELS, Prediction, PredictionKind
 from contract.resolution import Observation, ResolutionMethod
 from scoring.baselines import (
     BASELINE_VERSION,
@@ -71,7 +71,7 @@ from storage.schema import (
 
 RIDGE = "baseline:ridge"
 RIDGE_NAME = "ridge"
-RIDGE_SPEC_VERSION = "v1"
+RIDGE_SPEC_VERSION = "v2"  # v2 (01-10-2026): residu-kwantielen op vijf niveaus; een oud model met drie wordt nooit geladen
 """Versie van de SPECIFICATIE van dit model: features, z-scorevenster,
 regularisatiegrid, CV-opzet. Zit in de sleutel van de bevroren modellen.
 Verander je iets aan een van die keuzes, verhoog dit dan -- oude modellen
@@ -352,7 +352,7 @@ def fit_ridge_model(
         for i in range(grenzen[k], grenzen[k + 1])
     ]
     intercept, beta = fit_ridge(x, y, lam, drift)
-    q10, q50, q90 = _kwantielen(resid)
+    resid_q = list(_kwantielen(resid))
     model = {
         "spec_version": RIDGE_SPEC_VERSION,
         "lambda": lam,
@@ -361,7 +361,7 @@ def fit_ridge_model(
         "features": [f.key for _, f, _ in behouden],
         "coefficients": beta,
         "dropped": [f"{f.key} (dekking {d:.0%})" for _, f, d in weggelaten],
-        "resid_q": [q10, q50, q90],
+        "resid_q": resid_q,
         "n_rows": n,
         "n_oos": len(resid),
         "mse_oos": mse,
@@ -412,8 +412,15 @@ def _ridge_prediction(
             )
         rij.append(z)
     y_hat = _voorspel(model["intercept"], model["coefficients"], rij)
-    q10, q50, q90 = (sample.anchor + y_hat + q for q in model["resid_q"])
-    if not all(math.isfinite(v) for v in (q10, q50, q90)):
+    if len(model["resid_q"]) != len(QUANTILE_LEVELS):
+        # Een bevroren model met een ander aantal kwantielen is geen model om mee te voorspellen
+        # (en kan niet bijgewerkt worden: opnieuw fitten is een nieuwe RIDGE_SPEC_VERSION).
+        raise _Insufficient(
+            f"{target.metric_key} h={horizon_n}: bevroren ridge heeft {len(model['resid_q'])} "
+            f"residu-kwantielen, {len(QUANTILE_LEVELS)} verwacht"
+        )
+    kwantielen = tuple(sample.anchor + y_hat + q for q in model["resid_q"])
+    if not all(math.isfinite(v) for v in kwantielen):
         raise _Insufficient(f"{target.metric_key} h={horizon_n}: niet-eindige ridge-voorspelling")
     note = (
         f"ridge {RIDGE_SPEC_VERSION}: lambda={model['lambda']:g}, "
@@ -421,7 +428,7 @@ def _ridge_prediction(
         f"{model['n_rows']} rijen, {model['n_oos']} uit-de-steekproef-residuen, "
         f"gefit t/m {model['as_of'][:10]}, anker {sample.anchor:g} ({sample.anchor_date.date()})"
     )
-    return _bouw(RIDGE, domain, target, horizon_n, now, (q10, q50, q90), note)
+    return _bouw(RIDGE, domain, target, horizon_n, now, kwantielen, note)
 
 
 def ridge_predictions(

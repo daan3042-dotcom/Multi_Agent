@@ -49,8 +49,8 @@ def _client(tekst: str):
 def _volledig_antwoord() -> str:
     return (
         '{"forecasts": ['
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q50": 4.1, "q90": 4.3},'
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q50": 4.1, "q90": 4.6}'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q25": 4, "q50": 4.1, "q75": 4.2, "q90": 4.3},'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q25": 3.9, "q50": 4.1, "q75": 4.35, "q90": 4.6}'
         "]}"
     )
 
@@ -111,7 +111,7 @@ def test_ontbrekend_doel_komt_in_issues_maar_gooit_de_rest_niet_weg(tmp_path):
     conn = init_db(str(tmp_path / "t.db"))
     half = (
         '{"forecasts": ['
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q50": 4.1, "q90": 4.3}'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q25": 4, "q50": 4.1, "q75": 4.2, "q90": 4.3}'
         "]}"
     )
     resultaat = _ronde(conn, half)
@@ -127,8 +127,8 @@ def test_niet_oplopende_kwantielen_worden_geweigerd(tmp_path):
     conn = init_db(str(tmp_path / "t.db"))
     fout = (
         '{"forecasts": ['
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 4.9, "q50": 4.1, "q90": 3.3},'
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q50": 4.1, "q90": 4.6}'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 4.9, "q25": 4.5, "q50": 4.1, "q75": 3.7, "q90": 3.3},'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q25": 3.9, "q50": 4.1, "q75": 4.35, "q90": 4.6}'
         "]}"
     )
     resultaat = _ronde(conn, fout)
@@ -151,9 +151,9 @@ def test_onbekend_doel_in_de_respons_wordt_gemeld(tmp_path):
     conn = init_db(str(tmp_path / "t.db"))
     extra = (
         '{"forecasts": ['
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q50": 4.1, "q90": 4.3},'
-        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q50": 4.1, "q90": 4.6},'
-        '{"metric_key": "goud", "horizon_n": 5, "q10": 1, "q50": 2, "q90": 3}'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q25": 4, "q50": 4.1, "q75": 4.2, "q90": 4.3},'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q25": 3.9, "q50": 4.1, "q75": 4.35, "q90": 4.6},'
+        '{"metric_key": "goud", "horizon_n": 5, "q10": 1, "q25": 1.5, "q50": 2, "q75": 2.5, "q90": 3}'
         "]}"
     )
     resultaat = _ronde(conn, extra)
@@ -273,3 +273,55 @@ def test_mislukte_run_regel_rolt_de_voorspellingen_terug(tmp_path, monkeypatch):
         _ronde(conn, _volledig_antwoord(), event_id="2026-W41")
 
     assert list_predictions(conn) == []
+
+
+# --------------------------------------------------------------------------
+# Vijf kwantielen (contract v1, 01-10-2026)
+# --------------------------------------------------------------------------
+
+
+def test_de_prompt_vraagt_om_alle_vijf_kwantielen_en_noemt_ze_in_de_regels(tmp_path):
+    conn = init_db(str(tmp_path / "t.db"))
+    client = _client(_volledig_antwoord())
+    run_forecast_round(
+        conn, client, "monetary_policy", "domeinprompt", DOELEN, [], prompt_version="v2", now=NU,
+        event_id="forecast:2026-W40",
+    )
+    aanroep = client.messages.create.call_args.kwargs
+    gebruiker = aanroep["messages"][0]["content"]
+    for veld in ("q10", "q25", "q50", "q75", "q90"):
+        assert f'"{veld}": <getal>' in gebruiker
+    assert "q10 <= q25 <= q50 <= q75 <= q90" in aanroep["system"]
+
+
+def test_een_antwoord_in_de_oude_vorm_met_drie_kwantielen_wordt_geweigerd_en_niet_aangevuld(tmp_path):
+    """Regressie op het stille-faal-patroon: een model dat nog q10/q50/q90 geeft mag NIET
+    stilzwijgend q25 en q75 krijgen (interpoleren zou kwantielen verzinnen die niemand heeft
+    uitgesproken). Het doel blijft zonder voorspelling en komt in `issues`."""
+    conn = init_db(str(tmp_path / "t.db"))
+    oud = (
+        '{"forecasts": ['
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q50": 4.1, "q90": 4.3},'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q50": 4.1, "q90": 4.6}'
+        "]}"
+    )
+    resultaat = _ronde(conn, oud)
+
+    assert resultaat.predictions == ()
+    assert len([i for i in resultaat.issues if "ongeldige voorspelling" in i]) == 2
+    assert any("q25" in i and "q75" in i for i in resultaat.issues)
+    assert list_predictions(conn) == []
+
+
+def test_alleen_het_middelste_kwantiel_dat_kruist_wordt_geweigerd(tmp_path):
+    """q10 <= q50 <= q90 klopt hier, maar q25 ligt boven q50: de oude controle had dit gemist."""
+    conn = init_db(str(tmp_path / "t.db"))
+    fout = (
+        '{"forecasts": ['
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 5, "q10": 3.9, "q25": 4.3, "q50": 4.1, "q75": 4.2, "q90": 4.4},'
+        '{"metric_key": "10y_treasury_yield", "horizon_n": 21, "q10": 3.7, "q25": 3.9, "q50": 4.1, "q75": 4.35, "q90": 4.6}'
+        "]}"
+    )
+    resultaat = _ronde(conn, fout)
+    assert len(resultaat.predictions) == 1
+    assert any("oplopen" in i for i in resultaat.issues)

@@ -607,7 +607,7 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    sqlite3 market_intelligence.db "SELECT domain, status, COUNT(*) FROM qc_cases GROUP BY domain, status;"
    ```
    `NEEDS_REVIEW` is een vlag en geen fout (CLAUDE.md, regel 3): lees de tekst voordat je oordeelt.
-6. **Lees minstens twee voorspellingen met de hand** en kijk of de kwantielen (q10 < q50 < q90)
+6. **Lees minstens twee voorspellingen met de hand** en kijk of de vijf kwantielen (q10 ≤ q25 ≤ q50 ≤ q75 ≤ q90)
    en de onderbouwing te volgen zijn. Dit is het enige punt dat geen test kan controleren.
 7. **De kosten:** de log (`LLM-verbruik: ...`) en de query hierboven, en ter controle het Anthropic-console
    onder Usage. Ongeveer $0,10 tot $0,30 voor deze run. Wijkt het met een factor tien af, of wijken de

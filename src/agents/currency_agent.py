@@ -90,7 +90,7 @@ FORECAST_TARGETS = tuple(
 # hij hem wel, dan is dat pas interessant omdat de lat vooraf laag lag.
 
 
-FORECAST_PROMPT_VERSION = "v1"
+FORECAST_PROMPT_VERSION = "v2"
 """Versie van de prompt waarmee deze agent voorspelt -- gaat mee in elke
 prediction (`prompt_version`). De prompt is FORECAST_SYSTEM_RULES uit
 `agents/base.py` PLUS de DEEP_DIVE_SYSTEM_PROMPT hieronder.

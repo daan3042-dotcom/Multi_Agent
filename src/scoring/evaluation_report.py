@@ -39,12 +39,17 @@ from scoring.diagnostics import (
 
 _QUERY = """
 SELECT p.cohort, p.agent, p.kind, p.model_id, p.created_at, p.resolves_at,
-       p.q10, p.q50, p.q90, p.probability,
+       p.q10, p.q25, p.q50, p.q75, p.q90, p.probability,
        e.realised_value, e.crps, e.brier, e.pinball_mean
 FROM evaluations e JOIN predictions p ON p.id = e.prediction_id
 WHERE e.status = 'resolved'
 ORDER BY p.created_at
 """
+
+
+# Kolomposities in _QUERY. De vijf kwantielen staan aaneen (q10..q90), in de volgorde van
+# contract.prediction.QUANTILE_FIELDS.
+_Q10, _Q90, _PROBABILITY, _REALISED, _CRPS, _BRIER = 6, 10, 11, 12, 13, 14
 
 
 @dataclass
@@ -78,7 +83,7 @@ def build_report(conn, cohort: str | None = None) -> list[GroupReport]:
     rapport = []
     for (coh, agent, soort), leden in sorted(groepen.items()):
         naam = "crps" if soort == "quantile" else "brier"
-        idx = 11 if soort == "quantile" else 12
+        idx = _CRPS if soort == "quantile" else _BRIER
         scores = [(_dt(r[4]), r[idx]) for r in leden if r[idx] is not None]
         horizon = statistics.median((_dt(r[5]) - _dt(r[4])).total_seconds() / 86400 for r in leden)
         groep = GroupReport(
@@ -89,10 +94,10 @@ def build_report(conn, cohort: str | None = None) -> list[GroupReport]:
             effective=effective_n(scores, max(horizon, 1.0)),
         )
         if soort == "quantile":
-            groep.coverage = quantile_coverage([(r[6], r[7], r[8], r[10]) for r in leden])
+            groep.coverage = quantile_coverage([(*r[_Q10:_Q90 + 1], r[_REALISED]) for r in leden])
         else:
-            kansen = [r[9] for r in leden]
-            uitkomsten = [r[10] >= 0.5 for r in leden]
+            kansen = [r[_PROBABILITY] for r in leden]
+            uitkomsten = [r[_REALISED] >= 0.5 for r in leden]
             groep.reliability = reliability_bins(kansen, uitkomsten)
             groep.auc = auc(kansen, uitkomsten)
             groep.n_positive = sum(uitkomsten)
@@ -124,9 +129,16 @@ def format_report(groepen: list[GroupReport]) -> str:
         uit.append(f"  {e.note}" + ("" if e.reliable else "  -> NIET BETROUWBAAR: geen conclusies trekken"))
         if g.coverage is not None:
             c = g.coverage
+            namen = ("onder q10", "q10-q25", "q25-q50", "q50-q75", "q75-q90", "boven q90")
+            verwacht = QuantileCoverage.expected()
             uit.append(
-                f"  uitkomst valt: onder q10 {_pct(c.below_q10)} (verwacht 10%) | q10-q50 {_pct(c.q10_to_q50)} (40%) | "
-                f"q50-q90 {_pct(c.q50_to_q90)} (40%) | boven q90 {_pct(c.above_q90)} (10%)"
+                "  uitkomst valt: " + " | ".join(
+                    f"{naam} {_pct(deel)} ({100 * v:.0f}%)" for naam, deel, v in zip(namen, c.shares, verwacht)
+                )
+            )
+            uit.append(
+                f"  binnen q25-q75: {_pct(c.central_share())} (verwacht 50%)  |  "
+                f"binnen q10-q90: {_pct(c.within_80())} (verwacht 80%)"
             )
         else:
             a = "niet te meten (maar één soort uitkomst)" if g.auc is None else f"{g.auc:.2f}"

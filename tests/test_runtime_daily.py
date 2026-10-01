@@ -650,7 +650,7 @@ DINSDAG = datetime(2026, 10, 6, 7, 15, tzinfo=timezone.utc)
 VOLGENDE_MAANDAG = datetime(2026, 10, 12, 7, 15, tzinfo=timezone.utc)
 
 
-def _forecast_client(tekst='{"forecasts": [{"metric_key": "testmetric", "horizon_n": 5, "q10": 0.9, "q50": 1.0, "q90": 1.1}]}'):
+def _forecast_client(tekst='{"forecasts": [{"metric_key": "testmetric", "horizon_n": 5, "q10": 0.9, "q25": 0.95, "q50": 1.0, "q75": 1.05, "q90": 1.1}]}'):
     """Minimale Anthropic-client-dubbel; zelfde vorm als in
     test_forecast_round.py."""
     from unittest.mock import MagicMock

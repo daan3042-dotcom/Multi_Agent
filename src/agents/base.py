@@ -98,7 +98,7 @@ from typing import Callable
 from contract.horizons import ReleaseCadence, resolves_at_for
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, DomainOutput, Mode, now_utc
-from contract.prediction import HorizonKind, Prediction, PredictionKind
+from contract.prediction import QUANTILE_FIELDS, HorizonKind, Prediction, PredictionKind
 from contract.resolution import ResolutionMethod
 from health.data_health import (
     HealthStatus,
@@ -574,8 +574,12 @@ Regels waar je je aan moet houden:
 1. GEEF VOOR ELK GEVRAAGD DOEL EEN VOORSPELLING. Sla er geen over. Weet je het niet, geef \
 dan een brede verdeling -- dat is informatie, geen zwakte. Een ontbrekende voorspelling is \
 een gat in de meting dat niet achteraf te vullen is.
-2. KWANTIELEN MOETEN OPLOPEN: q10 <= q50 <= q90. q10 betekent: 10% kans dat de \
-werkelijke waarde LAGER uitkomt. q90: 10% kans dat hij HOGER uitkomt.
+2. KWANTIELEN MOETEN OPLOPEN: q10 <= q25 <= q50 <= q75 <= q90. q10 betekent: 10% kans dat \
+de werkelijke waarde LAGER uitkomt, q25: 25% kans lager, q50 is je mediaan (even vaak hoger \
+als lager), q75: 25% kans dat hij HOGER uitkomt, q90: 10% kans hoger. Dat zijn vijf getallen \
+die samen één verdeling vormen: de middelste helft van de uitkomsten hoort tussen q25 en \
+q75 te vallen, en de ruimte tussen q25 en q75 hoort dus smaller te zijn dan die tussen q10 \
+en q90.
 3. WEES EERLIJK BREED. Een te smalle verdeling wordt hard afgestraft zodra de uitkomst \
 erbuiten valt. Overmoed is duurder dan twijfel.
 4. GEBRUIK ALLEEN DE AANGELEVERDE CIJFERS als vertrekpunt. Je mag erover redeneren, maar \
@@ -657,7 +661,7 @@ def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim]) ->
         for n in t.horizons:
             eenheid = "handelsdagen" if t.horizon_kind is HorizonKind.TRADING_DAYS else "publicaties"
             if t.kind is PredictionKind.QUANTILE:
-                vorm = '"q10": <getal>, "q50": <getal>, "q90": <getal>'
+                vorm = ", ".join(f'"{veld}": <getal>' for veld in QUANTILE_FIELDS)
             else:
                 vorm = '"probability": <0-1>'
             regels.append(
@@ -726,9 +730,7 @@ def _parse_forecast_response(
                     benchmark_metric_key=target.benchmark_metric_key,
                     model_id=model_id,
                     prompt_version=prompt_version,
-                    q10=entry.get("q10"),
-                    q50=entry.get("q50"),
-                    q90=entry.get("q90"),
+                    **{veld: entry.get(veld) for veld in QUANTILE_FIELDS},
                     probability=entry.get("probability"),
                     event_rule=target.event_rule,
                     graph_node=target.graph_node,

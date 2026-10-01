@@ -1027,6 +1027,33 @@ maar dat is een aanname. Gevolg: de drempelkalibratie (1.5/4.2) voor die reeks z
 alleen een rustige periode zonder 2008 of 2020, en de DoD "macro ≥ 20 jaar" is
 voor deze reeks niet te halen via FRED. **Checkpoint 4.**
 
+### Vijf kwantielen, optie B (4.1/4.5, 01-10) — 867 tests groen
+
+**Besluit (DD):** niveaus .10 .25 .50 .75 .90. DD koos eerst zeven (optie D) en draaide dat terug naar vijf (optie B). De D-keuze was alleen
+documentatie (geen code); die is met een `git revert` ongedaan gemaakt (commit fe0b2e4), en B is daarna van nul opgebouwd. Contract v0 -> v1.
+
+**Wat er is veranderd:** `QUANTILE_LEVELS`/`QUANTILE_FIELDS` in `contract/prediction.py` als enige bron (prompt, validatie, scoring, baselines en
+kalibratie lezen ze); `Prediction` met `q25` en `q75` en een middenkruising-controle; schema met vijf kolommen en CHECK-constraints (ook `evaluations`:
+`pinball_q25`, `pinball_q75`); `scoring/scores.py` v2 (`pinball_losses(kwantielen, y)`, CRPS = 2 × gemiddelde pinball, geweigerd bij een verkeerd
+aantal); `baselines.py` v2 (persistence en climatology op vijf niveaus), `ridge.py` v2 (residu-kwantielen op vijf niveaus; een bevroren model met een
+ander aantal wordt niet geladen); `agents/base.py` (regel 2 van `FORECAST_SYSTEM_RULES`, JSON-vorm, parser) en `FORECAST_PROMPT_VERSION` v1 -> v2 voor alle vijf
+agents (hashes in `test_forecast_prompt_version.py`); `diagnostics.py` en het rapport (zes gebieden, verwacht 10/15/25/25/15/10%, plus binnen q25-q75 en q10-q90).
+
+**De migratie van een bestaande database (het risicovolste deel, `_migreer_predictions_kwantielen`).** `init_db` draait elke ochtend, dus een crash daar raakt T₀ᵃ.
+Lege `predictions` en `evaluations` worden vervangen door de nieuwe vorm. Staan er rijen in, dan worden beide tabellen NIET weggegooid en NIET gerepareerd maar
+hernoemd naar `predictions_legacy_v0` en `evaluations_legacy_v0` (indexen losgekoppeld, vreemde sleutel volgt de hernoeming), met een warning. Dit wijkt bewust af van
+de eerdere migratie voor `resolution_method`, die hard weigert en daarmee de dagelijkse run zou laten crashen. Getest tegen de EXACTE oude tabelvorm uit git
+(`tests/test_quantile_migration.py`): leeg, met rijen, idempotent, nieuwe voorspellingen en uitkomsten werken erna, de indexen horen bij de nieuwe tabellen.
+
+**Gemeten voor de keuze van de CRPS-weging** (synthetisch, voorspeller die de echte verdeling kent): gelijk gewogen over vijf niveaus 1,9% (normaal) en 0,7% (dikke
+staarten) onder de echte CRPS; weging naar kansbreedte 2,1 en 2,5% erboven; trapezium 4,1 en 4,5% eronder. Gelijk gewogen is dus de dichtste en de eenvoudigste, en is
+niet veranderd. Voor drie niveaus was het ~11% en voor zeven gelijk gewogen 16 tot 19% te laag. De rangorde van voorspellers was bij elke keuze gelijk.
+
+**Ongetest/onzeker:** of een taalmodel vijf kwantielen betrouwbaar en gekalibreerd uitspreekt (nog nooit gemeten; de begeleide `--deep-dives`-testrun is de eerste echte
+meting; meer dan 5% afgewezen kruisingen is het signaal om te heroverwegen); de migratie is niet op de echte VPS-database gedraaid (alleen tegen de oude tabelvorm uit git).
+Staartrisico's (q05/q95) zijn bewust niet vastgelegd. **Op de VPS vóór het uitrollen:** `SELECT COUNT(*) FROM predictions;` (verwacht 0). Is het meer dan 0, dan werkt de migratie
+nog steeds, maar de rijen belanden in de legacy-tabellen. **Dit is een contractwijziging en dus een freeze-item (checkpoint 5), vóór de eerste echte voorspelling.**
+
 ### T₀ᵃ-teller, roadmap.html en probe-advies (1.11, 01-10) — 842 tests groen
 
 **`t0a_status.py` + `src/runtime/t0a_status.py` (alleen lezen, database `mode=ro`).** Rekent uit `agent_runs` en `trigger_events` per werkdag

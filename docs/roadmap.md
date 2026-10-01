@@ -46,7 +46,7 @@ mechaniek erachter:
    episodes.** Vijf voorspellingen per week op één knoop over 63 dagen
    overlappen negen weken lang — dezelfde weddenschap twaalf keer. Effectieve
    n per agent op 63 dagen is ~3–4 episodes in zes maanden, niet ~130.
-   **Besluiten:** (a) kwantielen (q10/q50/q90) i.p.v. binaire richting+
+   **Besluiten:** (a) kwantielen (sinds 01-10 vijf: q10/q25/q50/q75/q90) i.p.v. binaire richting+
    drempel voor numerieke doelen — meer informatie per resolutie; (b) veel
    *onafhankelijke doelen* per agent i.p.v. herhaling op één knoop (de
    sector agent met 11 ETF's is daarom de rijkste testbron); (c) de
@@ -212,7 +212,7 @@ vanaf cohort v1 verplicht.
 
 - `predictions`-tabel, onveranderlijk; velden in 4.1, inclusief
   `model_id`, `prompt_version`, `contract_version`, `cohort`.
-- **Twee vormen:** kwantielen (q10/q50/q90) voor numerieke doelen,
+- **Twee vormen:** kwantielen (q10/q25/q50/q75/q90) voor numerieke doelen,
   kans op een binaire gebeurtenis (bijv. "FOMC verhoogt") waar geen
   continue waarde bestaat. Richtings- en drempelkansen worden uit
   kwantielen afgeleid, niet apart gevraagd.
@@ -619,7 +619,7 @@ gebouwd wordt staat in deel A, niet hier.
       prediction zonder kwantielen/kans, `resolution_rule`, `resolves_at`
       of **[27-09]** `model_id`/`prompt_version` wordt geweigerd, niet
       gevlagd. Ook geweigerd: kwantielen die niet monotoon zijn
-      (q10 > q50) en een release-horizon op een dagreeks of andersom.
+      (elk kwantiel boven het volgende) en een release-horizon op een dagreeks of andersom.
       Dit is de ene plek waar `NEEDS_REVIEW` niet volstaat — een
       onscoorbare voorspelling vervuilt het track record permanent.
 
@@ -1117,6 +1117,21 @@ Elke uitspraak van het systeem wordt een falsifieerbare claim:
 onveranderlijk, met tijdstempel, en met de regel waarmee hij later
 gescoord wordt er al in.
 
+- [x] **[01-10] Vijf kwantielen i.p.v. drie (contract v0 -> v1).** Niveaus **.10 .25 .50 .75 .90**
+      (`QUANTILE_LEVELS` in `contract/prediction.py`, de enige plek). DD koos dit op 01-10 uit vier
+      opties (drie, vijf binnen, vijf breed, zeven): de oude drie blijven staan (oude scores blijven
+      vergelijkbaar) en q25/q75 erbij, omdat het interkwartielgebied bij weinig data het meest oplevert.
+      **Bewust geen q05/q95:** met onze effectieve n zijn de uiteinden niet te toetsen en een taalmodel is
+      daar overmoedig. DD koos eerst zeven (met het oog op staartrisico's) en draaide dat terug; staartrisico
+      blijft dus ondervertegenwoordigd en kan alleen via een nieuw cohort alsnog bij. Menselijke voorspellers
+      vullen geen kwantielen in (4.8 blijft op pauze). **Gebouwd en getest:** contract (alle vijf verplicht,
+      oplopend, kruising in het midden wordt gevangen), schema (CHECK-constraints, nieuwe kolommen),
+      migratie van een bestaande database, scoring v2, baselines v2, ridge v2, prompts v2 (alle vijf agents),
+      kalibratie (zes gebieden, verwacht 10/15/25/25/15/10%). **CRPS-benadering:** gemeten dat gelijk gewogen
+      over deze vijf niveaus het dichtst bij de echte CRPS zit (1 tot 2% eronder); weging naar kansbreedte
+      zat er 2 tot 2,5% boven, dus de formule is niet veranderd. **Een antwoord in de oude vorm (drie
+      kwantielen) wordt geweigerd en nooit aangevuld.**
+
 - [x] **[28-09]** `Prediction`-contract met minimaal deze velden
       (**[27-09]** herzien) — `src/contract/prediction.py`, bevroren
       dataclass, 19 tests:
@@ -1129,7 +1144,7 @@ gescoord wordt er al in.
   | `target_metric_key`, `domain` | wat er voorspeld wordt; resolutie gebeurt hierop |
   | `graph_node` | welke knoop uit 1.10 — optioneel in cohort 0, verplicht vanaf v1 |
   | `kind` | `quantile` (numeriek doel) of `binary` (gebeurtenis) |
-  | `q10`, `q50`, `q90` | **[27-09]** voor `kind=quantile`; richtings- en drempelkansen worden hieruit afgeleid, niet apart gevraagd |
+  | `q10`, `q25`, `q50`, `q75`, `q90` | **[27-09, vijf sinds 01-10]** voor `kind=quantile`; richtings- en drempelkansen worden hieruit afgeleid, niet apart gevraagd |
   | `probability`, `event_rule` | voor `kind=binary`: expliciete kans 0–1 op een machine-uitvoerbare gebeurtenis ("FOMC verhoogt op 2026-12-10") |
   | `horizon_kind`, `horizon_n` | **[27-09]** `trading_days` (5/21/63) voor dagreeksen, `releases` (1/2/3) voor week-/maandreeksen |
   | `causal_chain` | welke pijlen uit de graaf dit onderbouwen (vanaf v1) |

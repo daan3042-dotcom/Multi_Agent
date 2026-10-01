@@ -32,6 +32,7 @@ from scoring.baselines import CLIMATOLOGY, PERSISTENCE
 from scoring.ridge import (
     LAMBDA_GRID,
     RIDGE,
+    RIDGE_SPEC_VERSION,
     FeatureSeries,
     fit_ridge,
     fit_ridge_model,
@@ -383,7 +384,7 @@ def test_ontbrekende_input_bij_gebruik_is_een_probleem(tmp_path):
     x, _ = _geplant()
     _reeks(schoon, "x", x)  # wel het doel, niet de input f
     save_baseline_model(
-        schoon, "ridge", "v1", "d", "x", 1, MAANDAG, MAANDAG, fit.model["n_rows"], fit.model
+        schoon, "ridge", RIDGE_SPEC_VERSION, "d", "x", 1, MAANDAG, MAANDAG, fit.model["n_rows"], fit.model
     )
 
     uitkomst = ridge_predictions(schoon, "d", [_doel()], MAANDAG)
