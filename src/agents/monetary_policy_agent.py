@@ -102,6 +102,12 @@ FRED_SERIES = {
     "inflation_expectations_5y": "T5YIE",  # -> inflation_expectations
     "inflation_expectations_10y": "T10YIE",  # -> inflation_expectations
     "fed_balance_sheet": "WALCL",  # -> liquidity
+    # Toegevoegd 01-10-2026, vóór de freeze: de bovengrens van de doelrange,
+    # DAGELIJKS. De twee FOMC-doelen worden hierop afgewikkeld i.p.v. op
+    # FEDFUNDS (zie ForecastTarget hieronder en docs/data-archive.md,
+    # "Eén concrete verbetering"). Gemeten op de VPS op 01-10-2026: 0 dagen
+    # achterstand, historie vanaf 2008-12-16.
+    "fed_funds_target_upper": "DFEDTARU",  # -> policy_stance
 }
 
 # Extra reeksen, alleen voor de Taylor Rule (_fetch_taylor_rule_inputs) --
@@ -132,10 +138,20 @@ METRIC_SPECS = {
     # drempel zou in de praktijk nooit gevuurd hebben en liet de knoop
     # `liquidity` blind voor het tempo van de balansafbouw.
     "fed_balance_sheet": MetricSpec(label="Fed-balanstotaal", tolerance=33_000.0, severity="medium"),
+    # De doelrange verspringt in stappen van 0,25. Drempel op de halve stap
+    # (0,125), dezelfde conventie als bij UNRATE/ICSA: een stap van 0,25
+    # vuurt, geen verandering vuurt nooit, en er is geen float-randgeval
+    # zoals bij 0,15 (4,3-4,1 = 0,2000000000000002). Verwacht aantal: 0 tot
+    # 4 per jaar -- bewust ver onder het v1-doel van 5 per jaar, want dit is
+    # een stapreeks en geen ruisreeks. Vuurt op de besluitdag, tot weken vóór
+    # de FEDFUNDS-trigger voor hetzelfde besluit (FEDFUNDS blijft staan:
+    # dubbele trigger op één gebeurtenis is bewust, zoals bij UNRATE).
+    "fed_funds_target_upper": MetricSpec(label="Fed funds doelrange (bovengrens)", tolerance=0.125, severity="high"),
 }
 
 GRAPH_MAPPING: dict[str, Node | None] = {
     "fed_funds_rate": Node.POLICY_STANCE,
+    "fed_funds_target_upper": Node.POLICY_STANCE,
     "10y_treasury_yield": Node.TERM_PREMIUM,
     "2y_treasury_yield": Node.POLICY_EXPECTATIONS,
     "inflation_expectations_5y": Node.INFLATION_EXPECTATIONS,
@@ -179,7 +195,7 @@ FORECAST_TARGETS = (
         ),
     ),
     ForecastTarget(
-        metric_key="fed_funds_rate",
+        metric_key="fed_funds_target_upper",
         kind=PredictionKind.BINARY,
         horizon_kind=HorizonKind.RELEASES,
         horizons=(1, 2),
@@ -187,13 +203,15 @@ FORECAST_TARGETS = (
         graph_node=Node.POLICY_STANCE,
         resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         event_rule=(
-            "De Fed funds rate ligt na de {horizon_n}-de FOMC-vergadering na created_at "
-            "HOGER dan de laatst bekende waarde op created_at"
+            "De bovengrens van de Fed funds doelrange ligt na de {horizon_n}-de "
+            "FOMC-vergadering na created_at HOGER dan de laatst bekende waarde op created_at"
         ),
         resolution_rule=(
-            "FEDFUNDS-waarde na de {horizon_n}-de FOMC-vergadering na created_at, "
-            "eerste print, vergeleken met de laatst bekende waarde op created_at. "
-            "Gelijk blijven telt als NIET verhoogd."
+            "DFEDTARU (bovengrens van de doelrange, dagelijks) op de eerste dag NA de "
+            "{horizon_n}-de FOMC-vergadering na created_at, eerste print, vergeleken met "
+            "de laatst bekende waarde op created_at. Gelijk blijven telt als NIET verhoogd. "
+            "Tot 01-10-2026 was dit FEDFUNDS (maandgemiddelde); dat gaf pas weken later een "
+            "uitkomst en mengde de dagen vóór en na het besluit."
         ),
     ),
 )
@@ -288,7 +306,7 @@ def monitor(conn, now=None, event_id=None):
     om op elke cyclus te herhalen, declareert alleen de actuele config."""
     register_source(
         conn, SOURCE_KEY, provider=PROVIDER, domain=DOMAIN, max_age=MAX_AGE,
-        frequency="gemengd: maandelijks (FEDFUNDS/CPI/UNRATE), dagelijks (DGS2/DGS10/break-evens), wekelijks (WALCL)",
+        frequency="gemengd: maandelijks (FEDFUNDS/CPI/UNRATE), dagelijks (DFEDTARU/DGS2/DGS10/break-evens), wekelijks (WALCL)",
         latency="~1s per call (REST)", cost="gratis (FRED API)",
     )
     return run_monitoring(conn, DOMAIN, SOURCE_KEY, fetch_snapshot, METRIC_SPECS, MAX_AGE, now=now, event_id=event_id)

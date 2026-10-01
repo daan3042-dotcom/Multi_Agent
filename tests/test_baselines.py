@@ -306,14 +306,14 @@ def test_maandreeks_mag_een_ouder_anker_hebben_dan_een_dagreeks(tmp_path):
 
 
 def test_fomc_doelen_worden_bewust_overgeslagen_en_zijn_geen_probleem(tmp_path):
-    """De FEDFUNDS-richting is een gebeurtenis op FOMC-vergaderingen. Een
+    """De richting van de Fed-doelrange is een gebeurtenis op FOMC-vergaderingen. Een
     basisrate uit maandvensters zou een andere gebeurtenis scoren. Dat staat
     onder `skipped` (ontwerp) en niet onder `issues` (probleem): het hoort
     niet in de melding."""
     conn = _db(tmp_path)
-    _reeks(conn, "fed_funds_rate", [4.0 + (i % 4) * 0.25 for i in range(80)])
+    _reeks(conn, "fed_funds_target_upper", [4.0 + (i % 4) * 0.25 for i in range(80)])
 
-    fomc = [t for t in monetary_policy_agent.FORECAST_TARGETS if t.metric_key == "fed_funds_rate"]
+    fomc = [t for t in monetary_policy_agent.FORECAST_TARGETS if t.metric_key == "fed_funds_target_upper"]
     uitkomst = baseline_predictions(conn, "monetary_policy", fomc, MAANDAG)
 
     assert uitkomst.predictions == ()

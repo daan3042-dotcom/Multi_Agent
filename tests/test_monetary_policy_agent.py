@@ -313,3 +313,39 @@ def test_walcl_drempel_negeert_een_rustige_week(tmp_path, monkeypatch):
     _, triggers = mpa.monitor(conn, now=now + timedelta(days=7))
 
     assert not any(t.metric_key == "fed_balance_sheet" for t in triggers)
+
+
+def test_doelrange_bovengrens_wordt_opgehaald_en_bedient_de_fomc_doelen():
+    """01-10-2026: de twee FOMC-doelen draaien op DFEDTARU (dagelijks), niet
+    op FEDFUNDS (maandgemiddelde). De reeks hoort dus in de snapshot, heeft
+    een spec en een graafknoop, en de FOMC-doelen wijzen ernaar."""
+    from contract.resolution import ResolutionMethod
+
+    assert mpa.FRED_SERIES["fed_funds_target_upper"] == "DFEDTARU"
+    assert "fed_funds_target_upper" in mpa.METRIC_SPECS
+    assert "fed_funds_target_upper" in mpa.GRAPH_MAPPING
+    fomc = [t for t in mpa.FORECAST_TARGETS if t.resolution_method is ResolutionMethod.DIRECTION_AFTER_FOMC]
+    assert [t.metric_key for t in fomc] == ["fed_funds_target_upper"]
+    assert "DFEDTARU" in fomc[0].resolution_rule
+
+
+def test_doelrange_trigger_vuurt_op_een_stap_en_nooit_op_geen_verandering(tmp_path):
+    """De drempel staat op de halve stap (0,125): een stap van 0,25 vuurt, een
+    gelijkblijvende stand vuurt niet. Dat laatste is het regressiegeval: de
+    reeks wordt elke dag opnieuw gemeld, en een drempel die op niets vuurt zou
+    elke dag een trigger geven."""
+    from agents.base import run_monitoring
+
+    conn = init_db(str(tmp_path / "t.db"))
+    specs = {"fed_funds_target_upper": mpa.METRIC_SPECS["fed_funds_target_upper"]}
+    nu = datetime.now(timezone.utc)
+
+    def snap(waarde, dag):
+        return lambda: {"fed_funds_target_upper": {"value": waarde, "date": dag}}
+
+    run_monitoring(conn, "monetary_policy", "FRED", snap("4.25", "2026-10-27"), specs, timedelta(days=35), now=nu)
+    _, geen = run_monitoring(conn, "monetary_policy", "FRED", snap("4.25", "2026-10-28"), specs, timedelta(days=35), now=nu + timedelta(days=1))
+    _, stap = run_monitoring(conn, "monetary_policy", "FRED", snap("4.50", "2026-10-29"), specs, timedelta(days=35), now=nu + timedelta(days=2))
+
+    assert geen == []
+    assert len(stap) == 1 and stap[0].severity == "high"

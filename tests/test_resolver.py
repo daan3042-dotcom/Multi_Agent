@@ -120,10 +120,10 @@ def test_binaire_voorspelling_krijgt_brier_en_log_loss(tmp_path):
     from contract import resolution
 
     conn = _db(tmp_path)
-    _claim(conn, "fed_funds_rate", 1, 4.00)
-    _claim(conn, "fed_funds_rate", 30, 4.25)
+    _claim(conn, "fed_funds_target_upper", 1, 4.00)
+    _claim(conn, "fed_funds_target_upper", 30, 4.25)
     save_prediction(conn, _kwantiel(
-        target_metric_key="fed_funds_rate",
+        target_metric_key="fed_funds_target_upper",
         kind=PredictionKind.BINARY,
         horizon_kind=HorizonKind.RELEASES, horizon_n=1,
         resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
@@ -206,9 +206,9 @@ def test_ontbrekende_fomc_kalender_is_meteen_onafwikkelbaar(tmp_path, monkeypatc
     30-09-2026 gevuld, dus deze test maakt hem expliciet leeg."""
     monkeypatch.setattr(resolution, "FOMC_MEETING_DATES", ())
     conn = _db(tmp_path)
-    _claim(conn, "fed_funds_rate", 1, 4.00)
+    _claim(conn, "fed_funds_target_upper", 1, 4.00)
     save_prediction(conn, _kwantiel(
-        target_metric_key="fed_funds_rate",
+        target_metric_key="fed_funds_target_upper",
         kind=PredictionKind.BINARY, horizon_kind=HorizonKind.RELEASES, horizon_n=1,
         resolution_method=ResolutionMethod.DIRECTION_AFTER_FOMC,
         q10=None, q50=None, q90=None,

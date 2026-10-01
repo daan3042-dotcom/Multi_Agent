@@ -327,7 +327,7 @@ def test_de_registry_leest_elke_drempel_rechtstreeks_uit_de_agents():
     werkelijk = {(d, k): s.tolerance for d, k, s in metric_registry()}
 
     assert werkelijk == verwacht
-    assert len(werkelijk) == 40
+    assert len(werkelijk) == 41  # 40 + fed_funds_target_upper (01-10-2026)
 
 
 def test_calibrate_all_gebruikt_de_echte_tolerance_en_markeert_wat_zonder_historie_is(tmp_path):

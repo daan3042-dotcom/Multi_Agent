@@ -225,6 +225,28 @@ def test_met_kalender_werkt_de_methode_wel():
     assert uitkomst.claim_ids == (1, 2)
 
 
+def test_dagelijkse_doelrange_wikkelt_af_op_de_dag_na_de_vergadering():
+    """01-10-2026: de FOMC-doelen draaien op DFEDTARU (dagelijks) en niet op
+    FEDFUNDS (maandgemiddelde). De eerste waarneming NA de besluitdag is
+    genoeg, of de bron de nieuwe stand nu op de besluitdag zelf of een dag
+    later toont. Met het maandgemiddelde duurde dit vijf tot zes weken."""
+    kalender = (date(2026, 10, 28),)
+    # Dagreeks 1..27 oktober op 4.00; de stap naar 4.25 staat op de 28e (besluitdag).
+    reeks = [_obs(d, 4.00) for d in range(1, 28)] + [_obs(28, 4.25), _obs(29, 4.25)]
+    uitkomst = direction_after_fomc(reeks, NU, 1, meetings=kalender)
+    assert uitkomst.value == 1.0
+    assert uitkomst.realised_at == datetime(2026, 10, 29, tzinfo=timezone.utc)
+
+
+def test_dagelijkse_doelrange_wacht_tot_er_een_dag_na_de_vergadering_is():
+    """Regressie: de besluitdag zelf telt niet als 'na de vergadering'. Anders
+    zou een bron die op de besluitdag de OUDE stand toont nog 'gelijk' geven."""
+    kalender = (date(2026, 10, 28),)
+    reeks = [_obs(d, 4.00) for d in range(1, 29)]
+    with pytest.raises(NotYetResolvable):
+        direction_after_fomc(reeks, NU, 1, meetings=kalender)
+
+
 def test_gelijk_blijven_telt_als_niet_verhoogd():
     """Staat zo in de resolution_rule van de monetary agent. De
     conservatieve kant: wie 'hoger' zei krijgt geen punt voor niets."""

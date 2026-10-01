@@ -35,6 +35,10 @@ VERSIES.
       omdat er nog geen historie was.
   v2  v1 + commodity gekalibreerd op de back-fill (29-09-2026, dezelfde dag,
       ~5 per jaar). Alleen de tien commodity-drempels zijn veranderd.
+  v3  v2 + één nieuwe spec: `fed_funds_target_upper` (DFEDTARU, tolerance
+      0,125 = de halve stap van 0,25) in de monetary agent (01-10-2026,
+      vóór de freeze). Bestaande drempels zijn niet veranderd. De reeks
+      bedient de FOMC-resolutie en vuurt op de besluitdag.
 
 ONBEKEND IS GEEN v0. Triggers van vóór deze module hebben `NULL` in
 `trigger_events.trigger_version`: ze zijn gemaakt met drempels die
@@ -44,7 +48,7 @@ beloven.
 
 from __future__ import annotations
 
-TRIGGER_VERSION = "v2"
+TRIGGER_VERSION = "v3"
 
 # versie -> vingerafdruk van de regels zoals die bij die versie golden.
 # Alleen de vingerafdruk van TRIGGER_VERSION wordt bewaakt; de oudere blijven
@@ -53,6 +57,7 @@ TRIGGER_FINGERPRINTS: dict[str, str] = {
     "v0": "d075e95a2b069acf",
     "v1": "6d38e5eadaa613b3",
     "v2": "f80c151df5175293",
+    "v3": "1d72aeed38fc97ec",
 }
 
 # De versie die bij de freeze vóór T₀ᵇ is bevestigd (CLAUDE.md, checkpoint 5).
