@@ -64,7 +64,7 @@ en `docs/project-state.md`.
 | QC + `NEEDS_REVIEW` | `src/qc/qc.py` |
 | Manager-dispatch (gelijktijdige triggers) | `src/manager/manager.py` |
 | Volledige planning | `docs/roadmap.md` |
-| **De causale graaf (fase 1, handwerk)** | `docs/causal-graph.md` |
+| **De causale graaf (fase 1, handwerk)** | `docs/causal-graph.md`; DD's concept van 02-10 (ongewijzigd) en de vergelijking met v0 + vragen: `docs/causal-graph-dd-concept.md`, `docs/causal-graph-vergelijking.md` |
 | Huidige status | `docs/project-state.md` |
 | Architectuur/datastroom van het fundament | `docs/architecture.md` |
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |

@@ -696,6 +696,8 @@ losse analisten: de causale structuur is expliciet en handgeschreven, de
 inferentie deterministisch, en het taalmodel voedt hem alleen met
 waarnemingen.
 
+- [~] **[02-10] DD's antwoorden op de graafvragen:** `labor_market` voor `nonfarm_payrolls`; voorwaarden als tekst; aandelen als knoop; D1/D10/C6 gesplitst en A3a/A3b twee pijlen met een `kanaal`-label; C8/C9 buiten de graaf (als tekst bij de agents); alle tien knopen zonder reeks blijven in v1 als "uitgesteld in cohort 0"; "hoog" per knoop goedgekeurd (`docs/causal-graph-vergelijking.md` §9–10). `sentiment_flows` wordt twee knopen (`sentiment` en `stress_gedwongen_verkoop`): 24 knopen, elf zonder reeks. **Open:** of `wage_growth`/`term_premium`/`liquidity`/`earnings_growth` bewust weg zijn (voor de samenvoegsessie) en de blinde versie van de partner (9-10).
+- [~] **[02-10] DD's graafconcept ontvangen** (23 knopen, 39 pijlrijen, voorwaardelijke pijlen; ongewijzigd in `docs/causal-graph-dd-concept.md`) en naast v0 gelegd in `docs/causal-graph-vergelijking.md`: samengevoegde, gesplitste en nieuwe knopen, de meetbaarheid (19 van ~42 pijlen hebben aan beide kanten een reeks die we al ophalen), wat het in de code raakt en acht vragen aan DD. **Niets in de code gewijzigd**; v1 volgt in één keer na de blinde versie van de partner (9 oktober).
 - [x] **[28-09]** 17 knopen vastgelegd in `docs/causal-graph.md`, met de
       driedeling observaties → toestanden → outputs. **Niet het
       oorspronkelijke handwerk DD + partner:** er is nog geen partner, en
