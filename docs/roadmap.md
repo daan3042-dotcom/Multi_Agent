@@ -1105,6 +1105,7 @@ volledig in Python; **het LLM raakt deze laag nooit aan**. Voorwaarde:
       7×7-correlatiematrix uit ~25 effectieve episodes is ruis: shrinkage
       (Ledoit-Wolf) naar een gedeelde correlatie, plus extremizing van
       de gepoolde kans. De gedeelde-bron-vlag uit 3.1 is de covariaat.
+- [ ] **[02-10] Het ongewogen gemiddelde van de leden als maatstaf.** Zodra meerdere voorspellers (agents, mensen, baselines, synthesizer) hetzelfde doel voorspellen, berekent Python achteraf uit de opgeslagen voorspellingen ook het ongewogen gemiddelde van de kwantielen. Zowel de gewogen pool als de synthesizer moeten dat verslaan; zo niet, dan voegt de weging of het cross-domein-redeneren niets toe. Vóór de freeze niet nodig (alleen opgeslagen voorspellingen nodig).
 - [ ] Gewichten conditioneel op regime (3.3) — pas als de
       onvoorwaardelijke gewichten stabiel zijn, waarschijnlijk jaar twee
 
@@ -1311,6 +1312,7 @@ en dat window is nu al beschikbaar.
       niet een puntschatting.
 - [ ] **[27-09] Synthesizer wordt gescoord** als eigen agent — het is
       het enige wat DD en partner uiteindelijk lezen.
+      **[02-10, besluit DD] De synthesizer is BLIND:** hij ziet de claims en de evidence-sheets van de domeinen, NIET de voorspellingen (kwantielen/kansen) van de domain agents, mensen of baselines. Anders is hij een verkapte aggregator en meet de scoring in mei iets anders dan bedoeld; Python aggregeert nooit over agents heen (3.4, mei 2027). Vastgelegd in `docs/architecture.md` (LLM-taken-tabel). Bij de eerste bouw: elk doel wordt nu door één agent voorspeld, dus een gemiddelde van agents bestaat niet; de vergelijking is synthesizer tegen de domain agent op hetzelfde doel en tegen de baselines.
 - [ ] Uitsplitsing per domein, per horizon, per `model_id` en (later)
       per regime
 
@@ -1320,6 +1322,7 @@ Zonder baseline is niet vast te stellen of we iets gebouwd hebben of
 alleen kosten gemaakt. **[27-09] Drie** baselines draaien vanaf T₀ mee als
 volwaardige "agents" in de scoring, met dezelfde kwantielvorm.
 
+- [ ] **[02-10] Baselines ook op de vier instrumentdoelen van de synthesizer (NQ, ZN, CL, 6E; 5 hd) — vóór de freeze.** De baselines bestaan nu alleen voor de doelen van de agents. Voor de instrumenten is er geen agent om mee te vergelijken, dus persistence en climatology zijn daar de enige maatstaf. Hangt af van de prijsbron per instrument (open beslissing, zie 4.1 en 'Aandachtspunt' bij 3.1).
 - [x] **[29-09] Random walk / persistence** (`src/scoring/baselines.py`)
       — "het blijft zoals het is"; kwantielen uit de historische verdeling
       van veranderingen over de horizon. Verrassend moeilijk te verslaan.
