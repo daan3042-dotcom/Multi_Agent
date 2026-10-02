@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+import requests
+
 import agents.commodity_agent as ca
 from storage.schema import get_source, init_db
 
@@ -23,7 +25,7 @@ def test_fetch_snapshot_returns_available_commodities(monkeypatch):
             resp.json = lambda: {"data": [{"date": "2026-09-01", "value": "."}]}  # placeholder, geen echte data
         return resp
 
-    monkeypatch.setattr(ca.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = ca.fetch_snapshot()
 
     assert "error" not in result
@@ -37,7 +39,7 @@ def test_fetch_snapshot_all_commodities_fail_returns_error(monkeypatch):
     def fake_get(url, params, timeout):
         raise ConnectionError("netwerkfout")
 
-    monkeypatch.setattr(ca.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = ca.fetch_snapshot()
     assert "error" in result
 

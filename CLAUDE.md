@@ -69,6 +69,7 @@ en `docs/project-state.md`.
 | Architectuur/datastroom van het fundament | `docs/architecture.md` |
 | **Wat elke agent doet, in gewone taal (geen code lezen nodig)** | `docs/agents.md` |
 | API-quota/callvolume per bron | `docs/data-sources.md` |
+| **De gedeelde Alpha Vantage-aanroep (gelogde reden per mislukte reeks, één herhaalpoging)** | `src/sources/alpha_vantage.py` |
 | **Data die niet terug te halen is: beoordeling en plan (breed archief)** | `docs/data-archive.md` |
 | Bronnen meten voor het archief (alleen lezen) | `probe_sources.py`, `src/sources/probe.py` |
 | **Het dagelijkse ruwe archief (SPY-holdings; eigen proces, geen database)** | `archive_daily.py`, `src/archive/spy_holdings.py` |

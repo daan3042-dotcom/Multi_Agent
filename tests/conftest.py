@@ -17,3 +17,13 @@ import pytest
 @pytest.fixture(autouse=True)
 def _geen_cohort_uit_de_omgeving(monkeypatch):
     monkeypatch.delenv("MI_COHORT", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _geen_echte_pauze_bij_alpha_vantage(monkeypatch):
+    """De herhaalpoging van `sources/alpha_vantage.py` wacht 30 seconden. In een test mag dat nooit echt gebeuren:
+    elke test waarbij een reeks mislukt zou anders een halve minuut stilstaan. Tests die de pauze willen zien, geven
+    zelf een `slaap` mee of vervangen `_slaap` opnieuw."""
+    from sources import alpha_vantage
+
+    monkeypatch.setattr(alpha_vantage, "_slaap", lambda seconden: None)

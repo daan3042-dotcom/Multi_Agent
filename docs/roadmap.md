@@ -744,6 +744,7 @@ gewogen pool.
 Blokkades 1 en 2 uit deel A. Dit is de sectie waaraan nu gewerkt wordt;
 fase 2 en 3 lopen erachteraan.
 
+- [x] **[02-10] Alpha Vantage: reden loggen en één herhaalpoging** (`src/sources/alpha_vantage.py`; sector, currency, commodity). Aanleiding: de eerste T₀ᵃ-dag miste `xlp_consumer_staples` zonder dat het log zei waarom. Completeness-check ongewijzigd (een blijvend gat telt nog steeds als niet-schone dag); `TRIGGER_VERSION` blijft v3. **Oorzaak van het gat nog onbekend**: de gelogde redenen van de komende ochtenden moeten dat uitwijzen (plan: `docs/deployment.md`).
 - [ ] **Ingestion uit de sandbox.** Fetch-runner op eigen infra (VPS,
       Pi, of een van onze machines) die alleen ruwe data ophaalt en in de
       SQLite schrijft. Agents en LLM-calls mogen blijven waar ze zijn.

@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import requests
+
 import agents.currency_agent as ca
 from storage.schema import get_source, init_db
 
@@ -25,7 +27,7 @@ def test_fetch_snapshot_returns_available_pairs(monkeypatch):
             resp.json = lambda: {}  # geen data voor dit paar
         return resp
 
-    monkeypatch.setattr(ca.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = ca.fetch_snapshot()
 
     assert "error" not in result
@@ -39,7 +41,7 @@ def test_fetch_snapshot_all_pairs_fail_returns_error(monkeypatch):
     def fake_get(url, params, timeout):
         raise ConnectionError("netwerkfout")
 
-    monkeypatch.setattr(ca.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = ca.fetch_snapshot()
     assert "error" in result
 
