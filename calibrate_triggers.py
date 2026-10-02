@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
+from calibration.atr_proef import atr_proef_alles, render_atr_rapport  # noqa: E402
 from calibration.trigger_calibration import calibrate_all, render_report, render_split_vergelijking  # noqa: E402
 from runtime.env import load_env_file  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db  # noqa: E402
@@ -47,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="rapport op de ruwe reeksen, zonder de correctie voor aandelensplitsingen (zoals de kalibratie van 29-09)")
     parser.add_argument("--vergelijk-splitsingen", action="store_true",
                         help="alleen de reeksen met een splitsing, ruw naast gecorrigeerd")
+    parser.add_argument("--atr-proef", action="store_true",
+                        help="proefrapport voor het volatiliteitsidee (roadmap 4.2): triggers per jaar bij N keer de gemiddelde beweging van 30 dagen")
     args = parser.parse_args(argv)
 
     try:
@@ -57,6 +60,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         nu = datetime.now(timezone.utc)
+        if args.atr_proef:
+            print(f"ATR-proef -- {nu.date()} -- alleen lezen, wijzigt niets\n")
+            print(render_atr_rapport(atr_proef_alles(conn, nu, domain=args.domain)))
+            return 0
         if args.vergelijk_splitsingen:
             ruw = calibrate_all(conn, nu, domain="sector", corrigeer_splitsingen=False)
             gecorrigeerd = calibrate_all(conn, nu, domain="sector", corrigeer_splitsingen=True)

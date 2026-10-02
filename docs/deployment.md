@@ -818,6 +818,23 @@ cd /opt/multi_agent && .venv/bin/python t0a_status.py
 - Komt er een melding van Alpha Vantage zelf (`meldt (Note)` of `(Information)`) over aanroepen per minuut of per dag, dan is dat het
   gezochte antwoord op de oorzaak.
 
+## ATR-proefrapport (roadmap 4.2, idee van DD) — gebouwd op 02-10-2026, alleen lezen
+
+Beantwoordt: hoeveel triggers per jaar zou "beweging groter dan N keer de gemiddelde absolute beweging van de afgelopen 30 dagen" geven, per reeks, voor N van 2 tot 6, naast de huidige vaste drempel? Het rapport leest alleen de database (op de gesplitsingsgecorrigeerde reeksen) en wijzigt niets.
+
+```bash
+cd /opt/multi_agent && git pull && .venv/bin/python calibrate_triggers.py --atr-proef --domain sector
+.venv/bin/python calibrate_triggers.py --atr-proef          # alle reeksen, langer
+```
+
+**Wat je ziet:** per reeks de kolom `nu` (vaste drempel, trigger-versie v4) en `N=2..6`; `dekking` (aandeel paren met een bruikbaar 30-daags gemiddelde) en `N~5` (de N die het dichtst bij 5 per jaar komt). Week-, maand- en stapreeksen krijgen "niet te beoordelen": die passen niet in een venster van 30 dagen. Onderaan staat het totaal over de vergelijkbare reeksen.
+
+**Wat het niet doet:** de regel in de engine zetten (checkpoint 2, nieuwe trigger-versie, besluit van DD) en niet op het kritieke pad naar T₀.
+
+## Jaarlijkse FOMC-kalenderstap (besluit DD 02-10-2026: niets bouwen)
+
+De besluitdagen staan in `FOMC_MEETING_DATES` (`src/contract/resolution.py`). Er komt geen automatische kalender. Eens per jaar, zodra de Fed het schema voor het volgende jaar publiceert (federalreserve.gov, "FOMC Meeting Calendars"): geef de nieuwe besluitdagen door; ze worden **aan het eind** toegevoegd (nooit bestaande wijzigen of verwijderen). Een gat in de kalender merkt het systeem zelf op: de pseudo-OOS-run weigert te starten zonder dekking, en de resolver weigert een FOMC-doel af te wikkelen als er te weinig besluitdagen zijn en zegt dan "vul FOMC_MEETING_DATES aan". De huidige lijst loopt tot en met 2027; zie vóór oktober 2027 of het volgende jaar erbij moet.
+
 ## SPY-bron: wanneer ververst de `as_of`? — meting (02-10-2026), voorstel, **nog niet in de cron**
 
 **Waarom.** Het archief bewaart per UTC-dag het EERSTE bestand. Op 02-10 stond de `as_of` om 08:30 UTC nog op 30-09, twee handelsdagen achter, en
