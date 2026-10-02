@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
@@ -27,7 +28,7 @@ def test_fetch_snapshot_returns_available_series(monkeypatch):
             resp.json = lambda: {"Global Quote": {}}  # geen data voor deze ETF
         return resp
 
-    monkeypatch.setattr(sa.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = sa.fetch_snapshot()
 
     assert "error" not in result
@@ -41,7 +42,7 @@ def test_fetch_snapshot_all_series_fail_returns_error(monkeypatch):
     def fake_get(url, params, timeout):
         raise ConnectionError("netwerkfout")
 
-    monkeypatch.setattr(sa.requests, "get", fake_get)
+    monkeypatch.setattr(requests, "get", fake_get)
     result = sa.fetch_snapshot()
     assert "error" in result
 

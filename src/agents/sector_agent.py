@@ -45,7 +45,7 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-import requests
+import logging
 
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.prediction import HorizonKind, PredictionKind
@@ -53,12 +53,12 @@ from contract.resolution import ResolutionMethod
 from analysis.relative_strength import classify_relative_strength, compute_relative_strength_pct
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
+from sources import alpha_vantage as av
 from storage.schema import register_source
 
 DOMAIN = "sector"
 PROVIDER = "ALPHA_VANTAGE_EQUITY"
 SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
-BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=5)  # dagelijkse slotkoersen; buffer voor een weekend + feestdag
 BENCHMARK_SYMBOL = "SPY"  # S&P 500-proxy voor de relatieve-sterkte-berekening
 BENCHMARK_KEY = "spy_benchmark"
@@ -189,22 +189,20 @@ aangeleverde cijfers, onzekerheid expliciet -- staan al vóór dit stuk; dit is 
 vakinhoudelijke aanvulling.)"""
 
 
-def _fetch_quote(symbol: str, api_key: str) -> dict | None:
-    """Zelfde aanpak als andere _fetch_*-helpers in deze codebase: None
-    bij elke fout, geen gok. Geeft ook 'change_percent' mee (Alpha Vantage
-    berekent dat al zelf) -- fetch_snapshot() gebruikt alleen 'value'/
-    'date' (voor de reguliere prijstrigger), _fetch_change_percent()
-    hieronder gebruikt 'change_percent' (voor de deep-dive-verrijking)."""
-    try:
-        resp = requests.get(
-            BASE_URL, params={"function": "GLOBAL_QUOTE", "symbol": symbol, "apikey": api_key}, timeout=15,
-        )
-        resp.raise_for_status()
-        quote = resp.json().get("Global Quote")
-    except Exception:
-        return None
+def _fetch_quote_met_reden(symbol: str, api_key: str) -> tuple[dict | None, str | None]:
+    """Zelfde aanpak als andere _fetch_*-helpers in deze codebase: geen resultaat
+    bij elke fout, geen gok. Sinds 02-10-2026 komt er bij een mislukking ook een REDEN
+    mee (zie sources/alpha_vantage.py), zodat het log kan zeggen waaróm een reeks
+    ontbreekt. Geeft ook 'change_percent' mee (Alpha Vantage berekent dat al zelf) --
+    fetch_snapshot() gebruikt alleen 'value'/'date' (voor de reguliere prijstrigger),
+    _fetch_change_percent() hieronder gebruikt 'change_percent' (voor de
+    deep-dive-verrijking)."""
+    payload, reden = av.haal_json({"function": "GLOBAL_QUOTE", "symbol": symbol, "apikey": api_key})
+    if payload is None:
+        return None, reden
+    quote = payload.get("Global Quote")
     if not quote or not quote.get("05. price"):
-        return None
+        return None, "lege respons (geen koers in 'Global Quote')"
     change_percent_raw = quote.get("10. change percent", "")
     try:
         change_percent = float(change_percent_raw.rstrip("%"))
@@ -214,7 +212,16 @@ def _fetch_quote(symbol: str, api_key: str) -> dict | None:
         "value": quote["05. price"],
         "date": quote.get("07. latest trading day", ""),
         "change_percent": change_percent,
-    }
+    }, None
+
+
+def _fetch_quote(symbol: str, api_key: str) -> dict | None:
+    """Alleen het resultaat, voor de deep-dive-verrijking (`_fetch_change_percent`). Een mislukking wordt hier
+    wel gelogd, maar niet herhaald: dat gebeurt alleen in de dagelijkse cyclus (`fetch_snapshot`)."""
+    resultaat, reden = _fetch_quote_met_reden(symbol, api_key)
+    if resultaat is None:
+        logging.getLogger("sources.alpha_vantage").warning("Alpha Vantage sector: %s mislukt (deep-dive): %s", symbol, reden)
+    return resultaat
 
 
 def fetch_snapshot() -> dict:
@@ -223,11 +230,10 @@ def fetch_snapshot() -> dict:
     api_key = os.environ.get("ALPHAVANTAGE_API_KEY")
     if not api_key:
         return {"error": "ALPHAVANTAGE_API_KEY niet gevonden in environment"}
-    snapshot = {}
-    for metric_key, symbol in SECTOR_ETFS.items():
-        result = _fetch_quote(symbol, api_key)
-        if result:
-            snapshot[metric_key] = result
+    # Eén herhaalronde voor wat ontbreekt, met een gelogde reden per mislukking (sources/alpha_vantage.py).
+    snapshot = av.verzamel(
+        DOMAIN, SECTOR_ETFS, lambda metric_key: _fetch_quote_met_reden(SECTOR_ETFS[metric_key], api_key),
+    )
     if not snapshot:
         return {"error": "geen enkele sector-ETF kon worden opgehaald"}
 

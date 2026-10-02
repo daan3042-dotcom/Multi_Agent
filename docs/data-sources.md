@@ -81,6 +81,24 @@ check is nu ook de controle op de betaalde tier hieronder** — komt er na
 de upgrade nog een completeness-trigger voorbij voor currency, sector of
 commodity, dan is het probleem niet opgelost.
 
+## GEMETEN op 02-10-2026: één reeks miste, het log zei niet waarom — en wat er is veranderd
+
+De eerste T₀ᵃ-dag (02-10, 07:15 UTC) leverde van de twaalf sectorreeksen er elf: `xlp_consumer_staples` ontbrak. Alle agents meldden `ok`;
+de completeness-check zette er een trigger bij en de dag telde niet als schoon (teller op nul, T₀ᵃ op zijn vroegst 13-10 volgens
+`t0a_status.py`). **De oorzaak is niet bekend en kon uit het log niet worden afgeleid**: de drie `_fetch_*`-helpers (sector, currency,
+commodity) vingen elke fout op met `except Exception: return None`, ook een "Note"/"Information"-melding van Alpha Vantage, en
+loggen deden ze niets. Een grep op `xlp|rate|limit|Note|Information` over het hele `daily.log` gaf niets.
+
+**Gewijzigd op 02-10 (DD akkoord; checkpoint 3 via het plan in `docs/deployment.md`):** `src/sources/alpha_vantage.py`.
+1. Elke mislukte reeks krijgt een gelogde reden: time-out, verbindingsfout, HTTP-status, de tekst van Alpha Vantage's eigen melding, of
+   "lege respons". De API-sleutel komt nooit in het log (van een uitzondering loggen we alleen het type).
+2. Wat in de eerste ronde ontbreekt, wordt na één gezamenlijke pauze van 30 seconden één keer opnieuw geprobeerd.
+3. **Niet gewijzigd:** de completeness-check. Een gat dat ook na de herhaling blijft, blijft een volledigheidstrigger en de dag telt dan
+   niet. Op een goede dag verandert er niets (geen pauze, geen extra aanroepen, geen logregel).
+
+**Wat nog niet bekend is:** of de uitval een limiet per minuut is (de 12 sectoraanroepen staan in een snelle lus zonder pauze), een
+tijdelijke fout aan Alpha Vantage's kant, of iets structureels voor XLP. De gelogde redenen van de komende ochtenden moeten dat uitwijzen.
+
 ## GEMETEN op 30-09-2026: het commodity-endpoint is niet live, ook niet met het betaalde plan
 
 DD vroeg of de commodity agent met het betaalde plan (real-time of 15 minuten vertraagd) live data kan

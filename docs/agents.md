@@ -380,6 +380,8 @@ werken vaak direct door in wisselkoersen).
 
 ## Currency agent (`agents/currency_agent.py`)
 
+*Ophalen (02-10-2026):* een mislukte Alpha Vantage-reeks krijgt een gelogde reden en wordt na één pauze van 30 s één keer opnieuw geprobeerd (`sources/alpha_vantage.py`). Een gat dat blijft, blijft een volledigheidstrigger.
+
 **Wat het volgt:** drie majeure wisselkoersparen via Alpha Vantage, elk
 gezien als "vers" tot 6 uur oud (wisselkoersen bewegen continu, dus vaker
 verse data nodig dan macro-reeksen):
@@ -510,6 +512,8 @@ per-ticker-namespacing nodig zoals bij equity.
 
 ## Sector agent (`agents/sector_agent.py`)
 
+*Ophalen (02-10-2026):* een mislukte Alpha Vantage-reeks krijgt een gelogde reden en wordt na één pauze van 30 s één keer opnieuw geprobeerd (`sources/alpha_vantage.py`). Een gat dat blijft, blijft een volledigheidstrigger.
+
 **Wat het volgt:** alle 11 SPDR Select Sector-ETF's (de standaard,
 GICS-uitgelijnde sector-taxonomie) — bewust ALLE elf, niet een kleine
 selectie, want een arbitraire keuze zou precies Materials (relevant voor
@@ -564,6 +568,8 @@ FX-paren — geen per-ticker-namespacing nodig zoals bij equity, want elke
 sector-ETF heeft van nature een unieke metric_key (geen collision-risico).
 
 ## Commodity agent (`agents/commodity_agent.py`)
+
+*Ophalen (02-10-2026):* een mislukte Alpha Vantage-reeks krijgt een gelogde reden en wordt na één pauze van 30 s één keer opnieuw geprobeerd (`sources/alpha_vantage.py`). Een gat dat blijft, blijft een volledigheidstrigger.
 
 **Wat het volgt:** 10 grondstoffen via Alpha Vantage, 1-op-1 overgenomen
 van `analyst_agent.ai`'s bestaande `SUPPORTED_COMMODITIES`-lijst (geen

@@ -46,18 +46,16 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-import requests
-
 from agents.base import MetricSpec, run_deep_dive, run_monitoring
 from analysis.moving_average_deviation import compute_deviation_from_average_pct, compute_moving_average
 from contract.graph import Node
 from contract.output_contract import Claim, Confidence, now_utc
+from sources import alpha_vantage as av
 from storage.schema import register_source
 
 DOMAIN = "commodity"
 PROVIDER = "ALPHA_VANTAGE_COMMODITY"
 SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
-BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(days=40)  # maandelijkse data (interval=monthly, zelfde keuze als analyst_agent.ai)
 MOVING_AVERAGE_PERIODS = 6  # aantal maandpunten voor het voortschrijdend gemiddelde
 
@@ -133,20 +131,24 @@ algemene schrijfregels -- neutraliteit, alleen aangeleverde cijfers, onzekerheid
 -- staan al vóór dit stuk; dit is alleen de vakinhoudelijke aanvulling.)"""
 
 
-def _fetch_commodity_data(function_name: str, api_key: str) -> list[dict] | None:
+def _fetch_commodity_data_met_reden(function_name: str, api_key: str) -> tuple[list[dict] | None, str | None]:
     """Haalt de recente maandpunten op voor een grondstof (meest recent
-    eerst, zelfde volgorde als Alpha Vantage teruggeeft). None bij elke
-    fout -- geen gok, gewoon niets voor deze grondstof."""
-    try:
-        resp = requests.get(
-            BASE_URL, params={"function": function_name, "interval": "monthly", "apikey": api_key}, timeout=15,
-        )
-        resp.raise_for_status()
-        data_points = resp.json().get("data", [])
-    except Exception:
-        return None
+    eerst, zelfde volgorde als Alpha Vantage teruggeeft). Geen resultaat bij elke
+    fout -- geen gok, gewoon niets voor deze grondstof. Sinds 02-10-2026 komt er bij
+    een mislukking een REDEN mee (sources/alpha_vantage.py)."""
+    payload, reden = av.haal_json({"function": function_name, "interval": "monthly", "apikey": api_key})
+    if payload is None:
+        return None, reden
+    data_points = payload.get("data", [])
     valid_points = [p for p in data_points if p.get("value") not in (None, ".")]
-    return valid_points or None
+    if not valid_points:
+        return None, "lege respons (geen bruikbare maandpunten)"
+    return valid_points, None
+
+
+def _fetch_commodity_data(function_name: str, api_key: str) -> list[dict] | None:
+    """Alleen het resultaat (zonder herhaling of log); `fetch_snapshot` gebruikt de variant met reden."""
+    return _fetch_commodity_data_met_reden(function_name, api_key)[0]
 
 
 def fetch_snapshot() -> dict:
@@ -155,11 +157,10 @@ def fetch_snapshot() -> dict:
     api_key = os.environ.get("ALPHAVANTAGE_API_KEY")
     if not api_key:
         return {"error": "ALPHAVANTAGE_API_KEY niet gevonden in environment"}
-    snapshot = {}
-    for metric_key, function_name in COMMODITIES.items():
-        data_points = _fetch_commodity_data(function_name, api_key)
-        if data_points:
-            snapshot[metric_key] = {"value": data_points[0]["value"], "date": data_points[0]["date"]}
+    punten = av.verzamel(
+        DOMAIN, COMMODITIES, lambda metric_key: _fetch_commodity_data_met_reden(COMMODITIES[metric_key], api_key),
+    )
+    snapshot = {k: {"value": p[0]["value"], "date": p[0]["date"]} for k, p in punten.items()}
     if not snapshot:
         return {"error": "geen enkele grondstof kon worden opgehaald"}
     return snapshot

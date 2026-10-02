@@ -718,6 +718,31 @@ De kennisgrens van juni 2026 is **bevestigd in het Anthropic-modeloverzicht** (0
 - **Het logboek (`llm_calls`)** legt elk verzoek (inclusief de denkinstelling) en elk antwoord vast, zodat de instelling per voorspelling terug te vinden is.
   De denkinstelling staat dus NIET in `model_id`; het is een covariaat die alleen in dit logboek staat.
 
+## Alpha Vantage: reden loggen en één herhaalpoging — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 02-10-2026**
+
+**Waarom.** De eerste T₀ᵃ-dag miste `xlp_consumer_staples` en het log gaf geen reden (zie `docs/data-sources.md`, "GEMETEN op 02-10-2026").
+**Wat (`src/sources/alpha_vantage.py`, gebruikt door sector, currency en commodity):** elke mislukte reeks krijgt een gelogde reden; wat
+ontbreekt wordt na één pauze van 30 seconden één keer opnieuw geprobeerd. De completeness-check blijft ongewijzigd, `src/triggers/`
+en `src/qc/` zijn niet aangeraakt, en `TRIGGER_VERSION` blijft v3 (de vingerafdruk bevat geen fetch-gedrag; een test bewaakt dat).
+
+**Wat het kost.** Op een goede dag niets. Bij gaten maximaal één pauze van 30 s per agent (sector, currency, commodity: ten hoogste 90 s extra);
+de run duurt nu ongeveer 20 s en de heartbeat heeft 2 uur grace.
+
+**Uitrollen:** na een ochtendrun, niet ervoor; `cd /opt/multi_agent && git pull`. Er is niets te herstarten: de cron start de volgende ochtend de nieuwe code.
+Terugdraaien: `git revert` van de merge en weer `git pull`.
+
+**Wat DD de eerste drie ochtenden controleert** (na de run van 07:15 UTC):
+```bash
+grep -n "Alpha Vantage" /var/log/mi/daily.log | tail -n 30
+cd /opt/multi_agent && .venv/bin/python t0a_status.py
+```
+- Geen regels `Alpha Vantage ...` = alle reeksen kwamen in één keer binnen: goed.
+- `hersteld bij herhaling` = de herhaling deed zijn werk; noteer de reden uit de eerste ronde.
+- `blijft ontbreken na herhaling` = het gat bleef; de dag telt niet. Staat steeds dezelfde reden of dezelfde reeks erbij, dan is het structureel en
+  beslissen we op die reden (andere pauze, een andere aanpak voor die reeks), niet op een gok.
+- Komt er een melding van Alpha Vantage zelf (`meldt (Note)` of `(Information)`) over aanroepen per minuut of per dag, dan is dat het
+  gezochte antwoord op de oorzaak.
+
 ## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
 
 Wat het is en waarom: `docs/data-archive.md`, "Het ruwe archief draaien". Kort: de SPY-samenstelling van State

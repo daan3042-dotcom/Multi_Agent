@@ -25,19 +25,17 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-import requests
-
 from agents.base import ForecastTarget, MetricSpec, run_deep_dive, run_monitoring
 from contract.horizons import ReleaseCadence
 from contract.prediction import HorizonKind, PredictionKind
 from contract.resolution import ResolutionMethod
 from contract.graph import Node
+from sources import alpha_vantage as av
 from storage.schema import register_source
 
 DOMAIN = "currency"
 PROVIDER = "ALPHA_VANTAGE_FX"
 SOURCE_KEY = f"{PROVIDER}:{DOMAIN}"  # roadmap 1.4 (Source Registry); zie monetary_policy_agent.py::SOURCE_KEY voor de volledige toelichting
-BASE_URL = "https://www.alphavantage.co/query"
 MAX_AGE = timedelta(hours=6)  # wisselkoersen bewegen continu, hebben vaker verse pulls nodig dan macro-reeksen
 
 FX_PAIRS = {
@@ -112,39 +110,37 @@ zelf aanleiding toe geven -- verzin geen causaliteit die er niet expliciet uit b
 expliciet -- staan al vóór dit stuk; dit is alleen de vakinhoudelijke aanvulling.)"""
 
 
-def _fetch_pair(from_currency: str, to_currency: str, api_key: str) -> dict | None:
-    """Zelfde aanpak als commodity_data.py::fetch_fx_rate, maar geeft None
+def _fetch_pair_met_reden(from_currency: str, to_currency: str, api_key: str) -> tuple[dict | None, str | None]:
+    """Zelfde aanpak als commodity_data.py::fetch_fx_rate, maar geeft geen resultaat
     terug bij falen i.p.v. een {"error": ...}-dict -- deze functie levert
-    aan fetch_snapshot(), die zelf bepaalt of GEEN ENKEL paar lukte."""
-    try:
-        resp = requests.get(
-            BASE_URL,
-            params={
-                "function": "CURRENCY_EXCHANGE_RATE",
-                "from_currency": from_currency,
-                "to_currency": to_currency,
-                "apikey": api_key,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        rate_data = resp.json().get("Realtime Currency Exchange Rate")
-    except Exception:
-        return None
+    aan fetch_snapshot(), die zelf bepaalt of GEEN ENKEL paar lukte. Sinds 02-10-2026
+    komt er bij een mislukking een REDEN mee (sources/alpha_vantage.py)."""
+    payload, reden = av.haal_json({
+        "function": "CURRENCY_EXCHANGE_RATE",
+        "from_currency": from_currency,
+        "to_currency": to_currency,
+        "apikey": api_key,
+    })
+    if payload is None:
+        return None, reden
+    rate_data = payload.get("Realtime Currency Exchange Rate")
     if not rate_data or "5. Exchange Rate" not in rate_data:
-        return None
-    return {"value": rate_data["5. Exchange Rate"], "date": rate_data.get("6. Last Refreshed", "")}
+        return None, "lege respons (geen wisselkoers in het antwoord)"
+    return {"value": rate_data["5. Exchange Rate"], "date": rate_data.get("6. Last Refreshed", "")}, None
+
+
+def _fetch_pair(from_currency: str, to_currency: str, api_key: str) -> dict | None:
+    """Alleen het resultaat (zonder herhaling of log); `fetch_snapshot` gebruikt `_fetch_pair_met_reden`."""
+    return _fetch_pair_met_reden(from_currency, to_currency, api_key)[0]
 
 
 def fetch_snapshot() -> dict:
     api_key = os.environ.get("ALPHAVANTAGE_API_KEY")
     if not api_key:
         return {"error": "ALPHAVANTAGE_API_KEY niet gevonden in environment"}
-    snapshot = {}
-    for metric_key, (from_currency, to_currency) in FX_PAIRS.items():
-        result = _fetch_pair(from_currency, to_currency, api_key)
-        if result:
-            snapshot[metric_key] = result
+    snapshot = av.verzamel(
+        DOMAIN, FX_PAIRS, lambda metric_key: _fetch_pair_met_reden(*FX_PAIRS[metric_key], api_key),
+    )
     if not snapshot:
         return {"error": "geen enkel valutapaar kon worden opgehaald"}
     return snapshot
