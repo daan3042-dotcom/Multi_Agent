@@ -120,7 +120,7 @@ def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt
     voeg(G, "Scorer", sc.SCORER_VERSION, "src/scoring/scores.py", TE_BEVESTIGEN, "pinball + CRPS (gelijk gewogen), Brier, log loss")
     kal = sorted(res.FOMC_MEETING_DATES)
     voeg(G, "FOMC-kalender", f"{len(kal)} besluitdagen, {kal[0]} t/m {kal[-1]}" if kal else "leeg", "src/contract/resolution.py",
-         TE_BEVESTIGEN, "vergaderingen van vóór oktober 2026 ontbreken (nodig voor de pseudo-OOS-run)")
+         TE_BEVESTIGEN, "juli en september 2026 toegevoegd voor de pseudo-OOS-run (bron: Fed-persberichten, DD 02-10); vergaderingen van januari tot en met juni 2026 ontbreken (niet nodig voor het venster)")
 
     # --- Drempels -----------------------------------------------------------
     G = "DREMPELS"

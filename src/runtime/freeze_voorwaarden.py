@@ -133,13 +133,32 @@ def _resolver_regel(conn):
             ZELF_CONTROLEREN, "dat er afgewikkeld is, is te zien; of de uitkomsten KLOPPEN controleer jij op een steekproef")
 
 
-def _pseudo_oos_regel(conn):
-    n = conn.execute("SELECT COUNT(*) FROM predictions WHERE cohort = 'pseudo_oos'").fetchone()[0]
+PSEUDO_OOS_KOPIE = "pseudo_oos.db"
+"""De run (`pseudo_oos.py`) draait NOOIT op de echte database maar op een kopie met deze naam, naast de echte. Dit blok kijkt
+dus in die kopie (alleen lezen); in de echte database staan geen `pseudo_oos`-rijen."""
+
+
+def _pseudo_oos_regel(conn, db_pad: str | None = None):
+    naam = "Pseudo-OOS-run (4.4)"
+    kopie = Path(db_pad).with_name(PSEUDO_OOS_KOPIE) if db_pad else None
+    n_echt = conn.execute("SELECT COUNT(*) FROM predictions WHERE cohort = 'pseudo_oos'").fetchone()[0]
+    n_kopie = 0
+    if kopie is not None and kopie.exists():
+        k = sqlite3.connect(f"file:{kopie}?mode=ro", uri=True)
+        try:
+            n_kopie = k.execute("SELECT COUNT(*) FROM predictions WHERE cohort = 'pseudo_oos'").fetchone()[0]
+        except sqlite3.Error:
+            n_kopie = 0
+        finally:
+            k.close()
+    n = n_echt + n_kopie
     if not n:
-        return ("Pseudo-OOS-run (4.4)", "nog niet gedraaid", NOG_NIET_AF,
-                "vraagt FOMC-besluitdagen van vóór oktober 2026 (nu leeg, zie FOMC-kalender hierboven)")
-    return ("Pseudo-OOS-run (4.4)", f"{n} voorspellingen onder cohort pseudo_oos", ZELF_CONTROLEREN,
-            "'bevindingen verwerkt' is jouw oordeel; geen bewijs, wel contract- en resolverbugs vinden")
+        return (naam, "nog niet gedraaid", NOG_NIET_AF,
+                "script: `pseudo_oos.py` (draait op een kopie); de FOMC-besluitdagen van juli en september 2026 staan in "
+                "contract/resolution.py; wacht op graaf v1 en de testrun van 14-10")
+    waar = f"{n_kopie} in {PSEUDO_OOS_KOPIE}" + (f", {n_echt} in de echte database" if n_echt else "")
+    return (naam, f"{n} voorspellingen onder cohort pseudo_oos ({waar})", ZELF_CONTROLEREN,
+            "'bevindingen verwerkt' is jouw oordeel; geen bewijs, wel contract- en resolverbugs vinden (`pseudo_oos.py rapport`)")
 
 
 def _dry_run_week_regel(nu: datetime):
@@ -190,7 +209,7 @@ def bepaal_voorwaarden(db_pad: str | None, nu: datetime | None = None):
             regels.append(_deep_dive_regel(conn))
             regels.append(_forecast_regel(conn, verwacht))
             regels.append(_resolver_regel(conn))
-            regels.append(_pseudo_oos_regel(conn))
+            regels.append(_pseudo_oos_regel(conn, db_pad))
         except sqlite3.Error as e:
             regels.append(("Datagedreven voorwaarden", f"database niet leesbaar: {e}", ZELF_CONTROLEREN, ""))
         finally:

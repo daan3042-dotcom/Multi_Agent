@@ -26,7 +26,7 @@ kwantielen, en dat (plus het oordeel over wat anders is dan het verleden) is wat
 dan is het een promptwijziging (`prompt_version`), geen contractwijziging.
 
 WAT ER NIET IN STAAT en ook niet verzonnen wordt: releasedata van CPI of banen (daar is geen kalender van), en de
-uitkomst van eerdere FOMC-vergaderingen van vóór oktober 2026 (de kalender begint bij 28-10-2026).
+uitkomst van eerdere FOMC-vergaderingen van vóór oktober 2026 (de kalender begint bij 29-07-2026; de uitkomst van de vergaderingen van juli en september volgt uit de DFEDTARU-reeks zelf).
 
 POINT-IN-TIME. Alles gaat via `baselines._history`: alleen eerste prints die op `as_of` al bestonden. Zo kan de
 pseudo-OOS-run (4.4) deze functie met een datum in het verleden gebruiken zonder dat de agent de toekomst ziet.

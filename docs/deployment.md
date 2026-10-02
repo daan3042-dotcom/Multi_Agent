@@ -718,6 +718,45 @@ De kennisgrens van juni 2026 is **bevestigd in het Anthropic-modeloverzicht** (0
 - **Het logboek (`llm_calls`)** legt elk verzoek (inclusief de denkinstelling) en elk antwoord vast, zodat de instelling per voorspelling terug te vinden is.
   De denkinstelling staat dus NIET in `model_id`; het is een covariaat die alleen in dit logboek staat.
 
+## De pseudo-OOS-run (roadmap 4.4, fase 3b) — gebouwd op 02-10-2026, **nog niet gedraaid**
+
+**Wat het is.** De agents doen de wekelijkse forecast-ronde over het verleden: de dertien maandagen van 6 juli t/m 28 september 2026 (na de kennisgrens
+van het model), op data zoals die op dat moment bekend was. Doel: contract- en resolverfouten vinden vóór de klok loopt, en meten hoe vaak het model vijf
+kwantielen betrouwbaar uitspreekt (**meer dan 5% niet opgeleverd = het contract heroverwegen**). Het is **geen bewijs van kalibratie**: het venster is kort, de lange
+horizonnen lopen nog en de uitkomsten overlappen. Alles staat onder `cohort=pseudo_oos`.
+
+**Draait nooit op de echte database.** `voorbereiden` maakt een KOPIE (`pseudo_oos.db`, naast de echte) waarin het publicatiemoment van de back-fill-claims is
+verschoven met een aangenomen vertraging per reeks (`PUBLICATIE_VERTRAGING_DAGEN` in `src/scoring/pseudo_oos.py`: dagseries 1 dag, weekseries 2 tot 6, maandseries 38 tot 45).
+Zonder die correctie zou de agent op 6 juli de payrolls van juli zien (die pas in augustus verschenen). Alle bestaande point-in-time-code werkt dan ongewijzigd.
+De echte database wordt alleen gelezen. Elke andere stap weigert een database zonder die voorbereiding.
+
+**Aannames, niet te verifiëren (checkpoint 4):** de vertragingen zijn mijn inschatting van de publicatiekalenders en bewust conservatief (te veel vertraging toont
+oudere data, nooit nieuwere). `audit` laat per reeks de laatste zichtbare waarneming zien, zodat je die naast de echte kalender kunt leggen. **Geen ridge** (die kent
+het venster al); **geen herziene-versus-eerste-print-correctie** (de back-fill is gereviseerd); **geen tweede run over 2025** (geen passend ouder model gekozen).
+
+**Voorwaarden vóór de echte run**
+1. **[02-10 gedaan]** De FOMC-besluitdagen van juli en september 2026 (29 juli en 16 september) staan in `FOMC_MEETING_DATES` (`contract/resolution.py`); bron: de twee persberichten die DD aanleverde
+   (29 juli: ongewijzigd op 3,50-3,75; 16 september: verhoogd naar 3,75-4,00). De run weigert te starten zolang de kalender een gat heeft rond een voorspeldatum.
+2. Graaf v1 (of het besluit dat v0 blijft) staat in de code, zodat de doelen-vingerafdruk niet meer verandert na de run.
+3. De begeleide testrun van 14-10 is geweest (echte tokencijfers, een echte prompt gezien).
+
+**Stappen (op de VPS, in deze volgorde; de eerste vier kosten niets)**
+```bash
+cd /opt/multi_agent
+.venv/bin/python pseudo_oos.py voorbereiden --bron market_intelligence.db --doel pseudo_oos.db
+.venv/bin/python pseudo_oos.py audit --db pseudo_oos.db          # laatste zichtbare waarneming per reeks, begin en einde van het venster
+.venv/bin/python pseudo_oos.py prompt --db pseudo_oos.db --agent sector --datum 2026-07-06   # de echte prompt van die dag lezen
+.venv/bin/python pseudo_oos.py schatting --db pseudo_oos.db      # kostenschatting uit echte promptlengtes
+.venv/bin/python pseudo_oos.py draaien --db pseudo_oos.db        # DROGE run: toont alleen het plan
+.venv/bin/python pseudo_oos.py draaien --db pseudo_oos.db --ja   # KOST GELD (ruwe schatting: enkele dollars)
+.venv/bin/python pseudo_oos.py afwikkelen --db pseudo_oos.db
+.venv/bin/python pseudo_oos.py rapport --db pseudo_oos.db        # per agent: gevraagd, gekregen, % gemist, afgewikkeld
+```
+De standaardlocatie van `--bron` is `market_intelligence.db`; geef bij een andere plek het volledige pad op (zoals de dagelijkse run `MI_DB_PATH` gebruikt).
+De run is hervatbaar (per ISO-week; een tweede aanroep slaat af wat er staat). Het LLM-verbruik wordt in de kopie vastgelegd (`llm_usage`), niet in de echte database;
+de maandrem van de kopie kent het verbruik van vóór het kopiëren. `freeze_status.py` kijkt naast de echte database ook in `pseudo_oos.db`.
+**Wat DD beoordeelt:** de `audit` en een `prompt` (klopt wat er zichtbaar is met de echte publicatiekalender?), het `rapport` (>5% gemist?), en of er geen resolverfouten zijn.
+
 ## Alpha Vantage: reden loggen en één herhaalpoging — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 02-10-2026**
 
 **Waarom.** De eerste T₀ᵃ-dag miste `xlp_consumer_staples` en het log gaf geen reden (zie `docs/data-sources.md`, "GEMETEN op 02-10-2026").

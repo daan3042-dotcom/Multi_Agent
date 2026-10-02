@@ -1108,6 +1108,17 @@ nog steeds, maar de rijen belanden in de legacy-tabellen. **Dit is een contractw
 De run van 02-10 (dag 1 van de herstarte telling) was `ok` voor alle zes agents maar niet compleet: sector 11 van 12 reeksen, `xlp_consumer_staples` ontbrak. Met de definitie van 01-10 staat de teller dan op nul en begint de nieuwe telling op maandag 05-10: zeven schone werkdagen zijn op zijn vroegst vol op **dinsdag 13 oktober** (`t0a_status.py` rekent dit uit). Mee verschoven (voorstellen, door DD te bevestigen): de `--deep-dives`-testrun naar woensdag 14 oktober en de cron met `--deep-dives` naar donderdag 15 oktober; de drie begeleide weken lopen dan tot 5 november en overlappen de dry-run-week nog steeds. Aangepast in CLAUDE.md, roadmap (tabel Herzieningen, deel A, 1.11), `roadmap.html` en `docs/deployment.md`.
 **Risico, niet te negeren:** er zijn op vier van de vijf dagen sinds 28-09 Alpha Vantage-gaten geweest (28-09, 29-09, 01-10 en 02-10; alleen 30-09 was compleet). Zonder dat de herhaalpoging helpt kan de reeks van zeven schone dagen lang uitblijven. De datum is dus echt "op zijn vroegst".
 
+### Pseudo-OOS-run: harness gebouwd (roadmap 4.4, 02-10) — 1018 tests groen, echte run nog niet gedraaid
+
+**Gebouwd:** `pseudo_oos.py` (CLI: voorbereiden, audit, prompt, schatting, draaien, afwikkelen, rapport) en `src/scoring/pseudo_oos.py`. De run draait op een KOPIE van de database, waarin
+`analysis_time` van de back-fill-claims is verschoven met een aangenomen publicatievertraging per reeks, zodat de bestaande point-in-time-code (evidence-sheet, baselines, resolver) het verleden
+eerlijk ziet; de echte database wordt alleen gelezen. Dertien maandagen (6 juli t/m 28 september), vijf agents, persistence en climatology als baselines, **geen ridge**. `claims_op_datum` geeft per reeks de laatste op die datum
+bekende waarneming. De run weigert te starten zonder voorbereide kopie, en zonder FOMC-besluitdagen die het venster dekken. Een kostenschatting uit de echte promptlengtes komt vóór elke betaalde stap; draaien zonder `--ja` is een droge run.
+**Gevonden onderweg (checkpoint 4):** de back-fill zet `first_seen` gelijk aan de waarnemingsdatum, dus zonder correctie lekt de publicatievertraging (een maandcijfer van 1 juli is op 6 juli "zichtbaar"). De vertragingen zijn mijn inschatting en niet te verifiëren; ze zijn conservatief.
+`freeze_status.py` ziet de kopie (`pseudo_oos.db` naast de echte database).
+**Getest:** 33 tests tegen een bron-database met alle reeksen van de vijf agents (dag-, week- en maandfrequentie, waarnemingen na het venster, een planted piek); tien mutaties getest; twee overleefden eerst (waarnemingsdatum en ridge) en kregen een eigen test, daarna zijn alle gevangen (geen verschuiving, dagvertraging 0, te korte maandvertraging, claims negeren `first_seen` of waarnemingsdatum, geen FOMC-controle, cohort niet gezet, geen voorbereidcheck, ridge doet mee, live claims verschoven). **Niet gedraaid tegen de echte database of het echte model.**
+**FOMC-besluitdagen (02-10 opgelost):** 29 juli en 16 september 2026 staan in `FOMC_MEETING_DATES`, op basis van de twee FOMC-persberichten die DD als PDF aanleverde (juli: ongewijzigd op 3,50-3,75; september: verhoogd naar 3,75-4,00). Geverifieerd met die documenten, niet met de kalenderpagina zelf. **Open (DD):** akkoord op de aangenomen vertragingen; de tweede run over 2025 bewust uitgesteld. Plan en stappen: `docs/deployment.md`.
+
 ### Alpha Vantage: reden loggen en één herhaalpoging (1.11, 02-10) — 976 tests groen
 
 **Aanleiding.** De eerste T₀ᵃ-dag (02-10) was niet schoon: 11 van de 12 sectorreeksen, `xlp_consumer_staples` ontbrak (zie ook `t0a_status.py`, dat de teller op 0 zet; streefdatum nu 13-10, zie hieronder). Het log zei niet waarom: `_fetch_quote`/`_fetch_pair`/`_fetch_commodity_data` vingen elke fout stil op.
@@ -1287,11 +1298,11 @@ om te weten:
   vergadering hem bevestigt. Een verschoven of geannuleerde vergadering vraagt
   een aanpassing van de tuple. Een niet-geplande vergadering staat er bewust niet
   in.
-- **Vergaderingen van vóór oktober 2026 ontbreken nog.** De pseudo-OOS-run (4.4)
-  laat agents juli-september 2026 voorspellen en heeft daarvoor 29 juli en de
-  septembervergadering van 2026 nodig. Die zijn nog niet van de pagina
-  gecontroleerd. Tot dan is een voorspelling in die periode onafwikkelbaar,
-  met de reden erbij, en is dat geen benadering.
+- **[02-10 opgelost voor het pseudo-OOS-venster] 29 juli en 16 september 2026 zijn toegevoegd.** Bron: de twee
+  FOMC-persberichten ("For release at 2:00 p.m. EDT"), door DD als PDF aangeleverd: 29 juli (doelrange ongewijzigd op
+  3,50-3,75) en 16 september (verhoogd naar 3,75-4,00, 12-0). De vergaderingen van januari tot en met juni 2026 ontbreken nog en
+  zijn daar niet nodig. Een voorspelling waarvan de vergadering buiten de lijst valt is onafwikkelbaar, met de reden erbij, en
+  is geen benadering.
 
 **Tests.** Een bestaande test (`test_zonder_fomc_kalender_wordt_er_niet_benaderd`)
 riep de methode zonder kalender aan en verwachtte een lege. Nu de standaard

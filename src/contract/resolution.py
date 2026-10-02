@@ -67,6 +67,8 @@ class ResolutionMethod(str, Enum):
 
 
 FOMC_MEETING_DATES: tuple[date, ...] = (
+    date(2026, 7, 29),
+    date(2026, 9, 16),
     date(2026, 10, 28),
     date(2026, 12, 9),
     date(2027, 1, 27),
@@ -93,11 +95,14 @@ Elke datum is "tentative until confirmed at the meeting immediately preceding it
 zegt de Fed zelf. Een verschoven of geannuleerde vergadering vraagt dus om een
 aanpassing hier; een onverwachte (niet-geplande) vergadering staat er bewust niet in.
 
-NOG NIET AANWEZIG: de vergaderingen van vóór oktober 2026. De pseudo-OOS-run
-(4.4) laat agents juli-september 2026 voorspellen en heeft daarvoor de data van
-juli en september 2026 nodig. Voeg die toe zodra ze van dezelfde pagina zijn
-gecontroleerd; tot dan meldt de resolver voor een voorspelling waarvan de
-vergadering buiten de lijst valt per stuk waarom.
+TOEGEVOEGD OP 02-10-2026 voor de pseudo-OOS-run (4.4): 29 juli en 16 september 2026. Bron: de twee
+FOMC-persberichten ("For release at 2:00 p.m. EDT, July 29, 2026" en "September 16, 2026"), door DD
+aangeleverd als PDF; daaruit volgt de besluitdag (de dag van de rentebeslissing) en wat er besloten is
+(29 juli: doelrange ongewijzigd op 3,50-3,75; 16 september: verhoogd met een kwart punt naar 3,75-4,00).
+Het zijn persberichten van de gehouden vergaderingen, niet de geplande kalender; ze bewijzen de besluitdag,
+niet dat er tussen deze twee geen derde, onverwachte vergadering was (de Fed meldt die apart).
+NOG NIET AANWEZIG: de vergaderingen van vóór juli 2026 (januari tot en met juni); de pseudo-OOS-run heeft ze niet nodig.
+Voor een voorspelling waarvan de vergadering buiten de lijst valt meldt de resolver per stuk waarom.
 
 Een lege of te korte lijst maakt een voorspelling onafwikkelbaar met een reden,
 en geeft nooit een benadering: de resolver zegt hoeveel vergaderingen er ontbreken.

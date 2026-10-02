@@ -239,6 +239,20 @@ def test_pseudo_oos_telt_alleen_dat_cohort_en_is_nooit_af(tmp_path):
     assert status == fv.ZELF_CONTROLEREN and "1 voorspellingen" in waarde and "jouw oordeel" in opm
 
 
+def test_pseudo_oos_kijkt_ook_in_de_kopie_waarop_de_run_draait(tmp_path):
+    """`pseudo_oos.py` draait nooit op de echte database maar op `pseudo_oos.db` ernaast; dit blok moet dat zien."""
+    pad, conn = _db(tmp_path)
+    conn.close()
+    assert _voorwaarden(pad, _tijd(START))["Pseudo-OOS-run (4.4)"][1] == fv.NOG_NIET_AF
+
+    kopie = init_db(str(tmp_path / fv.PSEUDO_OOS_KOPIE))
+    save_prediction(kopie, _voorspelling(cohort="pseudo_oos"))
+    save_prediction(kopie, _voorspelling(cohort="pseudo_oos", target_metric_key="dgs2"))
+    kopie.close()
+    waarde, status, _ = _voorwaarden(pad, _tijd(START))["Pseudo-OOS-run (4.4)"]
+    assert status == fv.ZELF_CONTROLEREN and "2 in pseudo_oos.db" in waarde and "echte database" not in waarde
+
+
 # --------------------------------------------------------------------------
 # Dry-run-week, reeksenlijst, handmatige punten
 # --------------------------------------------------------------------------
