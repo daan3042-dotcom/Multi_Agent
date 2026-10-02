@@ -88,6 +88,39 @@ Volgens CLAUDE.md komen er geen nieuwe agents vóór T₀ (behalve de lean econo
 
 ## 8. Volgende stappen
 
-1. DD beantwoordt de vragen (de meeste zijn een kort ja/nee of een keuze).
+1. ~~DD beantwoordt de vragen~~ — gedaan op 02-10, zie §9.
 2. 9 oktober: de blinde versie van de partner. Dan een samenvoegsessie knoop voor knoop; verschillen komen in `docs/causal-graph.md`, "Open punten", met `[DD]` en `[partner]` gemarkeerd.
 3. Pas daarna één keer de code in: graaf v1, `TARGETS_VERSION` v2, nieuwe mapping per agent, tests, docs.
+
+## 9. Besluiten en antwoorden van DD (02-10-2026)
+
+| Vraag | Besluit |
+|---|---|
+| 1. "Hoog" per knoop | **Goedgekeurd:** de tabel in §10, met mijn voorstel voor `policy_rate` (één knoop voor het niveau; de pijlen geven aan of ze via niveau of verandering werken) en `policy_room` (hoog = meer ruimte). **`sentiment_flows` is niet besloten**, zie hieronder. |
+| 2. Bewust weggelaten of vergeten (`wage_growth`, `term_premium`, `liquidity`, `earnings_growth`) | **Onbekend** ("durf ik niet te zeggen": DD's graaf komt uit een interview met Claude Fable 5.1 en wordt later met de versie van de partner samengevoegd). Open voor de samenvoegsessie; er wordt niets aangenomen. |
+| 3. Voorwaarden | **Als tekst**, tot ze een meetbaar getal hebben; pas dan een veld. |
+| 4. `equities` als knoop met eigen uitgaande pijl | **Ja.** |
+| 5. Samengestelde pijlen | **Akkoord:** D1 wordt drie pijlen (`policy_rate → valuation`, `policy_expectation → valuation`, `valuation → equities`); D10 twee (`credit_conditions → corporate_strength`, `corporate_strength → equities`); C6 twee (`policy_rate → dollar`, `long_rate → dollar`). **A3a en A3b blijven twee pijlen** (kopinflatie en kerninflatie, vertraging weken tegenover 6–12 maanden), met een label `kanaal`; dat vraagt een klein extra veld in de graaf. |
+| 6. `nonfarm_payrolls` | **`labor_market`** (nu `growth` in v0; dit verandert bij v1 de doelenlijst). |
+| 7. C8 en C9 (buitenland) | **Optie 1: buiten de graaf**, als tekst bij de agents (zie hieronder). |
+| 8. De tien knopen zonder reeks | **Optie A:** alle tien blijven in graaf v1, genoteerd als "uitgesteld in cohort 0". Welke ze later krijgen (en of er vóór T₀ een paar reeksen bijkomen) wordt apart beslist als onderdeel van "reeksenlijst definitief" (open punt van de T₀-checklist). |
+
+**Nog open:** (a) de pool van `sentiment_flows`: in D7 is hoog = positief sentiment, in C7 is het "stress" die de dollar laat stijgen en in D8 "gedwongen verkoop"; één van de drie tekens klopt dus niet. Mijn voorstel is twee knopen (sentiment, en stress/gedwongen verkoop); nog geen besluit. (b) Vraag 2. (c) De blinde versie van de partner (9 oktober).
+
+**Kandidaat-richtlijnen voor de agents** (komen bij de richtlijnen-stap, niet nu in een prompt): de drie regels uit DD's concept (winnaars via de waardeketen; reactie lezen over meerdere markten; eerst de aard van de schok vaststellen) en, volgens besluit 7: *een sterke dollar belast opkomende landen (schuldenlast en inflatie, 6–18 maanden; kijk naar BRL/USD, vooral bij dollarschuld)* [C8] en *Amerikaanse aandelen beïnvloeden buitenlandse markten direct, afhankelijk van hoeveel het buitenland erin belegd heeft* [C9].
+
+## 10. "Hoog" betekent (goedgekeurd door DD, 02-10-2026; `sentiment_flows` ontbreekt tot het besluit)
+
+| Knoop | "Hoog" betekent | Knoop | "Hoog" betekent |
+|---|---|---|---|
+| `external_shock` | zwaardere schok | `credit_conditions` | krapper en duurder lenen |
+| `growth` | harder groeiende activiteit | `corporate_strength` | sterkere bedrijfsbalansen |
+| `household_balance` | sterkere balans (koopkracht, buffer) | `long_rate` | hogere tienjaarsrente |
+| `labor_market` | krappere arbeidsmarkt | `dollar` | sterkere dollar |
+| `inflation` | hogere inflatie (incl. verwachtingen) | `growth_driver` | sterkere groeidrijver |
+| `policy_rate` | hogere beleidsrente (niveau) | `valuation` | duurdere waardering |
+| `stimulus_vs_damage` | meer nieuw geld t.o.v. de schade | `tail_uncertainty` | onzekerder over het uiterste |
+| `policy_room` | meer ruimte (stap vanuit neutraal) | `equities` | hoger koersniveau |
+| `policy_expectation` | markt prijst meer verkrapping in | `commodities` | hogere prijzen |
+| `fiscal` | zwakkere houdbaarheid (meer tekort/schuld) | `financial_institutions` | gezondere instellingen |
+| `debt_buildup` | meer schuld t.o.v. bbp | `collateral_prices` | hogere onderpandprijzen |
