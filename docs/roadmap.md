@@ -1215,6 +1215,7 @@ gescoord wordt er al in.
       een eigen venster en een ondergrens; (5) raakt de trigger-engine (checkpoint 2), vraagt een kalibratie per reeks en een nieuwe trigger-versie.
       *Voorstel voor de proef (alleen lezen, nog niet gebouwd):* een rapport dat per reeks laat zien hoeveel triggers per jaar "N keer de gemiddelde beweging over 30 dagen"
       zou geven voor N van 2 tot 6. Dat raakt de engine niet; het vraagt wel DD's akkoord omdat het niet op het kritieke pad naar T₀ ligt.
+      **[02-10] Proefrapport gebouwd, nog niet gedraaid:** `calibrate_triggers.py --atr-proef` (`src/calibration/atr_proef.py`, alleen lezen, `tests/test_atr_proef.py`). Per reeks: triggers per jaar bij N=2..6 naast de huidige vaste drempel, met een kolom `dekking` die laat zien welke reeksen (week-, maand- en stapreeksen) niet in een venster van 30 dagen passen. Het gemiddelde is point-in-time. De regel zelf blijft ongebouwd (checkpoint 2).
 
 ### 4.3 Agent Track Records — loopt mee vanaf T₀
 - [ ] Precision/recall/hallucination-rate per agent (QC-kant)

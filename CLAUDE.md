@@ -86,6 +86,7 @@ en `docs/project-state.md`.
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
+| **ATR-proefrapport (idee van DD, roadmap 4.2), alleen lezen** | `calibrate_triggers.py --atr-proef`, `src/calibration/atr_proef.py` |
 | **Het freeze-overzicht (alleen lezen) + versie/vingerafdruk van doelenlijst en evidence-sheet** | `freeze_status.py`, `src/runtime/freeze_status.py`, `src/runtime/freeze_voorwaarden.py` (wat er vóór de klok nog moet: AF / NOG NIET AF / ZELF CONTROLEREN), `src/runtime/freeze_guard.py`, `src/contract/freeze_versions.py` |
 | **Trigger-versienummer + vingerafdruk-waakhond (1.5)** | `src/contract/trigger_version.py`, `src/runtime/trigger_guard.py` |
 | **LLM-tokenverbruik, de maandrem ($200, 1.11), het ruwe LLM-logboek (`llm_calls`) en het denkbeleid** | `src/runtime/llm_budget.py` |
