@@ -242,3 +242,61 @@ def test_de_database_gaat_alleen_lezen_open(tmp_path):
     bron = (ROOT / "src/runtime/freeze_status.py").read_text(encoding="utf-8")
     for verboden in ("INSERT", "UPDATE ", "DELETE", "DROP ", "CREATE ", ".commit("):
         assert verboden not in bron.replace("alleen lezen", ""), verboden
+
+
+# --------------------------------------------------------------------------
+# DD's voorlopige akkoord (02-10-2026): hangt aan de waarde, vervalt vanzelf
+# --------------------------------------------------------------------------
+
+AKKOORD_NAMEN = (
+    "Predictiecontract", "Kwantielniveaus", "Aandelensplitsingen (correctie bij het lezen)", "FOMC-kalender",
+    "Persistence en climatology", "Model (model_id)",
+)
+
+
+def test_de_zes_punten_met_dd_akkoord_staan_als_akkoord_dd_en_de_rest_blijft_te_bevestigen():
+    from contract.freeze_versions import AKKOORDEN_DD
+
+    assert set(AKKOORDEN_DD) == set(AKKOORD_NAMEN)
+    punten = fs.bepaal_punten(None)
+    for naam in AKKOORD_NAMEN:
+        p = _punt(punten, naam)
+        assert p.status == fs.AKKOORD_DD, (naam, p.waarde)
+        assert "voorlopig akkoord DD 02-10-2026" in p.opmerking
+    # Niet in het register: blijft wachten (graaf, doelenlijst, prompts, evidence-sheet, ridge, denkinstelling, pin, cohort, drempels, resolver, scorer)
+    for naam in ("Doelenlijst en resolutieregels", "Prompt sector", "Evidence-sheet", "Ridge-baseline", "Denkinstelling",
+                 "Trigger-pin (FROZEN_TRIGGER_VERSION)", "Trigger-regels", "Resolver-wachttijd", "Scorer"):
+        assert _punt(punten, naam).status in (fs.TE_BEVESTIGEN, fs.ZONDER_VERSIE), naam
+
+
+def test_een_akkoord_vervalt_vanzelf_als_de_waarde_verandert(monkeypatch):
+    from contract import prediction as pred
+
+    monkeypatch.setattr(pred, "CONTRACT_VERSION", "v2")
+    p = _punt(fs.bepaal_punten(None), "Predictiecontract")
+    assert p.status == fs.TE_BEVESTIGEN and "VERVALLEN" in p.opmerking and "'v1'" in p.opmerking and "'v2'" in p.opmerking
+
+
+def test_akkoord_dd_is_geen_bevroren_en_een_andere_status_blijft_zoals_ze_is(monkeypatch):
+    punten = fs.bepaal_punten(None)
+    tel = fs.samenvatting(punten)
+    assert tel[fs.BEVROREN] == 0 and tel[fs.AKKOORD_DD] == 6
+    # een LET OP (hier: de splitsingswaakhond) wordt NIET door een akkoord overschreven
+    from runtime import split_waakhond
+
+    monkeypatch.setattr(split_waakhond, "waarschuwingen", lambda conn: ["onverklaarde sprong xlf"], raising=False)
+    from contract import freeze_versions as fv
+
+    monkeypatch.setitem(fv.AKKOORDEN_DD, "Model (model_id)", ("een-ander-model", "01-01-2026"))
+    punten = [fs.Punt("G", "Model (model_id)", "claude-sonnet-5-5", "x", fs.LET_OP)]
+    assert fs._pas_akkoorden_toe(punten)[0].status == fs.LET_OP
+
+
+def test_de_tekst_toont_het_akkoord_en_het_register_heeft_geen_spelfouten():
+    from contract.freeze_versions import AKKOORDEN_DD
+
+    punten = fs.bepaal_punten(None)
+    namen = {p.naam for p in punten}
+    assert set(AKKOORDEN_DD) <= namen        # een typfout in een naam zou het akkoord stil wegnemen
+    tekst = fs.format_overzicht(punten)
+    assert "[AKKOORD DD]" in tekst and "6 akkoord dd" in tekst

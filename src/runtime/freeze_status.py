@@ -14,6 +14,8 @@ niet is wat er draait. De tests bewijzen dat een gewijzigde waarde hier zichtbaa
 STATUSSEN
   BEVROREN          echt vastgezet (de trigger-pin staat op de huidige versie, de ridge-modellen staan in de database)
   TE BEVESTIGEN     staat in de code en wacht op DD's bevestiging bij de freeze
+  AKKOORD DD        DD gaf een voorlopig akkoord op precies deze waarde (`contract/freeze_versions.py::AKKOORDEN_DD`). Vervalt vanzelf als de
+                    waarde verandert. Geen freeze: bij de freeze bevestigt DD nog steeds met de versienummers erbij.
   OPEN BESLISSING   er is nog niets om te bevestigen: DD moet eerst iets beslissen of aanleveren
   WIJZIGING ZONDER VERSIE   de code wijkt af van de vingerafdruk van zijn versienummer (de tests vangen dit al;
                             hier staat het voor het geval iemand ze niet draaide)
@@ -31,11 +33,12 @@ dry-run-week, ...). Zie `runtime/freeze_voorwaarden.py`.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 BEVROREN = "BEVROREN"
 TE_BEVESTIGEN = "TE BEVESTIGEN"
+AKKOORD_DD = "AKKOORD DD"
 OPEN_BESLISSING = "OPEN BESLISSING"
 ZONDER_VERSIE = "WIJZIGING ZONDER VERSIE"
 LET_OP = "LET OP"
@@ -44,7 +47,7 @@ INFO = "INFO"
 AF = "AF"
 NOG_NIET_AF = "NOG NIET AF"
 ZELF_CONTROLEREN = "ZELF CONTROLEREN"
-TELLEN_MEE = (BEVROREN, TE_BEVESTIGEN, OPEN_BESLISSING, ZONDER_VERSIE, LET_OP, NOG_NIET_AF, ZELF_CONTROLEREN, AF)
+TELLEN_MEE = (BEVROREN, AKKOORD_DD, TE_BEVESTIGEN, OPEN_BESLISSING, ZONDER_VERSIE, LET_OP, NOG_NIET_AF, ZELF_CONTROLEREN, AF)
 
 
 @dataclass(frozen=True)
@@ -218,7 +221,28 @@ def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt
 
     for naam, waarde, status, opmerking in bepaal_voorwaarden(db_pad, nu):
         voeg(GROEP, naam, waarde, "database/docs", status, opmerking)
-    return punten
+    return _pas_akkoorden_toe(punten)
+
+
+def _pas_akkoorden_toe(punten: list[Punt]) -> list[Punt]:
+    """TE BEVESTIGEN wordt AKKOORD DD als DD op precies deze waarde akkoord gaf; was er een akkoord op een andere waarde, dan blijft het
+    TE BEVESTIGEN met de melding dat het akkoord is vervallen. Andere statussen (LET OP, ZONDER VERSIE, BEVROREN, ...) blijven zoals ze zijn."""
+    from contract.freeze_versions import AKKOORDEN_DD
+
+    uit = []
+    for p in punten:
+        akkoord = AKKOORDEN_DD.get(p.naam)
+        if akkoord is None or p.status != TE_BEVESTIGEN:
+            uit.append(p)
+            continue
+        waarde, datum = akkoord
+        if p.waarde == waarde:
+            uit.append(replace(p, status=AKKOORD_DD, opmerking=f"voorlopig akkoord DD {datum}. " + p.opmerking))
+        else:
+            uit.append(replace(p, opmerking=(
+                f"LET OP: het akkoord van {datum} gold voor '{waarde}' en is VERVALLEN, want de waarde is nu '{p.waarde}'. " + p.opmerking
+            )))
+    return uit
 
 
 def samenvatting(punten: list[Punt]) -> dict[str, int]:

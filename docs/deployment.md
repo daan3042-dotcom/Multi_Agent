@@ -508,6 +508,8 @@ buiten de VPS) staat elke datagedreven regel op ZELF CONTROLEREN met "onbekend",
 voorspellingen krijgen LET OP (contract heroverwegen). De dry-run-week-data (27-10 t/m 09-11) staan als constante in `src/runtime/freeze_voorwaarden.py`. Wijzigt iemand de doelenlijst of de evidence-sheet zonder het versienummer in
 `src/contract/freeze_versions.py` op te hogen, dan faalt `tests/test_freeze_guard.py` (en voor de evidence-sheet ook de prompt-test).
 
+**`AKKOORD DD` (02-10-2026).** Een punt dat DD voorlopig heeft goedgekeurd staat als `AKKOORD DD` in plaats van `TE BEVESTIGEN`. Het akkoord hangt aan de waarde zoals het overzicht hem toont (`contract/freeze_versions.py::AKKOORDEN_DD`) en vervalt vanzelf, met een melding, zodra die waarde verandert. Het is geen freeze en telt niet als `BEVROREN`; bij de freeze bevestig je nog steeds met de versienummers erbij.
+
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat

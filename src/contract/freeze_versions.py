@@ -35,3 +35,25 @@ per horizon en de FOMC-context."""
 EVIDENCE_SHEET_FINGERPRINTS: dict[str, str] = {
     "v1": "94e8923819c07998",
 }
+
+
+AKKOORDEN_DD: dict[str, tuple[str, str]] = {
+    "Predictiecontract": ("v1", "02-10-2026"),
+    "Kwantielniveaus": (".10 .25 .50 .75 .90", "02-10-2026"),
+    "Aandelensplitsingen (correctie bij het lezen)": ("5 geregistreerd (2025-12-05)", "02-10-2026"),
+    "FOMC-kalender": ("12 besluitdagen, 2026-07-29 t/m 2027-12-08", "02-10-2026"),
+    "Persistence en climatology": ("v3, minimaal 30 vensters (seizoen 60)", "02-10-2026"),
+    "Model (model_id)": ("claude-sonnet-5-5", "02-10-2026"),
+}
+"""DD's VOORLOPIGE akkoord per freeze-punt (02-10-2026): punt -> (de waarde waarop het akkoord gold, de datum).
+
+HET AKKOORD HANGT AAN DE WAARDE, NIET AAN DE NAAM. `runtime/freeze_status.py` toont een punt alleen als AKKOORD DD zolang de waarde uit de
+code exact gelijk is aan wat hier staat. Verandert de waarde (een nieuw contractversienummer, een extra kwantiel, een tweede model), dan
+vervalt het akkoord vanzelf en staat het punt weer op TE BEVESTIGEN, met een melding. Zo kan een akkoord nooit stilletjes doorgelden voor iets
+anders dan waar DD ja op zei.
+
+DIT IS GEEN FREEZE. Het voorlopige akkoord zegt 'dit is zoals ik het wil'; de bevestiging bij de freeze (CLAUDE.md, checkpoint 5) blijft een
+handeling van DD met de versienummers erbij, vlak voordat de klok loopt. AKKOORD DD telt dan ook nooit als BEVROREN.
+
+Een punt toevoegen of bijwerken: alleen op DD's uitdrukkelijke akkoord, met de waarde zoals `freeze_status.py` hem toont."""
+
