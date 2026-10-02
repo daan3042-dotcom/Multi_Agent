@@ -1095,6 +1095,10 @@ meting; meer dan 5% afgewezen kruisingen is het signaal om te heroverwegen); de 
 Staartrisico's (q05/q95) zijn bewust niet vastgelegd. **Op de VPS vóór het uitrollen:** `SELECT COUNT(*) FROM predictions;` (verwacht 0). Is het meer dan 0, dan werkt de migratie
 nog steeds, maar de rijen belanden in de legacy-tabellen. **Dit is een contractwijziging en dus een freeze-item (checkpoint 5), vóór de eerste echte voorspelling.**
 
+### SPY-bron: eerste meting van het verversmoment (02-10, 12:13 UTC)
+
+`as_of=2026-10-01`, `Last-Modified` 02-10 **10:15:20 GMT**: de bron plaatst het bestand van gisteren om ~10:15 UTC, ná de archief-cron van 08:30 UTC. Het archief loopt daardoor één dag achter, maar verliest niets zolang de bron één keer per werkdag rond dat uur ververst (de cron valt dan steeds in het venster van het bestand van de vorige werkdag). Risico aan de vroege kant: publiceert de bron vóór 08:30 UTC, dan wordt het bestand van de dag ervoor nooit bewaard; de cron dus niet later zetten. **Eén meetpunt**: de uurlijkse meting tot maandag 5 oktober 12:00 UTC (voorstel, nog niet geïnstalleerd) moet de schommeling en het weekendgedrag laten zien. Zie `docs/deployment.md`.
+
 ### SPY-bron: meetscript voor het verversmoment (02-10) — 982 tests groen
 
 `meet_spy_asof.py` + `src/archive/spy_meting.py` (alleen lezen, schrijft niets): één regel met `as_of`, grootte, vingerafdruk en de koppen `Last-Modified`/`ETag`/`Date`, om te meten op welk uur de bron een nieuwe `as_of` toont (`archive_daily.py` archiveert maximaal één keer per UTC-dag en kan dat niet). **Voorstel (checkpoint 3, door DD te bevestigen):** drie dagen lang elk uur via een tijdelijke cron-regel; staat in `docs/deployment.md`, niet geïnstalleerd. 6 tests; vier mutaties gevangen. Een test vond onderweg dat de standaard-`get` te vroeg werd vastgelegd (een test haalde echt het netwerk op); dat is nu bij het aanroepen opgezocht.

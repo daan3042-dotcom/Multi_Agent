@@ -754,12 +754,27 @@ cron elke dag een verouderde versie. Dat weten we alleen met metingen over de da
 ```bash
 cd /opt/multi_agent && .venv/bin/python meet_spy_asof.py
 ```
-**Voorstel, door DD te bevestigen (checkpoint 3):** drie dagen lang elk uur laten meten, zodat het niet van DD's aanwezigheid afhangt. Eén verzoek per uur aan
+**Eerste meting (02-10-2026, 12:13 UTC, DD):** `as_of=2026-10-01`, `last-modified=Fri, 02 Oct 2026 10:15:20 GMT`, ETag `0x8DF206E10C627F7`. De bron
+plaatste het bestand met `as_of` 01-10 dus om **10:15 UTC op 02-10**, ná de archief-cron van 08:30 UTC (die `as_of` 30-09 bewaarde).
+*Wat dat betekent (één meetpunt, nog te bevestigen):* het archief loopt één dag achter op wat er op dat moment beschikbaar is, maar er gaat niets
+verloren zolang de bron één keer per werkdag rond 10:15 UTC ververst: elk bestand leeft van zijn publicatie tot de volgende, en de cron van 08:30 valt
+elke werkdag in dat venster (het bestand van gisteren). **Het risico zit aan de vroege kant:** publiceert de bron ooit vóór 08:30 UTC, dan wordt het
+bestand van de vorige dag nooit bewaard. De cron NIET later zetten dan 10:15 (dan sla je juist bestanden over); eerder zetten geeft marge.
+Onbekend en te meten: of de tijd van dag tot dag schommelt en of er in het weekend of op feestdagen iets verschijnt.
+
+**Voorstel, door DD te bevestigen (checkpoint 3):** elk uur laten meten, tot en met maandag 5 oktober 12:00 UTC (dan zitten het weekend en de publicatie van maandag erbij), zodat het niet van DD's aanwezigheid afhangt. Eén verzoek per uur aan
 State Street, naar een eigen logbestand, los van de dagelijkse run en het archief (`crontab -e`, regel toevoegen):
 ```
 5 * * * * cd /opt/multi_agent && .venv/bin/python meet_spy_asof.py >> /var/log/mi/spy_asof.log 2>&1
 ```
-Na drie dagen: `cat /var/log/mi/spy_asof.log` plakken, en de regel weer uit de crontab halen (`crontab -e`). Wat we dan zien: het uur waarop `as_of` van dag
+Veilig toevoegen (laat de rest van de crontab ongemoeid) en controleren:
+```bash
+(crontab -l; echo '5 * * * * cd /opt/multi_agent && .venv/bin/python meet_spy_asof.py >> /var/log/mi/spy_asof.log 2>&1') | crontab - && crontab -l
+```
+Op maandag 5 oktober na 12:00 UTC: `cat /var/log/mi/spy_asof.log` plakken, en de regel weer weghalen:
+```bash
+crontab -l | grep -v meet_spy_asof | crontab - && crontab -l
+``` Wat we dan zien: het uur waarop `as_of` van dag
 wisselt en wat `Last-Modified` zegt. Bij een verversing later dan 08:30 UTC stel ik een nieuw archiefmoment voor (nieuwe checkpoint-3-beslissing).
 
 ## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
