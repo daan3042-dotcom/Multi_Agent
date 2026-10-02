@@ -19,6 +19,13 @@ STATUSSEN
                             hier staat het voor het geval iemand ze niet draaide)
   LET OP            iets staat in een stand die niet bij de rest past
   INFO              geen freeze-punt, wel goed om te zien
+
+TWEEDE HELFT, "VOORWAARDEN VÓÓR DE KLOK": wat er VÓÓR de freeze gedaan moet zijn (T₀ᵃ, begeleide testrun, pseudo-OOS,
+dry-run-week, ...). Zie `runtime/freeze_voorwaarden.py`.
+  AF                uit de data af te leiden en voldaan. Alleen dit mag "klaar" heten.
+  NOG NIET AF       uit de data af te leiden en niet voldaan.
+  ZELF CONTROLEREN  de data toont dat iets gedaan is maar niet of het GOED is, of het is niet uit de data af te leiden.
+                    Dat oordeel is van DD; het overzicht zegt hier nooit "klaar".
 """
 
 from __future__ import annotations
@@ -33,7 +40,11 @@ OPEN_BESLISSING = "OPEN BESLISSING"
 ZONDER_VERSIE = "WIJZIGING ZONDER VERSIE"
 LET_OP = "LET OP"
 INFO = "INFO"
-TELLEN_MEE = (BEVROREN, TE_BEVESTIGEN, OPEN_BESLISSING, ZONDER_VERSIE, LET_OP)
+# Voorwaarden vóór de klok (runtime/freeze_voorwaarden.py): zie daar voor het verschil tussen de drie.
+AF = "AF"
+NOG_NIET_AF = "NOG NIET AF"
+ZELF_CONTROLEREN = "ZELF CONTROLEREN"
+TELLEN_MEE = (BEVROREN, TE_BEVESTIGEN, OPEN_BESLISSING, ZONDER_VERSIE, LET_OP, NOG_NIET_AF, ZELF_CONTROLEREN, AF)
 
 
 @dataclass(frozen=True)
@@ -69,7 +80,7 @@ def _db_tellingen(db_pad: str | None):
         conn.close()
 
 
-def bepaal_punten(db_pad: str | None = None, environ=None) -> list[Punt]:
+def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt]:
     # Imports bij het aanroepen, zodat een test een module-waarde kan vervangen en het hier terugziet.
     from agents import (
         currency_agent, economic_agent, financial_agent, monetary_policy_agent, sector_agent,
@@ -174,6 +185,12 @@ def bepaal_punten(db_pad: str | None = None, environ=None) -> list[Punt]:
          "bepaalt of een agent na zes maanden wordt verwijderd; moet vooraf worden vastgelegd (roadmap 4.5)")
     if db is not None:
         voeg(G, "Voorspellingen per cohort", ", ".join(f"{c}: {n}" for c, n in sorted(db[1].items())) or "geen", "database", INFO, "")
+
+    # --- Voorwaarden vóór de klok -------------------------------------------
+    from runtime.freeze_voorwaarden import GROEP, bepaal_voorwaarden
+
+    for naam, waarde, status, opmerking in bepaal_voorwaarden(db_pad, nu):
+        voeg(GROEP, naam, waarde, "database/docs", status, opmerking)
     return punten
 
 
@@ -200,6 +217,11 @@ def format_overzicht(punten: list[Punt]) -> str:
             uit.append(huidige)
         uit.append(f"  {p.naam:<42} {p.waarde}")
         uit.append(f"  {'':<42} [{p.status}]" + (f"  {p.opmerking}" if p.opmerking else ""))
+    if any(p.groep == "VOORWAARDEN VÓÓR DE KLOK" for p in punten):
+        uit.append("")
+        uit.append("  AF = uit de data af te leiden en voldaan (alleen dit mag 'klaar' heten).")
+        uit.append("  NOG NIET AF = uit de data af te leiden en niet voldaan.")
+        uit.append("  ZELF CONTROLEREN = de data toont dat het gedaan is, niet of het GOED is (of het is niet af te leiden): jouw oordeel.")
     tel = samenvatting(punten)
     uit.append("")
     uit.append(
