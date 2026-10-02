@@ -106,8 +106,8 @@
 <script>
 const PHASES = [
 {
-  id:"0a", title:"Fase 0a — Deblokkeren", when:"29 sep – 12 okt 2026",
-  goal:"Het systeem haalt elke dag zonder tussenkomst echte data op. <em>Uitkomst: T₀ᵃ, de ingestieklok loopt (op zijn vroegst 12 oktober; was 3 en daarna 7 oktober).</em>",
+  id:"0a", title:"Fase 0a — Deblokkeren", when:"29 sep – 13 okt 2026",
+  goal:"Het systeem haalt elke dag zonder tussenkomst echte data op. <em>Uitkomst: T₀ᵃ, de ingestieklok loopt (op zijn vroegst 13 oktober; was 3, daarna 7 en 12 oktober).</em>",
   tasks:[
     {id:"0a-1", who:"DD", sec:"1.11", blocked:true, t:"VPS-provider kiezen en instance bestellen",
      dod:"Machine bereikbaar via SSH, Python 3.12+, tijdzone UTC.",
@@ -128,7 +128,7 @@ const PHASES = [
      dod:"Een externe dienst alarmeert bij UITBLIJVEN van de dagelijkse ping; getest door de VPS bewust één dag uit te zetten.",
      why:"<code>run_daily()</code> ziet gaten alleen bij de eerstvolgende run die wél draait. Staat de machine drie weken uit, hoort niemand iets."},
     {id:"0a-7", who:"—", sec:"1.11", t:"T₀ᵃ: de ingestieklok loopt",
-     dod:"7 SCHONE werkdagen op rij zonder handmatige actie. Schoon = alle zes agents ok én geen volledigheidstrigger (een ontbrekende reeks); een niet-schone dag zet de teller op nul. De reeks begon op 29-09, brak op 01-10 (sector 10 van 12 reeksen) en herstartte op 02-10: op zijn vroegst klaar op maandag 12 oktober. Controle op de VPS: <code>cd /opt/multi_agent &amp;&amp; .venv/bin/python t0a_status.py</code> (alleen lezen).",
+     dod:"7 SCHONE werkdagen op rij zonder handmatige actie. Schoon = alle zes agents ok én geen volledigheidstrigger (een ontbrekende reeks); een niet-schone dag zet de teller op nul. De reeks begon op 29-09, brak op 01-10 (sector 10 van 12 reeksen) en herstartte op 02-10, brak op 02-10 weer (sector 11 van 12 reeksen) en herstartte op 05-10: op zijn vroegst klaar op dinsdag 13 oktober. Controle op de VPS: <code>cd /opt/multi_agent &amp;&amp; .venv/bin/python t0a_status.py</code> (alleen lezen).",
      why:"Elke dag zonder VPS is een verloren dag point-in-time-data voor de Alpha Vantage-reeksen — die zijn niet retroactief te reconstrueren."}
   ]
 },

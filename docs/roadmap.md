@@ -22,6 +22,7 @@ Vink items af zodra ze klaar zijn én groen zijn in de testsuite.
 | 27-09-2026 | Zie hieronder | Externe review van de roadmap (Claude Fable 5.1) |
 | 28-09-2026 | Synthesizer-doelen op verhandelbare instrumenten, instrument-mapping, referentieprijs in de `resolution_rule`, en extra niet-reconstrueerbare data (consensus, expected moves, ruwe headlines). Gemarkeerd met **[28-09]** | Voorbereiding op een mogelijke swing-trading-laag (1–3 dagen) over 1–1,5 jaar, zonder die nu te bouwen. Zie "Beslist op 28-09-2026" |
 | 01-10-2026 | T₀ᵃ-streefdatum van 7 oktober naar **12 oktober (op zijn vroegst)**; definitie van een "schone dag" vastgelegd | De run van 01-10 was niet schoon: alle agents `ok`, maar de sector-agent kreeg 10 van de 12 reeksen binnen (`spy_benchmark` en `xlp_consumer_staples` ontbraken, Alpha Vantage), en de volledigheidscheck gaf een trigger. **Een schone dag = alle agents `ok` én geen volledigheidstrigger; een niet-schone dag zet de teller op nul** ("op rij"). 29-09 en 30-09 waren schoon, 01-10 niet, dus de reeks start opnieuw op 02-10 en zeven schone werkdagen zijn op zijn vroegst vol op **maandag 12 oktober**. Dat is vijf kalenderdagen later, niet twee: een niet-schone dag schuift niets op, hij begint de telling opnieuw, en elke volgende niet-schone dag doet dat weer. DD koos op 01-10 de strenge definitie ("wat het beste is voor de multi-agent"), omdat de ingestieklok bewijst dat data betrouwbaar binnenkomt en een ontbrekende SPY-koers dat bewijs aantast |
+| 02-10-2026 | T₀ᵃ-streefdatum van 12 naar **13 oktober (op zijn vroegst)**; testrun `--deep-dives` van 13 naar **14 oktober**, cron met `--deep-dives` van 14 naar **15 oktober** | De eerste dag van de herstarte telling (02-10) was niet schoon: alle agents `ok`, maar sector kreeg 11 van de 12 reeksen (`xlp_consumer_staples` ontbrak, Alpha Vantage). Dat is de definitie van 01-10 zelf: de teller staat op nul en de nieuwe telling begint op maandag 05-10, dus zeven schone werkdagen zijn op zijn vroegst vol op dinsdag 13-10 (`t0a_status.py` rekent dit uit). Er is geen nieuwe beslissing: het is de uitkomst van de bestaande regel. **Risico:** elke volgende niet-schone dag schuift dit opnieuw; daarom logt en herhaalt sinds 02-10 de Alpha Vantage-aanroep (`src/sources/alpha_vantage.py`) |
 | 30-09-2026 | T₀ᵃ-streefdatum van 3 naar **7 oktober** (vervangen op 01-10, zie hierboven) | "7 dagen op rij zonder handmatige actie", en de cron draait alleen maandag tot en met vrijdag. 3 oktober is een zaterdag; als 29-09 dag 1 was, zijn zeven werkdagen vol op woensdag 7 oktober. DD bevestigde dit op 30-09 |
 
 **Mapping oude lettering → nieuwe nummering** (voor code-comments als
@@ -112,8 +113,8 @@ dragen een versienummer (v3: v2 plus DFEDTARU voor de FOMC-doelen), en de code v
 voorspellingscontract, de forecast-ronde, de resolver, de scores en de
 baselines staat (de ridge is nog niet bevroren, de FOMC-kalender is gevuld).
 **Open voor T₀ᵃ:** zeven schone werkdagen op rij (schoon = alle agents `ok` én geen
-volledigheidstrigger; zie Herzieningen 01-10), op zijn vroegst **maandag
-12 oktober** omdat de reeks na de niet-schone dag van 01-10 opnieuw begint op 02-10, en de heartbeat-test (alarmkanaal
+volledigheidstrigger; zie Herzieningen 01-10), op zijn vroegst **dinsdag
+13 oktober** omdat de reeks na de niet-schone dagen van 01-10 en 02-10 opnieuw begint op 05-10, en de heartbeat-test (alarmkanaal
 getest met een tijdelijke check; de strikte "machine een dag uit"-test na T₀ᵃ).
 Daarna, in volgorde: `--deep-dives` aanzetten met een dry-run-plan (checkpoint
 3), pseudo-OOS-run (4.4), synthesizer als gescoorde agent, en de freeze vóór
@@ -162,7 +163,7 @@ intraday (buiten scope, zie Scope-afbakening).
 ## Fase 0 — Deblokkeren + ingestieklok (29 sep – 12 okt)
 
 **Doel:** het systeem haalt elke dag zonder tussenkomst echte data op en
-legt triggers vast. **T₀ᵃ streefdatum 12 oktober** (op zijn vroegst; herzien op 01-10 van 7 oktober omdat de run van 01-10 niet schoon was, zie Herzieningen).
+legt triggers vast. **T₀ᵃ streefdatum 13 oktober** (op zijn vroegst; herzien op 01-10 van 7 naar 12 oktober omdat de run van 01-10 niet schoon was, en op 02-10 naar 13 oktober omdat die van 02-10 het ook niet was; zie Herzieningen).
 
 | Taak | Sectie | Definition of done | Wie |
 |---|---|---|---|
@@ -1499,8 +1500,8 @@ kalibratie-deel van 5.2.
 - [x] **Dry-run-plan voor `--deep-dives` goedgekeurd** (checkpoint 3), zie
       `docs/deployment.md`. Drie fasen: één begeleide testrun, cron aan de dag erna,
       drie weken begeleid, dan de dry-run-week (fase 3b). **[01-10] Datums schuiven mee
-      met T₀ᵃ (nu op zijn vroegst 12 oktober): testrun op zijn vroegst dinsdag 13 oktober,
-      cron met `--deep-dives` woensdag 14 oktober; drie weken begeleid loopt dan tot 4 november
+      met T₀ᵃ (nu op zijn vroegst 13 oktober, herzien op 02-10): testrun op zijn vroegst woensdag 14 oktober,
+      cron met `--deep-dives` donderdag 15 oktober; drie weken begeleid loopt dan tot 5 november
       en overlapt de dry-run-week (27 oktober), zie `docs/deployment.md`. Voorstel, nog door DD
       te bevestigen.** De testrun wacht bewust tot na T₀ᵃ:
       een handmatige run telt als handmatige actie. **Gebouwd:** time-out van 90
