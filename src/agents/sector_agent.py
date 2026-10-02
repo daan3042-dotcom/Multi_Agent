@@ -82,16 +82,21 @@ SECTOR_ETFS = {
     "spy_benchmark": BENCHMARK_SYMBOL,
 }
 
+# Trigger-versie v4 (02-10-2026): XLK, XLE, XLY, XLB en XLU hadden een drempel die op de ongecorrigeerde koersen van vóór de
+# splitsing van 2025-12-05 was gekalibreerd (toen was de koers dubbel zo hoog, dus een gewone beweging in dollars ook). Op de gecorrigeerde
+# reeks vuurden ze maar 0,3 tot 1,7 keer per jaar in plaats van ~5. Nu de 5-per-jaar-drempel op de gecorrigeerde laatste drie jaar,
+# afgerond op één decimaal (kalibratierapport `--vergelijk-splitsingen`: 1,17 / 1,59 / 5,40 / 1,01 / 3,24 -> 1,2 / 1,6 / 5,4 / 1,0 / 3,2).
+# De andere zes ETF's en SPY zijn ongewijzigd.
 METRIC_SPECS = {
-    "xlk_technology": MetricSpec(label="XLK (Technology)", tolerance=8.9, severity="medium"),
+    "xlk_technology": MetricSpec(label="XLK (Technology)", tolerance=5.4, severity="medium"),
     "xlf_financials": MetricSpec(label="XLF (Financials)", tolerance=1.2, severity="medium"),
-    "xle_energy": MetricSpec(label="XLE (Energy)", tolerance=2.6, severity="medium"),
+    "xle_energy": MetricSpec(label="XLE (Energy)", tolerance=1.6, severity="medium"),
     "xlv_health_care": MetricSpec(label="XLV (Health Care)", tolerance=3.5, severity="medium"),
-    "xly_consumer_discretionary": MetricSpec(label="XLY (Consumer Discretionary)", tolerance=6.2, severity="medium"),
+    "xly_consumer_discretionary": MetricSpec(label="XLY (Consumer Discretionary)", tolerance=3.2, severity="medium"),
     "xlp_consumer_staples": MetricSpec(label="XLP (Consumer Staples)", tolerance=1.6, severity="medium"),
     "xli_industrials": MetricSpec(label="XLI (Industrials)", tolerance=3.9, severity="medium"),
-    "xlb_materials": MetricSpec(label="XLB (Materials)", tolerance=2.0, severity="medium"),
-    "xlu_utilities": MetricSpec(label="XLU (Utilities)", tolerance=1.8, severity="medium"),
+    "xlb_materials": MetricSpec(label="XLB (Materials)", tolerance=1.2, severity="medium"),
+    "xlu_utilities": MetricSpec(label="XLU (Utilities)", tolerance=1.0, severity="medium"),
     "xlre_real_estate": MetricSpec(label="XLRE (Real Estate)", tolerance=1.0, severity="medium"),
     "xlc_communication_services": MetricSpec(label="XLC (Communication Services)", tolerance=2.9, severity="medium"),
     # Toegevoegd 28-09-2026. SPY werd tot dan alleen op deep-dive-tijd

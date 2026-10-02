@@ -540,8 +540,10 @@ een weekend + feestdag):
 **Wanneer het triggert:** op de RUWE PRIJS van elke ETF (zelfde
 delta-mechanisme als de andere agents), tolerances per ETF, sinds
 trigger-versie v1 (29-09-2026) gekozen op ~5 triggers per jaar over de
-laatste drie jaar (XLK 8,9 · XLF 1,2 · XLE 2,6 · XLV 3,5 · XLY 6,2 · XLP 1,6 ·
-XLI 3,9 · XLB 2,0 · XLU 1,8 · XLRE 1,0 · XLC 2,9 · SPY 13,4 dollar). ETF's
+laatste drie jaar. **Sinds trigger-versie v4 (02-10-2026)** zijn de drempels van vijf ETF's die op 5
+december 2025 splitsten opnieuw gekalibreerd op de gecorrigeerde reeks (XLK 8,9 → 5,4, XLE 2,6 → 1,6,
+XLY 6,2 → 3,2, XLB 2,0 → 1,2, XLU 1,8 → 1,0). Huidige drempels: XLK 5,4 · XLF 1,2 · XLE 1,6 · XLV 3,5 ·
+XLY 3,2 · XLP 1,6 · XLI 3,9 · XLB 1,2 · XLU 1,0 · XLRE 1,0 · XLC 2,9 · SPY 13,4 dollar. ETF's
 hebben sterk verschillende prijsniveaus — XLK rond de $200, XLRE rond de $40 —
 een uniforme dollartolerantie zou niet kloppen. De elf sectoren bewegen
 samen: één schokdag geeft snel meerdere triggers tegelijk, die de manager

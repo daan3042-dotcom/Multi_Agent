@@ -261,3 +261,14 @@ def test_elf_forecast_doelen_op_relatief_rendement():
     for t in sa.FORECAST_TARGETS:
         assert "RELATIEVE rendement" in t.resolution_rule
         assert "spy_benchmark" in t.resolution_rule
+
+
+def test_de_vijf_gesplitste_etfs_hebben_hun_gecorrigeerde_drempel_en_de_rest_is_ongewijzigd():
+    """Trigger-versie v4 (02-10-2026): de drempels van de vijf ETF's die op 2025-12-05 splitsten zijn opnieuw gekalibreerd op de gecorrigeerde
+    reeks. De andere zes ETF's en SPY mogen niet zijn meebewogen."""
+    tol = {k: v.tolerance for k, v in sa.METRIC_SPECS.items()}
+    assert tol["xlk_technology"] == 5.4 and tol["xle_energy"] == 1.6 and tol["xly_consumer_discretionary"] == 3.2
+    assert tol["xlb_materials"] == 1.2 and tol["xlu_utilities"] == 1.0
+    assert tol["xlf_financials"] == 1.2 and tol["xlv_health_care"] == 3.5 and tol["xlp_consumer_staples"] == 1.6
+    assert tol["xli_industrials"] == 3.9 and tol["xlre_real_estate"] == 1.0 and tol["xlc_communication_services"] == 2.9
+    assert tol["spy_benchmark"] == 13.4
