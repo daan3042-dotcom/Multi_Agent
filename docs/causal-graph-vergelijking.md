@@ -96,7 +96,7 @@ Volgens CLAUDE.md komen er geen nieuwe agents vóór T₀ (behalve de lean econo
 
 | Vraag | Besluit |
 |---|---|
-| 1. "Hoog" per knoop | **Goedgekeurd:** de tabel in §10, met mijn voorstel voor `policy_rate` (één knoop voor het niveau; de pijlen geven aan of ze via niveau of verandering werken) en `policy_room` (hoog = meer ruimte). **`sentiment_flows` is niet besloten**, zie hieronder. |
+| 1. "Hoog" per knoop | **Goedgekeurd:** de tabel in §10, met mijn voorstel voor `policy_rate` (één knoop voor het niveau; de pijlen geven aan of ze via niveau of verandering werken) en `policy_room` (hoog = meer ruimte). `sentiment_flows` wordt twee knopen, zie hieronder. |
 | 2. Bewust weggelaten of vergeten (`wage_growth`, `term_premium`, `liquidity`, `earnings_growth`) | **Onbekend** ("durf ik niet te zeggen": DD's graaf komt uit een interview met Claude Fable 5.1 en wordt later met de versie van de partner samengevoegd). Open voor de samenvoegsessie; er wordt niets aangenomen. |
 | 3. Voorwaarden | **Als tekst**, tot ze een meetbaar getal hebben; pas dan een veld. |
 | 4. `equities` als knoop met eigen uitgaande pijl | **Ja.** |
@@ -105,15 +105,22 @@ Volgens CLAUDE.md komen er geen nieuwe agents vóór T₀ (behalve de lean econo
 | 7. C8 en C9 (buitenland) | **Optie 1: buiten de graaf**, als tekst bij de agents (zie hieronder). |
 | 8. De tien knopen zonder reeks | **Optie A:** alle tien blijven in graaf v1, genoteerd als "uitgesteld in cohort 0". Welke ze later krijgen (en of er vóór T₀ een paar reeksen bijkomen) wordt apart beslist als onderdeel van "reeksenlijst definitief" (open punt van de T₀-checklist). |
 
-**Nog open:** (a) de pool van `sentiment_flows`: in D7 is hoog = positief sentiment, in C7 is het "stress" die de dollar laat stijgen en in D8 "gedwongen verkoop"; één van de drie tekens klopt dus niet. Mijn voorstel is twee knopen (sentiment, en stress/gedwongen verkoop); nog geen besluit. (b) Vraag 2. (c) De blinde versie van de partner (9 oktober).
+**`sentiment_flows` (besloten door DD, 02-10): twee knopen.** In DD's concept had `sentiment_flows` drie tegenstrijdige betekenissen (D7: hoog = positief sentiment; C7: stress die de dollar laat stijgen; D8: gedwongen verkoop), zodat één van de drie tekens niet kon kloppen. Het wordt:
+- **`sentiment`**: hoog = positiever marktsentiment en kapitaalinstroom. Pijl: D7 (`sentiment → equities`, +).
+- **`stress_gedwongen_verkoop`**: hoog = meer marktstress en gedwongen verkoop. Pijlen: C7 (`stress_gedwongen_verkoop → dollar`, +) en D8 (`household_balance → stress_gedwongen_verkoop`, −: een lagere huishoudbalans geeft meer gedwongen verkoop).
+Daarmee wordt het **24 knopen** (was 23); het aantal pijlen blijft ~42. **Elf** knopen hebben geen reeks bij ons (was tien: `sentiment_flows` wordt twee knopen zonder reeks), beide "uitgesteld in cohort 0". Geen pijl tussen de twee nieuwe knopen is door DD genoemd, en ik verzin er geen.
+Beide knopen hebben geen eigen reeks: DD zegt dat sentiment niet met één datapunt te meten is (kruisreactie van NQ, obligaties en DXY).
+
+**Nog open:** (a) Vraag 2. (b) De blinde versie van de partner (9 oktober).
 
 **Kandidaat-richtlijnen voor de agents** (komen bij de richtlijnen-stap, niet nu in een prompt): de drie regels uit DD's concept (winnaars via de waardeketen; reactie lezen over meerdere markten; eerst de aard van de schok vaststellen) en, volgens besluit 7: *een sterke dollar belast opkomende landen (schuldenlast en inflatie, 6–18 maanden; kijk naar BRL/USD, vooral bij dollarschuld)* [C8] en *Amerikaanse aandelen beïnvloeden buitenlandse markten direct, afhankelijk van hoeveel het buitenland erin belegd heeft* [C9].
 
-## 10. "Hoog" betekent (goedgekeurd door DD, 02-10-2026; `sentiment_flows` ontbreekt tot het besluit)
+## 10. "Hoog" betekent (goedgekeurd door DD, 02-10-2026; `sentiment_flows` is vervangen door de twee knopen `sentiment` en `stress_gedwongen_verkoop`)
 
 | Knoop | "Hoog" betekent | Knoop | "Hoog" betekent |
 |---|---|---|---|
 | `external_shock` | zwaardere schok | `credit_conditions` | krapper en duurder lenen |
+| `sentiment` | positiever marktsentiment en instroom | `stress_gedwongen_verkoop` | meer marktstress en gedwongen verkoop |
 | `growth` | harder groeiende activiteit | `corporate_strength` | sterkere bedrijfsbalansen |
 | `household_balance` | sterkere balans (koopkracht, buffer) | `long_rate` | hogere tienjaarsrente |
 | `labor_market` | krappere arbeidsmarkt | `dollar` | sterkere dollar |
