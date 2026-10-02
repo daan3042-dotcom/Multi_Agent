@@ -35,6 +35,7 @@ from agents import (
     sector_agent,
 )
 from agents.base import FORECAST_SYSTEM_RULES
+from synthesizer import forecast as synthesizer_forecast
 
 AGENTS = {
     "monetary_policy": monetary_policy_agent,
@@ -42,6 +43,9 @@ AGENTS = {
     "financial": financial_agent,
     "sector": sector_agent,
     "economic": economic_agent,
+    # 02-10-2026: de synthesizer (slanke v1) voorspelt ook en valt dus in dezelfde bewaking; zijn "vakparagraaf" is
+    # SYNTHESIZER_SYSTEM_PROMPT (via de alias DEEP_DIVE_SYSTEM_PROMPT in synthesizer/forecast.py).
+    "synthesizer": synthesizer_forecast,
 }
 
 # Vastgelegd op 28-09-2026 (v1) en bijgewerkt op 01-10-2026 (v2: vijf kwantielen in
@@ -55,6 +59,7 @@ VERWACHT = {
     "financial": ("v3", "35b9c3f6d622bf2d"),
     "sector": ("v3", "4c61a11a74a11437"),
     "economic": ("v3", "c73f8f5ac5651b61"),
+    "synthesizer": ("v1", "e83c059f1269d6d3"),
 }
 
 

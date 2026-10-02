@@ -741,6 +741,22 @@ kunnen er twee deep-dives volgen over dezelfde publicatie, elk met een
 andere invalshoek. Of dat wenselijk is, staat als open vraag in
 `docs/project-state.md`.
 
+## Synthesizer (`synthesizer/forecast.py`) — **slanke v1, gebouwd 02-10-2026, nog NIET gekoppeld aan de dagelijkse run**
+
+**Wat hij is.** Een achtste voorspeller naast de domain agents, de mensen en de baselines. Hij krijgt de cijfers van ALLE vakgebieden tegelijk en spreekt zelf kwantielen uit. Zo meten we of "alles tegelijk bekijken" iets toevoegt boven één vakgebied afzonderlijk (roadmap 4.5).
+
+**Wat hij ziet.** Precies wat de domain agents ook zien, maar dan van alle domeinen samen: de laatste cijfers per reeks (`load_monitoring_claims`) en de evidence-sheet (ouderdom, veranderingen, 52-wekenbereik, spreiding per horizon). Commodity telt mee als context; die agent voorspelt zelf niets.
+
+**Wat hij NIET ziet (besluit DD, 02-10-2026).** De voorspellingen van de domain agents, van mensen of van baselines: geen kwantielen, geen kansen. Anders is hij een verkapte aggregator, wordt gedeelde informatie dubbel geteld (te stellig, juist waar iedereen het eens is) en meet de scoring in mei iets anders dan we denken. Een test bewaakt dit: zelfs met voorspellingen in de database komt er niets van in de prompt.
+
+**Wat hij voorspelt.** Dezelfde 24 doelen als de domain agents (57 voorspellingen per ronde: DGS10, DGS2, de FOMC-doelen, de drie FX-paren, HY-spread, VIX, 10Y-2Y, NFCI, de elf sector-ETF's, ICSA, werkloosheid, banen), met dezelfde resolutieregels. De score is daardoor rechtstreeks vergelijkbaar met de agent en met de baselines van dat doel. In de database staat `agent = synthesizer` en als `domain` het vakgebied van het doel.
+
+**Hoe vaak, en wat het kost.** Eén LLM-call per week (maandag, zelfde weekid als de agents), alle doelen in één JSON. Het voorblik `synthesizer_preview.py` toont de promptgrootte en een ruwe kostenschatting zonder iets aan te roepen; de echte cijfers komen uit de begeleide testrun.
+
+**Wat hij niet doet in deze versie.** Geen vier instrumentdoelen (NQ, ZN, CL, 6E): die vragen een log-rendement als resolutiemethode en een prijsbron per instrument (een eigen beslissing). Geen richtlijnen van DD en geen causale graaf in de prompt: die komen als een nieuwe promptversie (een covariaat, geen nieuw cohort). Geen eigen baselines: die van de domeinen gelden ook voor hem. Geen aggregatie over agents: dat is de gewogen pool in 3.4 (mei 2027).
+
+**Waar hij nog niet staat.** `run_daily.py` roept hem niet aan. Dat is een eigen stap die DD moet goedkeuren (CLAUDE.md, checkpoint 1 en 3). Ook de pseudo-OOS-run draait hem nog niet mee.
+
 ## Belangrijk voorbehoud, voor alle zes agents
 
 De tolerances in de tabellen hierboven zijn sinds **29-09-2026

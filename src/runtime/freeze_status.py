@@ -171,6 +171,11 @@ def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt
     ):
         voeg(G, f"Prompt {naam}", f"{mod.FORECAST_PROMPT_VERSION}, afdruk {fg.forecast_prompt_hash(mod, ev_fp)}",
              f"src/agents/{naam}_agent.py", TE_BEVESTIGEN, "afdruk = regels + vakparagraaf + evidence-sheet")
+    from synthesizer import forecast as synthesizer_forecast
+    voeg(G, "Prompt synthesizer (slanke v1, nog niet gekoppeld aan run_daily)",
+         f"{synthesizer_forecast.FORECAST_PROMPT_VERSION}, afdruk {fg.forecast_prompt_hash(synthesizer_forecast, ev_fp)}",
+         "src/synthesizer/forecast.py", TE_BEVESTIGEN,
+         "blind voor de voorspellingen van agents (besluit DD 02-10); draait pas mee na DD's akkoord op de koppeling")
     voeg(G, "Evidence-sheet", f"{fv.EVIDENCE_SHEET_VERSION}, afdruk {ev_fp}", "src/scoring/evidence_sheet.py",
          _versie_status(fv.EVIDENCE_SHEET_VERSION, fv.EVIDENCE_SHEET_FINGERPRINTS, ev_fp),
          "de context bij de forecast-ronde; een wijziging verandert ook de prompt-afdrukken hierboven")

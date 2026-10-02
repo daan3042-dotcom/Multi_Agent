@@ -833,6 +833,15 @@ cd /opt/multi_agent && .venv/bin/python dagcontrole.py --dag 2026-10-05         
 
 **Wat het niet kan:** beoordelen of een analyse goed is, of er handmatig ingegrepen is (een run buiten 07-09 UTC wordt wel gemeld), of de back-up herstelbaar is (daarvoor is de hersteltest). De logregels van de dag worden gevonden op de datum aan het begin van de regel, dus de logklok moet op UTC staan (zoals de cron). Controleer na de eerste echte run of de bestandsnamen (`/var/log/mi/daily.log`, `/var/log/mi/backup.log`) kloppen; met `--log` en `--backup-log` kun je andere paden meegeven.
 
+## Synthesizer, slanke v1: voorblik (roadmap 4.5) — gebouwd op 02-10-2026, **nog niet gekoppeld aan `run_daily`**
+
+```bash
+cd /opt/multi_agent && git pull && .venv/bin/python synthesizer_preview.py            # groottes, kostenschatting, begin van de prompt
+cd /opt/multi_agent && .venv/bin/python synthesizer_preview.py --volledig | less     # de hele prompt
+```
+
+Alleen lezen (`mode=ro`), geen LLM-aanroep, niets opgeslagen. Controleer: (1) staan alle 24 doelen/57 voorspellingen erin, (2) is de promptgrootte aanvaardbaar, (3) staat er nergens een kwantiel of kans van een agent in (de synthesizer is blind), (4) de kostenschatting past naast de domain agents bij de maandrem. De schatting is ruw (3 tekens per token); de begeleide testrun geeft de echte cijfers. Pas na jouw akkoord koppel ik de synthesizer aan de wekelijkse ronde (checkpoint 1 en 3).
+
 ## ATR-proefrapport (roadmap 4.2, idee van DD) — gebouwd op 02-10-2026, alleen lezen
 
 Beantwoordt: hoeveel triggers per jaar zou "beweging groter dan N keer de gemiddelde absolute beweging van de afgelopen 30 dagen" geven, per reeks, voor N van 2 tot 6, naast de huidige vaste drempel? Het rapport leest alleen de database (op de gesplitsingsgecorrigeerde reeksen) en wijzigt niets.

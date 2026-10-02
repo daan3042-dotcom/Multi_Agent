@@ -84,6 +84,7 @@ en `docs/project-state.md`.
 | **De context die een agent bij zijn forecast-ronde krijgt (evidence-sheet, point-in-time)** | `src/scoring/evidence_sheet.py` |
 | **Aandelensplitsingen in ETF-reeksen: de lijst, de correctie bij het lezen en de waakhond** | `src/contract/corporate_actions.py`, `src/runtime/split_waakhond.py` |
 | **De pseudo-OOS-run (4.4): de agents over juli–september 2026, op een kopie van de database** | `pseudo_oos.py`, `src/scoring/pseudo_oos.py` |
+| **De synthesizer als gescoorde voorspeller (4.5, slanke v1, blind, nog niet gekoppeld) + voorblik** | `src/synthesizer/forecast.py`, `synthesizer_preview.py` |
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
