@@ -1059,6 +1059,9 @@ delen.
    sqlite3 market_intelligence.db ".backup /tmp/mi-backup-$DATE.db"
    rclone copy "/tmp/mi-backup-$DATE.db" "do-spaces:<jouw-space-naam>/backups/"
    rm "/tmp/mi-backup-$DATE.db"
+   # [02-10-2026, akkoord DD] Bewijs voor de dagcontrole: rclone en sqlite melden niets bij succes. Dankzij `set -e` komt deze
+   # regel alleen na een geslaagde back-up; de cron-regel hieronder leidt de uitvoer naar het back-uplog.
+   echo "$(date -u +%FT%TZ) back-up ok"
    ```
    ```bash
    chmod +x /opt/multi_agent/backup.sh
