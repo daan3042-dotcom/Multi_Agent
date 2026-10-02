@@ -299,7 +299,7 @@ Secties 4.5, 4.6.
 - [~] Forecast-ronde draait wekelijks voor vijf agents **[28-09: gebouwd, maandagochtend, 57 voorspellingen per ronde]**; synthesizer nog niet; menselijke invoer bewust op pauze (2.0/4.8, DD 30-09)
 - [~] Resolver heeft minstens één cohort correct afgewikkeld, inclusief een release-gebaseerde horizon (4.5) **[28-09: gebouwd en getest; nog niet tegen echte afgelopen voorspellingen gedraaid — dat kan pas als de eerste horizon verstrijkt]**
 - [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
-- [ ] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4)
+- [~] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4) **[02-10: harness gebouwd en getest (`pseudo_oos.py`, draait op een kopie); de echte run wacht op de FOMC-besluitdagen van juli/september 2026 (DD verifieert), graaf v1 en de testrun van 14-10; plan in `docs/deployment.md`]**
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
 - [x] **[02-10] `freeze_status.py` toont ook de voorwaarden vóór de klok** (T₀ᵃ, 14 werkdagen, testrun, forecast-rondes, resolver, pseudo-OOS, dry-run-week, reeksenlijst, back-up, heartbeat, quota) met AF / NOG NIET AF / ZELF CONTROLEREN: één plek voor "wat staat er nog tussen nu en de klok". Alleen wat uit de data volgt kan AF zijn; kwaliteitsoordelen blijven van DD (`runtime/freeze_voorwaarden.py`). **Interpretatie gevlagd (checkpoint 4):** "14 dagen op rij" telt als 14 werkdagen.
 - [x] **[01-10] Freeze-overzicht (`freeze_status.py`, alleen lezen) en waakhond voor de doelenlijst en de evidence-sheet.** Het overzicht toont elk freeze-punt met zijn huidige waarde en status (BEVROREN / TE BEVESTIGEN / OPEN BESLISSING / WIJZIGING ZONDER VERSIE / LET OP); het voert de freeze NIET uit. De waakhond (`contract/freeze_versions.py`, `runtime/freeze_guard.py`, `tests/test_freeze_guard.py`) geeft de doelenlijst en de evidence-sheet een versienummer + vingerafdruk, naar het patroon van de trigger-versie; de prompt-afdruk bevat nu ook de evidence-sheet, want die verandert wat het model ziet.
@@ -1230,7 +1230,7 @@ en dat window is nu al beschikbaar.
 - [ ] Systeem laten draaien alsof het een historische datum is
 - [ ] Look-ahead/hindsight bias structureel voorkomen (voor de
       deterministische lagen)
-- [ ] **[27-09] Pseudo-out-of-sample-run vóór T₀ᵇ (fase 3b).** Agents
+- [~] **[27-09; 02-10 harness gebouwd] Pseudo-out-of-sample-run vóór T₀ᵇ (fase 3b).** Agents
       draaien de forecast-ronde over juli–september 2026 (cutoff Fable
       5.1: juni 2026) op point-in-time-data, web search uit, geen data
       van na de voorspeldatum in de prompt; daarna over 2025 met een

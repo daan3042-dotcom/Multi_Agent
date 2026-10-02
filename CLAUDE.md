@@ -81,6 +81,7 @@ en `docs/project-state.md`.
 | **De T₀ᵃ-teller (schone dagen, alleen lezen)** | `t0a_status.py`, `src/runtime/t0a_status.py` |
 | **Kalibratie, AUC, effectieve n per agent (4.5), alleen lezen** | `evaluate_scores.py`, `src/scoring/diagnostics.py`, `src/scoring/evaluation_report.py` |
 | **De context die een agent bij zijn forecast-ronde krijgt (evidence-sheet, point-in-time)** | `src/scoring/evidence_sheet.py` |
+| **De pseudo-OOS-run (4.4): de agents over juli–september 2026, op een kopie van de database** | `pseudo_oos.py`, `src/scoring/pseudo_oos.py` |
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
 | **Trigger-kalibratierapport (1.5), alleen lezen** | `calibrate_triggers.py`, `src/calibration/` |
