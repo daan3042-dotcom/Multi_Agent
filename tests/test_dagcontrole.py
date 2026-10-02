@@ -181,20 +181,72 @@ def test_schoon_log_is_ok_en_een_log_zonder_regels_van_vandaag_is_let_op(tmp_pat
     assert dc.controleer_log(log, date(2026, 10, 7))[0].status == dc.LET_OP
 
 
-def test_backup_ok_fout_oud_en_nog_niet(tmp_path):
+def test_backup_ok_regel_fout_en_nog_niet(tmp_path):
+    dag = date(2026, 10, 6)
     pad = tmp_path / "backup.log"
-    pad.write_text("2026-10-06 08:00:03 Transferred: 1 / 1, 100%\n", encoding="utf-8")
-    nu_na = datetime.now(timezone.utc)
-    dag = nu_na.date()
-    assert dc.controleer_backup(pad, dag, nu_na)[0].status == dc.OK                 # bijgewerkt vandaag, geen fout
+    pad.write_text("2026-10-06T08:00:12Z back-up ok\n", encoding="utf-8")
+    assert dc.controleer_backup(pad, dag, _t(dag, 12))[0].status == dc.OK
     pad.write_text("rclone: Failed to copy: AccessDenied\n", encoding="utf-8")
-    assert dc.controleer_backup(pad, dag, nu_na)[0].status == dc.LET_OP
-    pad.write_text("alles goed\n", encoding="utf-8")
-    oud = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc).timestamp()
+    assert dc.controleer_backup(pad, dag, _t(dag, 12))[0].status == dc.LET_OP
+    pad.write_text("2026-10-05T08:00:12Z back-up ok\n", encoding="utf-8")            # alleen gisteren
+    assert dc.controleer_backup(pad, dag, _t(dag, 6))[0].status == dc.NOG_NIET
+
+
+def test_een_stil_backuplog_is_geen_bewijs_en_geen_alarm(tmp_path):
+    """Regressie 02-10-2026: rclone en sqlite melden niets bij succes, dus de wijzigingstijd van het log zegt niets. De eerste versie gaf
+    daar een LET OP op terwijl de back-up gewoon in de Space stond. Zonder bewijs: ONBEKEND; met de Space als bewijs: ok."""
+    dag = date(2026, 10, 6)
+    pad = tmp_path / "backup.log"
+    pad.write_text("", encoding="utf-8")
+    oud = datetime(2026, 9, 28, 8, 0, tzinfo=timezone.utc).timestamp()
     os.utime(pad, (oud, oud))
-    assert dc.controleer_backup(pad, dag, datetime.combine(dag, datetime.min.time(), tzinfo=timezone.utc).replace(hour=6))[0].status == dc.NOG_NIET
-    assert dc.controleer_backup(pad, dag, datetime.combine(dag, datetime.min.time(), tzinfo=timezone.utc).replace(hour=12))[0].status == dc.LET_OP
-    assert dc.controleer_backup(tmp_path / "weg.log", dag, nu_na)[0].status == dc.ONBEKEND
+    assert dc.controleer_backup(pad, dag, _t(dag, 12))[0].status == dc.ONBEKEND
+    assert dc.controleer_backup(None, dag, _t(dag, 12))[0].status == dc.ONBEKEND                    # geen log, geen Space: onbekend
+    assert dc.controleer_backup(pad, dag, _t(dag, 12), space_datum=dag)[0].status == dc.OK
+    assert dc.controleer_backup(pad, dag, _t(dag, 12), space_datum=dag - timedelta(days=1))[0].status == dc.LET_OP
+    assert dc.controleer_backup(pad, dag, _t(dag, 6), space_datum=dag - timedelta(days=1))[0].status == dc.NOG_NIET
+    assert dc.controleer_backup(pad, dag, _t(dag, 12), space_gevraagd=True)[0].status == dc.ONBEKEND
+    assert "rclone" in dc.controleer_backup(pad, dag, _t(dag, 12), space_gevraagd=True)[0].tekst
+
+
+def test_nieuwste_backup_in_de_space_leest_de_lijst_en_faalt_zichtbaar():
+    lijst = "mi-backup-2026-10-01.db\nmi-backup-2026-10-02.db\nmi-backup-2026-09-30.db\nanders.txt\n"
+    assert dc.nieuwste_backup_in_space("x:y", lambda: lijst) == date(2026, 10, 2)
+    assert dc.nieuwste_backup_in_space("x:y", lambda: "") is None
+
+    def kapot():
+        raise RuntimeError("rclone niet gevonden")
+
+    assert dc.nieuwste_backup_in_space("x:y", kapot) is None
+
+
+def test_controleer_alles_gebruikt_de_space_als_bewijs(conn, tmp_path):
+    runner = lambda: f"mi-backup-{DAG.isoformat()}.db\n"  # noqa: E731
+    regels = dc.controleer_alles(conn, DAG, _t(DAG, 12), log=tmp_path / "x.log", backup_log=tmp_path / "y.log",
+                                 archief=tmp_path / "z", domeinen=DOMEINEN, space="x:y", space_runner=runner)
+    assert [r.status for r in regels if r.onderwerp == "back-up"] == [dc.OK]
+    kapot = dc.controleer_alles(conn, DAG, _t(DAG, 12), log=tmp_path / "x.log", backup_log=tmp_path / "y.log",
+                                archief=tmp_path / "z", domeinen=DOMEINEN, space="x:y", space_runner=lambda: 1 / 0)
+    assert [r.status for r in kapot if r.onderwerp == "back-up"] == [dc.ONBEKEND]
+
+
+def test_triggerversie_wordt_met_het_log_van_die_dag_vergeleken_niet_met_de_code_van_nu(conn, tmp_path):
+    """Regressie 02-10-2026: de run van 07:15 draaide met v3, daarna ging de code naar v4. Dat is een update, geen afwijking."""
+    conn.execute("INSERT INTO trigger_events (domain, triggered_at, reason, severity, trigger_version) VALUES ('a', ?, 'r', 'low', 'v3')",
+                 (_t(DAG).isoformat(),))
+    conn.commit()
+    log = tmp_path / "daily.log"
+    log.write_text(f"{DAG} 07:15:02,200 INFO run_daily: Trigger-versie: v3\n", encoding="utf-8")
+    assert dc._log_versies(log, DAG) == {"v3"}
+    regels = dc.controleer_triggers(conn, DAG, {"v3"})
+    assert dc.LET_OP not in [r.status for r in regels] and any("de code is nu" in r.tekst for r in regels)
+    # Een echte afwijking: de trigger draagt een andere versie dan de run zelf zei
+    regels = dc.controleer_triggers(conn, DAG, {"v4"})
+    assert dc.LET_OP in [r.status for r in regels]
+    # Zonder log blijft de voorzichtige vergelijking met de code staan
+    assert dc.LET_OP in [r.status for r in dc.controleer_triggers(conn, DAG, None)]
+    assert dc._log_versies(tmp_path / "bestaat_niet.log", DAG) is None
+    assert dc._log_versies(log, DAG - timedelta(days=1)) is None
 
 
 def _manifest(basis: Path, dag: date):
@@ -244,12 +296,9 @@ def test_alles_goed_geeft_geen_aandacht(conn, tmp_path):
     log = tmp_path / "daily.log"
     log.write_text(f"{dag} 07:15:02,200 INFO run_daily: Trigger-versie: {TRIGGER_VERSION}\n", encoding="utf-8")
     backup = tmp_path / "backup.log"
-    backup.write_text("ok\n", encoding="utf-8")
+    backup.write_text(f"{dag}T08:00:12Z back-up ok\n", encoding="utf-8")
     basis = tmp_path / "archive"
     _manifest(basis, dag)
-    # Het back-upbestand is "vandaag" gewijzigd alleen als de testdag vandaag is; dwing de wijzigingstijd af.
-    ts = datetime.combine(dag, datetime.min.time(), tzinfo=timezone.utc).replace(hour=8).timestamp()
-    os.utime(backup, (ts, ts))
     regels = dc.controleer_alles(conn, dag, nu, log=log, backup_log=backup, archief=basis, domeinen=DOMEINEN)
     if dag.weekday() == 0:
         _prediction(conn, dag)

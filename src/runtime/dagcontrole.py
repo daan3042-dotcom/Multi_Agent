@@ -98,7 +98,25 @@ def controleer_run(conn: sqlite3.Connection, dag: date, nu: datetime, domeinen: 
     return uit
 
 
-def controleer_triggers(conn: sqlite3.Connection, dag: date) -> list[Regel]:
+def _log_versies(pad: Path | None, dag: date) -> set[str] | None:
+    """De trigger-versie(s) die de run van die dag ZELF in het log meldde ("Trigger-versie: v3"). None als het log er niet is of voor die
+    dag niets zegt: dan valt er niets mee te vergelijken."""
+    if pad is None or not pad.exists():
+        return None
+    gevonden = set()
+    for r in pad.read_text(encoding="utf-8", errors="replace").splitlines():
+        if r.startswith(dag.isoformat()) and "Trigger-versie:" in r:
+            gevonden.add(r.split("Trigger-versie:", 1)[1].strip())
+    return gevonden or None
+
+
+def controleer_triggers(conn: sqlite3.Connection, dag: date, log_versies: set[str] | None = None) -> list[Regel]:
+    """De triggers van de dag en hun versie.
+
+    VERGELIJKT MET WAT DE RUN ZELF MELDDE, NIET MET DE CODE VAN NU. Een eerste versie vergeleek de opgeslagen versie met de huidige code,
+    en gaf op 02-10 een LET OP omdat de run van 07:15 met v3 draaide en de code daarna naar v4 ging. Dat is geen afwijking maar een
+    update: de volgende run gebruikt v4. Een echte afwijking is een trigger die een andere versie draagt dan de run in zijn eigen log
+    zegt. Is er geen log om mee te vergelijken, dan blijft de vergelijking met de code staan (voorzichtig)."""
     rijen = [r for r in conn.execute("SELECT domain, triggered_at, trigger_version FROM trigger_events").fetchall()
              if _dag_van(r[1]) == dag]
     if not rijen:
@@ -109,9 +127,19 @@ def controleer_triggers(conn: sqlite3.Connection, dag: date) -> list[Regel]:
     tekst = f"{len(rijen)} trigger(s): " + ", ".join(f"{d} {n}" for d, n in sorted(per_domein.items()))
     versies = {r[2] for r in rijen}
     uit = [Regel("triggers", INFO, tekst)]
-    if versies != {TRIGGER_VERSION}:
+    weergave = sorted(v or "(leeg)" for v in versies)
+    if log_versies is None:
+        if versies != {TRIGGER_VERSION}:
+            uit.append(Regel("triggers", LET_OP,
+                             f"trigger-versie in de database {weergave} wijkt af van de code ({TRIGGER_VERSION}); "
+                             f"geen log om te zien met welke versie de run draaide"))
+        return uit
+    if not versies <= log_versies:
         uit.append(Regel("triggers", LET_OP,
-                         f"trigger-versie in de database {sorted(v or '(leeg)' for v in versies)} wijkt af van de code ({TRIGGER_VERSION})"))
+                         f"trigger-versie in de database {weergave} wijkt af van wat de run zelf meldde in het log {sorted(log_versies)}"))
+    elif log_versies != {TRIGGER_VERSION}:
+        uit.append(Regel("triggers", INFO,
+                         f"de run van {dag} draaide met {sorted(log_versies)}; de code is nu {TRIGGER_VERSION} (de volgende run gebruikt die)"))
     return uit
 
 
@@ -184,20 +212,53 @@ def controleer_log(pad: Path | None, dag: date) -> list[Regel]:
     return uit
 
 
-def controleer_backup(pad: Path | None, dag: date, nu: datetime) -> list[Regel]:
+BACKUP_OK_MARKER = "back-up ok"
+"""De regel die `backup.sh` na een geslaagde back-up in het back-uplog hoort te schrijven (`echo "$(date -u +%FT%TZ) back-up ok"`)."""
+
+
+def nieuwste_backup_in_space(ruimte: str, runner=None) -> date | None:
+    """De datum van het nieuwste bestand `mi-backup-YYYY-MM-DD.db` in de Space, via `rclone lsf` (alleen een lijst, geen download, geen
+    wijziging). None als rclone niet draait of niets teruggeeft."""
+    import subprocess
+
+    runner = runner or (lambda: subprocess.run(["rclone", "lsf", ruimte], capture_output=True, text=True, timeout=60, check=True).stdout)
+    try:
+        uitvoer = runner()
+    except Exception:  # noqa: BLE001 -- zichtbaar als ONBEKEND, nooit als crash
+        return None
+    datums = []
+    for naam in uitvoer.splitlines():
+        m = re.fullmatch(r"mi-backup-(\d{4}-\d{2}-\d{2})\.db", naam.strip())
+        if m:
+            datums.append(date.fromisoformat(m.group(1)))
+    return max(datums) if datums else None
+
+
+def controleer_backup(pad: Path | None, dag: date, nu: datetime, space_datum: date | None = None, space_gevraagd: bool = False) -> list[Regel]:
+    """Is er van vandaag een back-up, en staat er geen fout in het log?
+
+    HET LOG ALLEEN IS GEEN BEWIJS. `sqlite3 .backup` en `rclone copy` melden niets als het goed gaat, dus het back-uplog wordt bij een
+    geslaagde back-up niet bijgewerkt. Een eerste versie keek naar de wijzigingstijd van het log en gaf op 02-10 een LET OP terwijl de
+    back-up van die ochtend gewoon in de Space stond. Bewijs van een geslaagde back-up is nu: (1) een regel `back-up ok` van die dag in het
+    log (als `backup.sh` die schrijft), of (2) het nieuwste bestand in de Space (optie `--space`, alleen een lijst). Is geen van beide
+    beschikbaar, dan staat er ONBEKEND, niet ok. Een foutregel in het log is altijd LET OP."""
     # De back-up draait elke dag (cron 0 8 * * *), ook in het weekend: geen weekendregel hier.
-    if pad is None or not pad.exists():
-        return [Regel("back-up", ONBEKEND, f"back-uplog niet gevonden ({pad}): niet gecontroleerd")]
-    gewijzigd = datetime.fromtimestamp(pad.stat().st_mtime, tz=timezone.utc)
-    laatste = [r for r in pad.read_text(encoding="utf-8", errors="replace").splitlines() if r.strip()][-5:]
-    fouten = [r for r in laatste if any(f in r.lower() for f in BACKUP_FOUTEN)]
+    regels = [r for r in pad.read_text(encoding="utf-8", errors="replace").splitlines() if r.strip()] if pad is not None and pad.exists() else []
+    fouten = [r for r in regels[-5:] if any(f in r.lower() for f in BACKUP_FOUTEN)]
     if fouten:
         return [Regel("back-up", LET_OP, "fout in de laatste regels van het back-uplog: " + fouten[-1][:160])]
-    if gewijzigd.date() == dag:
-        return [Regel("back-up", OK, f"back-uplog bijgewerkt om {gewijzigd:%H:%M} UTC, geen foutregels")]
+    if any(r.startswith(dag.isoformat()) and BACKUP_OK_MARKER in r for r in regels):
+        return [Regel("back-up", OK, f"'{BACKUP_OK_MARKER}'-regel van {dag} in het back-uplog")]
+    if space_datum is not None:
+        if space_datum == dag:
+            return [Regel("back-up", OK, f"nieuwste bestand in de Space is van {dag}")]
+        if not _verstreken(dag, BACKUP_KLAAR, nu):
+            return [_nog_niet("back-up", f"de back-up van 08:00 UTC is er nog niet (nieuwste in de Space: {space_datum})")]
+        return [Regel("back-up", LET_OP, f"nieuwste bestand in de Space is van {space_datum}, niet van {dag}")]
     if not _verstreken(dag, BACKUP_KLAAR, nu):
         return [_nog_niet("back-up", "de back-up van 08:00 UTC is er nog niet")]
-    return [Regel("back-up", LET_OP, f"back-uplog voor het laatst bijgewerkt op {gewijzigd:%Y-%m-%d %H:%M} UTC, niet op {dag}")]
+    reden = "de Space was niet te lezen (rclone)" if space_gevraagd else "het log meldt een geslaagde back-up niet en --space is niet gebruikt"
+    return [Regel("back-up", ONBEKEND, f"niet te beoordelen: {reden}. Het back-uplog blijft stil bij succes; zie docs/deployment.md")]
 
 
 def controleer_archief(basis: Path | None, dag: date, nu: datetime) -> list[Regel]:
@@ -233,20 +294,21 @@ def controleer_schijf(pad: str = "/", gebruikt: float | None = None) -> list[Reg
 def controleer_alles(
     conn: sqlite3.Connection, dag: date, nu: datetime | None = None, *, log: Path | None = None,
     backup_log: Path | None = None, archief: Path | None = None, domeinen: list[str] | None = None,
-    schijf_pad: str = "/",
+    schijf_pad: str = "/", space: str | None = None, space_runner=None,
 ) -> list[Regel]:
     nu = nu or datetime.now(timezone.utc)
     domeinen = domeinen if domeinen is not None else verwachte_domeinen()
     regels: list[Regel] = []
     regels += controleer_run(conn, dag, nu, domeinen)
-    regels += controleer_triggers(conn, dag)
+    regels += controleer_triggers(conn, dag, _log_versies(log, dag))
     regels += controleer_claims(conn, dag, domeinen) if _verstreken(dag, RUN_KLAAR, nu) and dag.weekday() < 5 else [
         Regel("claims", INFO, "niet beoordeeld: weekend of de run is er nog niet")]
     regels += controleer_bronnen(conn, dag)
     regels += controleer_voorspellingen(conn, dag, nu)
     regels += controleer_llm(conn, nu)
     regels += controleer_log(log, dag)
-    regels += controleer_backup(backup_log, dag, nu)
+    space_datum = nieuwste_backup_in_space(space, space_runner) if space else None
+    regels += controleer_backup(backup_log, dag, nu, space_datum, space_gevraagd=bool(space))
     regels += controleer_archief(archief, dag, nu)
     regels += controleer_schijf(schijf_pad)
     return regels

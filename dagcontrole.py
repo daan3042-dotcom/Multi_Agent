@@ -7,8 +7,8 @@ De dagelijkse controle voor de begeleide weken en de dry-run-week (roadmap fase 
     python dagcontrole.py --dag 2026-10-05   # een eerdere dag
 
 Eén scherm: run per agent, triggers, claims, bronnen, voorspellingen, LLM-verbruik, WARNING/ERROR-regels uit het log,
-back-up, SPY-archief en schijf. De database gaat open met `mode=ro`; er wordt niets op het netwerk aangeroepen en niets
-gewijzigd. Wat niet te controleren is (bijvoorbeeld een ontbrekend logbestand) staat als ONBEKEND, niet als ok.
+back-up, SPY-archief en schijf. De database gaat open met `mode=ro`; niets wordt gewijzigd. Netwerk alleen als je `--space` geeft
+(een `rclone lsf` van de back-upmap, alleen een lijst). Wat niet te controleren is (bijvoorbeeld een ontbrekend logbestand) staat als ONBEKEND, niet als ok.
 Uitleg en beperkingen: `src/runtime/dagcontrole.py`.
 
 EXIT CODES: 0 = niets dat aandacht vraagt, 1 = minstens één LET OP of ONBEKEND, 2 = database niet gevonden.
@@ -39,6 +39,9 @@ def main(argv=None) -> int:
     ouder.add_argument("--log", type=Path, default=LOG_DIR / "daily.log")
     ouder.add_argument("--backup-log", type=Path, default=LOG_DIR / "backup.log")
     ouder.add_argument("--archief", type=Path, default=None, help="default: de archiefmap van archive_daily.py")
+    ouder.add_argument("--space", default=None, metavar="REMOTE:PAD",
+                       help="controleer ook het nieuwste back-upbestand in de Space met `rclone lsf` (alleen een lijst), bijv. "
+                            "do-spaces:mi-backups-multi-agent/backups/")
     args = ouder.parse_args(argv)
 
     if not Path(args.db).exists():
@@ -50,7 +53,7 @@ def main(argv=None) -> int:
     try:
         regels = controleer_alles(
             conn, dag, nu, log=args.log, backup_log=args.backup_log,
-            archief=args.archief or spy_holdings.archive_dir(),
+            archief=args.archief or spy_holdings.archive_dir(), space=args.space,
         )
     finally:
         conn.close()
