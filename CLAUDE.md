@@ -79,6 +79,7 @@ en `docs/project-state.md`.
 | Hoe een voorspelling wordt afgewikkeld | `src/contract/resolution.py` |
 | **De kwantielniveaus (vijf, één plek) en het predictiecontract** | `src/contract/prediction.py` (`QUANTILE_LEVELS`) |
 | **De T₀ᵃ-teller (schone dagen, alleen lezen)** | `t0a_status.py`, `src/runtime/t0a_status.py` |
+| **De dagelijkse controle (begeleide weken en dry-run-week, alleen lezen)** | `dagcontrole.py`, `src/runtime/dagcontrole.py` |
 | **Kalibratie, AUC, effectieve n per agent (4.5), alleen lezen** | `evaluate_scores.py`, `src/scoring/diagnostics.py`, `src/scoring/evaluation_report.py` |
 | **De context die een agent bij zijn forecast-ronde krijgt (evidence-sheet, point-in-time)** | `src/scoring/evidence_sheet.py` |
 | **Aandelensplitsingen in ETF-reeksen: de lijst, de correctie bij het lezen en de waakhond** | `src/contract/corporate_actions.py`, `src/runtime/split_waakhond.py` |
