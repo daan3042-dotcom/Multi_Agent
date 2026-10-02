@@ -497,7 +497,15 @@ cd /opt/multi_agent && .venv/bin/python freeze_status.py
 Toont elk freeze-punt (contract, kwantielen, graaf, doelenlijst, resolver, scorer, trigger-regels en pin, model, prompts, evidence-sheet,
 baselines, ridge, cohort, prior, voorspellingen per cohort) met de huidige waarde uit code en database en een status: `BEVROREN`, `TE BEVESTIGEN`,
 `OPEN BESLISSING`, `WIJZIGING ZONDER VERSIE` of `LET OP`. Het script schrijft niets, zet geen pin, fit geen ridge en raakt `MI_COHORT` niet aan:
-**het is een overzicht, geen freeze.** Wijzigt iemand de doelenlijst of de evidence-sheet zonder het versienummer in
+**het is een overzicht, geen freeze.**
+
+Onderaan staat een tweede blok, **"Voorwaarden vóór de klok"**: wat er vóór de freeze gedaan moet zijn (T₀ᵃ, 14 werkdagen op rij zonder
+handmatige actie, begeleide deep-dive-testrun, forecast-rondes, resolver, pseudo-OOS-run, dry-run-week, reeksenlijst, back-up-herstel,
+heartbeat-test, API-quota). Drie statussen, en het verschil telt: **AF** (uit de data af te leiden en voldaan; alleen T₀ᵃ en de 14 werkdagen kunnen dit
+worden), **NOG NIET AF** (uit de data af te leiden en niet voldaan) en **ZELF CONTROLEREN** (de data toont dat iets gedaan is, niet of het
+*goed* is, of het is niet uit de data af te leiden: een testrun, een herstelde back-up, een doorlopen dry-run-week). Zonder database (bijvoorbeeld
+buiten de VPS) staat elke datagedreven regel op ZELF CONTROLEREN met "onbekend", nooit op NOG NIET AF. Forecast-rondes met meer dan 5% gemiste
+voorspellingen krijgen LET OP (contract heroverwegen). De dry-run-week-data (27-10 t/m 09-11) staan als constante in `src/runtime/freeze_voorwaarden.py`. Wijzigt iemand de doelenlijst of de evidence-sheet zonder het versienummer in
 `src/contract/freeze_versions.py` op te hogen, dan faalt `tests/test_freeze_guard.py` (en voor de evidence-sheet ook de prompt-test).
 
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
