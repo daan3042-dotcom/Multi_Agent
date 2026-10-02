@@ -339,7 +339,7 @@ def test_het_freeze_overzicht_toont_de_splitsingen_en_meldt_een_onverklaarde_spr
     conn.commit()
     punten = {p.naam: p for p in fs.bepaal_punten(pad)}
     punt = punten["Aandelensplitsingen (correctie bij het lezen)"]
-    assert punt.status == fs.TE_BEVESTIGEN and "5 geregistreerd" in punt.waarde and "2025-12-05" in punt.waarde
+    assert punt.status == fs.AKKOORD_DD and "5 geregistreerd" in punt.waarde and "2025-12-05" in punt.waarde   # DD-akkoord 02-10
 
     # een onverklaarde sprong in de database maakt er een LET OP van
     ander = init_db(str(tmp_path / "ander.db"))
