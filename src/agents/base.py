@@ -681,7 +681,10 @@ class ForecastRoundResult:
         return not self.issues
 
 
-def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim], evidence: str | None = None) -> str:
+def _forecast_user_prompt(
+    targets: list[ForecastTarget], claims: list[Claim], evidence: str | None = None,
+    kop: str = "Huidige, al berekende cijfers voor jouw domein",
+) -> str:
     claims_summary = (
         "\n".join(f"- {c.claim}: {c.value} (metric_key: {c.metric_key}, bron: {c.source})" for c in claims)
         or "(geen recente claims beschikbaar)"
@@ -702,7 +705,7 @@ def _forecast_user_prompt(targets: list[ForecastTarget], claims: list[Claim], ev
 
     context = f"{evidence}\n\n" if evidence else ""
     return (
-        f"Huidige, al berekende cijfers voor jouw domein:\n{claims_summary}\n\n"
+        f"{kop}:\n{claims_summary}\n\n"
         f"{context}"
         f"Geef voor ELK van de onderstaande doelen een voorspelling. "
         f"Antwoord met exact deze structuur:\n\n"
@@ -718,6 +721,8 @@ def _parse_forecast_response(
     model_id: str,
     prompt_version: str,
     trigger_conditioned: bool,
+    agent: str | None = None,
+    domain_of: dict[str, str] | None = None,
 ) -> ForecastRoundResult:
     """Zet de JSON-respons om in Prediction-objecten. Elk doel dat ontbreekt
     of ongeldig is komt in `issues` terecht in plaats van de hele ronde te
@@ -749,8 +754,8 @@ def _parse_forecast_response(
         try:
             predictions.append(
                 Prediction(
-                    agent=domain,
-                    domain=domain,
+                    agent=agent or domain,
+                    domain=(domain_of or {}).get(target.metric_key, domain),
                     target_metric_key=target.metric_key,
                     kind=target.kind,
                     horizon_kind=target.horizon_kind,
@@ -792,6 +797,10 @@ def run_forecast_round(
     event_id: str | None = None,
     trigger_conditioned: bool = False,
     evidence: str | None = None,
+    agent: str | None = None,
+    domain_of: dict[str, str] | None = None,
+    max_tokens: int = 2000,
+    kop: str = "Huidige, al berekende cijfers voor jouw domein",
 ) -> ForecastRoundResult:
     """De derde modus naast monitoring en deep-dive (roadmap 2.0).
 
@@ -819,9 +828,9 @@ def run_forecast_round(
         with _llm_context(client, domain, "forecast", event_id):
             response = client.messages.create(
                 model=model,
-                max_tokens=2000,
+                max_tokens=max_tokens,
                 system=full_system_prompt,
-                messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims, evidence)}],
+                messages=[{"role": "user", "content": _forecast_user_prompt(targets, claims, evidence, kop)}],
             )
         tekst = "".join(b.text for b in response.content if b.type == "text").strip()
         if not tekst:
@@ -834,7 +843,8 @@ def run_forecast_round(
         return ForecastRoundResult(domain, (), (f"LLM-call mislukt: {e}",))
 
     resultaat = _parse_forecast_response(
-        tekst, domain, targets, now, model, prompt_version, trigger_conditioned
+        tekst, domain, targets, now, model, prompt_version, trigger_conditioned,
+        agent=agent, domain_of=domain_of,
     )
     # Voorspellingen en run-regel in ÉÉN transactie: zie
     # save_predictions_with_run() voor waarom dat niet los mag.

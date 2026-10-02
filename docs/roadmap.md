@@ -301,6 +301,7 @@ Secties 4.5, 4.6.
 - [~] Drie baselines draaien mee (4.6) **[29-09: persistence + climatology draaien mee in de wekelijkse ronde; ridge gebouwd, fit + freeze volgt na de back-fill]**
 - [~] Pseudo-OOS-run uitgevoerd en bevindingen verwerkt (4.4) **[02-10: harness gebouwd en getest (`pseudo_oos.py`, draait op een kopie); de echte run wacht op de FOMC-besluitdagen van juli/september 2026 (DD verifieert), graaf v1 en de testrun van 14-10; plan in `docs/deployment.md`]**
 - [ ] Dry-run-week doorlopen, freeze vastgelegd met versienummers (CLAUDE.md checkpoint 3)
+- [x] **[02-10] `dagcontrole.py` (alleen lezen)**: de vaste dagelijkse controle voor de begeleide weken en de dry-run-week in één scherm (run, triggers, claims, bronnen, voorspellingen, LLM-verbruik, logregels, back-up, archief, schijf; ONBEKEND is geen ok). Runbook in `docs/deployment.md`. `src/runtime/dagcontrole.py`, `tests/test_dagcontrole.py`.
 - [x] **[02-10] `freeze_status.py` toont ook de voorwaarden vóór de klok** (T₀ᵃ, 14 werkdagen, testrun, forecast-rondes, resolver, pseudo-OOS, dry-run-week, reeksenlijst, back-up, heartbeat, quota) met AF / NOG NIET AF / ZELF CONTROLEREN: één plek voor "wat staat er nog tussen nu en de klok". Alleen wat uit de data volgt kan AF zijn; kwaliteitsoordelen blijven van DD (`runtime/freeze_voorwaarden.py`). **Interpretatie gevlagd (checkpoint 4):** "14 dagen op rij" telt als 14 werkdagen.
 - [x] **[01-10] Freeze-overzicht (`freeze_status.py`, alleen lezen) en waakhond voor de doelenlijst en de evidence-sheet.** Het overzicht toont elk freeze-punt met zijn huidige waarde en status (BEVROREN / TE BEVESTIGEN / OPEN BESLISSING / WIJZIGING ZONDER VERSIE / LET OP); het voert de freeze NIET uit. De waakhond (`contract/freeze_versions.py`, `runtime/freeze_guard.py`, `tests/test_freeze_guard.py`) geeft de doelenlijst en de evidence-sheet een versienummer + vingerafdruk, naar het patroon van de trigger-versie; de prompt-afdruk bevat nu ook de evidence-sheet, want die verandert wat het model ziet.
 - [ ] **[29-09] `MI_COHORT=cohort_0` gezet in `.env` op de VPS, NA de freeze**, en gecontroleerd: het log van de eerstvolgende run zegt "ECHT COHORT", en `SELECT cohort, COUNT(*) FROM predictions GROUP BY cohort` toont nieuwe rijen onder `cohort_0`. Vergeten = de eerste weken van het echte cohort staan onder `dry_run`
@@ -1104,6 +1105,7 @@ volledig in Python; **het LLM raakt deze laag nooit aan**. Voorwaarde:
       7×7-correlatiematrix uit ~25 effectieve episodes is ruis: shrinkage
       (Ledoit-Wolf) naar een gedeelde correlatie, plus extremizing van
       de gepoolde kans. De gedeelde-bron-vlag uit 3.1 is de covariaat.
+- [ ] **[02-10] Het ongewogen gemiddelde van de leden als maatstaf.** Zodra meerdere voorspellers (agents, mensen, baselines, synthesizer) hetzelfde doel voorspellen, berekent Python achteraf uit de opgeslagen voorspellingen ook het ongewogen gemiddelde van de kwantielen. Zowel de gewogen pool als de synthesizer moeten dat verslaan; zo niet, dan voegt de weging of het cross-domein-redeneren niets toe. Vóór de freeze niet nodig (alleen opgeslagen voorspellingen nodig).
 - [ ] Gewichten conditioneel op regime (3.3) — pas als de
       onvoorwaardelijke gewichten stabiel zijn, waarschijnlijk jaar twee
 
@@ -1310,6 +1312,7 @@ en dat window is nu al beschikbaar.
       niet een puntschatting.
 - [ ] **[27-09] Synthesizer wordt gescoord** als eigen agent — het is
       het enige wat DD en partner uiteindelijk lezen.
+      **[02-10, besluit DD] De synthesizer is BLIND:** hij ziet de claims en de evidence-sheets van de domeinen, NIET de voorspellingen (kwantielen/kansen) van de domain agents, mensen of baselines. Anders is hij een verkapte aggregator en meet de scoring in mei iets anders dan bedoeld; Python aggregeert nooit over agents heen (3.4, mei 2027). Vastgelegd in `docs/architecture.md` (LLM-taken-tabel). **[02-10] Slanke v1 gebouwd (nog niet afgevinkt, want nog niet gekoppeld of gedraaid):** `src/synthesizer/forecast.py` (dezelfde 24 doelen/57 voorspellingen als de agents, `agent=synthesizer`, blind, één call per week, geen richtlijnen, geen graaf in de prompt), `synthesizer_preview.py` (alleen lezen, kostenschatting), `tests/test_synthesizer_forecast.py`, prompt-bewaking in `tests/test_forecast_prompt_version.py` en `freeze_status.py`. **Nog open:** koppeling aan `run_daily` en pseudo-OOS (DD, checkpoint 1/3), de vier instrumentdoelen (log-rendement als resolutiemethode vraagt een contract- en schemawijziging, prijsbron per instrument), richtlijnen. Bij de eerste bouw: elk doel wordt nu door één agent voorspeld, dus een gemiddelde van agents bestaat niet; de vergelijking is synthesizer tegen de domain agent op hetzelfde doel en tegen de baselines.
 - [ ] Uitsplitsing per domein, per horizon, per `model_id` en (later)
       per regime
 
@@ -1319,6 +1322,7 @@ Zonder baseline is niet vast te stellen of we iets gebouwd hebben of
 alleen kosten gemaakt. **[27-09] Drie** baselines draaien vanaf T₀ mee als
 volwaardige "agents" in de scoring, met dezelfde kwantielvorm.
 
+- [ ] **[02-10] Baselines ook op de vier instrumentdoelen van de synthesizer (NQ, ZN, CL, 6E; 5 hd) — vóór de freeze.** De baselines bestaan nu alleen voor de doelen van de agents. Voor de instrumenten is er geen agent om mee te vergelijken, dus persistence en climatology zijn daar de enige maatstaf. Hangt af van de prijsbron per instrument (open beslissing, zie 4.1 en 'Aandachtspunt' bij 3.1).
 - [x] **[29-09] Random walk / persistence** (`src/scoring/baselines.py`)
       — "het blijft zoals het is"; kwantielen uit de historische verdeling
       van veranderingen over de horizon. Verrassend moeilijk te verslaan.
