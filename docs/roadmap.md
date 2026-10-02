@@ -1510,6 +1510,46 @@ kalibratie-deel van 5.2.
       "financial philosophy agent" uit DD's eindbeeld thuishoort: geen
       voorspeller, maar een kennislaag (RAG) die de prompts van de
       andere agents voedt.
+- [ ] **[02-10] Ideeën voor extra agents (niet besloten, allemaal post-T₀ᵇ).**
+      Aanleiding: de vraag of zeven agents genoeg zijn. Het aantal is niet
+      het knelpunt; alle vijf voorspellende agents zien cijfers die Python
+      al berekent, op hetzelfde model, en de ridge-baseline (4.6) ziet
+      dezelfde cijfers. Een extra agent is alleen zinvol als hij een
+      **ander soort informatie** binnenbrengt. Kandidaten, in volgorde van
+      verwachte waarde (de news-agent, 2.8, blijft de eerste bouwstap en
+      staat hier niet opnieuw):
+      1. **Verwachtingen-agent ("wat is ingeprijsd").** Verrassing ten
+         opzichte van de marktverwachting in plaats van ten opzichte van
+         de vorige waarde. Bronnen: fed funds futures, consensus vóór
+         releases, optie-geïmpliceerde bewegingen. Bouwt op de
+         `expectations`-entiteit (1.2), die deze data al zou opslaan.
+      2. **Liquiditeit en funding.** TGA, reverse repo, SOFR,
+         Treasury-veilingen. De knoop `liquidity` heeft nu alleen de
+         Fed-balans (WALCL). Overlapt met de "bonds"-uitsplitsing van 2.1
+         en de kandidaat-bronnen daar (NY Fed, Treasury FiscalData); kan
+         één agent worden.
+      3. **Aandelenindex-agent.** Winstherzieningen, waardering, breadth
+         en concentratie in big tech. De synthesizer krijgt NQ als doel
+         (4.5), maar `earnings_growth` en `equity_valuation` zijn in
+         cohort 0 onbediend. Verwant aan 2.9, maar een leverancier van
+         waarnemingen, geen conditionele verdeling.
+      4. **Positionering en volatiliteit.** CFTC COT, ETF-stromen,
+         VIX-termstructuur, skew. Vult de knopen `sentiment` en
+         `stress_gedwongen_verkoop` uit DD's graafconcept, die nu geen
+         reeks hebben.
+      5. **Internationaal.** ECB, BoJ, China. Alles is nu VS; de currency
+         agent kent geen buitenlandse rentes (zie kandidaat-bron ECB bij
+         2.2).
+
+      Daarnaast, geen nieuwe agent: **inflatie heeft geen eigenaar**
+      (CPI hangt bij monetary, `inflation_persistence` is van economic
+      maar de lean-versie haalt de reeks niet op). Oplossen bij de
+      uitbreiding van 2.7.
+      **Spelregels als een van deze wordt opgepakt:** één agent per keer,
+      op een cohortgrens (nieuwe reeksen en knopen raken de graaf en de
+      doelenlijst), checkpoint 1 uit `CLAUDE.md`, en de keuze laten sturen
+      door de scores bij T₀ᵇ + 3 maanden (welk domein is zwak), niet door
+      deze lijst. Bronnen zijn niet geverifieerd (checkpoint 4).
 
 ## Beslist op 30-09-2026
 
