@@ -730,6 +730,11 @@ verschoven met een aangenomen vertraging per reeks (`PUBLICATIE_VERTRAGING_DAGEN
 Zonder die correctie zou de agent op 6 juli de payrolls van juli zien (die pas in augustus verschenen). Alle bestaande point-in-time-code werkt dan ongewijzigd.
 De echte database wordt alleen gelezen. Elke andere stap weigert een database zonder die voorbereiding.
 
+**Gevonden bij de eerste echte `audit` (02-10-2026) en hersteld:** `fed_funds_rate` bleek een MAANDgemiddelde (FEDFUNDS, 866 waarnemingen sinds 1954), terwijl ik hem als dagreeks
+(1 dag vertraging) had aangenomen: op 6 juli was daardoor de julistand zichtbaar. Nu 35 dagen. **`voorbereiden` toetst voortaan elke vertraging aan de werkelijke afstand tussen de
+waarnemingen in de data zelf** (maandreeks: minstens 30 dagen, weekreeks: minstens 2, dagreeks: minstens 1) en breekt af als een aanname daar niet bij past. Een kopie die vóór
+deze correctie is gemaakt moet worden weggegooid: `rm pseudo_oos.db` en `voorbereiden` opnieuw.
+
 **Aannames, niet te verifiëren (checkpoint 4):** de vertragingen zijn mijn inschatting van de publicatiekalenders en bewust conservatief (te veel vertraging toont
 oudere data, nooit nieuwere). `audit` laat per reeks de laatste zichtbare waarneming zien, zodat je die naast de echte kalender kunt leggen. **Geen ridge** (die kent
 het venster al); **geen herziene-versus-eerste-print-correctie** (de back-fill is gereviseerd); **geen tweede run over 2025** (geen passend ouder model gekozen).

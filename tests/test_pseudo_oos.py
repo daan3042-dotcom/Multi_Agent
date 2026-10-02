@@ -47,7 +47,7 @@ def _reeksdagen(key: str) -> list[date]:
             uit.append(d)
             d += timedelta(days=7)
         return uit
-    if lag in (38, 45):
+    if lag in (35, 38, 45):
         uit, j, m = [], 2024, 1
         while date(j, m, 1) <= EINDE:
             uit.append(date(j, m, 1))
@@ -144,6 +144,32 @@ def test_elke_reeks_van_de_voorspellende_agents_heeft_een_publicatievertraging()
 def test_afgeleide_relatieve_sterkte_volgt_zijn_basisreeks():
     assert po.vertraging_voor("xlk_technology_rel_spy") == po.vertraging_voor("xlk_technology")
     assert po.vertraging_voor("bestaat_niet") is None
+
+
+def test_maandreeksen_hebben_een_vertraging_van_minstens_een_maand():
+    """FEDFUNDS bleek op de echte data een maandgemiddelde (866 waarnemingen sinds 1954) en stond op 1 dag: op 6 juli was de
+    julistand zichtbaar. Alle maandreeksen moeten minstens een maand vertraging hebben."""
+    for key in ("fed_funds_rate", "cpi_inflation_index", "unemployment_rate", "nonfarm_payrolls"):
+        assert po.PUBLICATIE_VERTRAGING_DAGEN[key] >= 30, key
+
+
+def test_de_werkelijke_frequentie_komt_uit_de_afstand_tussen_de_waarnemingen():
+    dag = [date(2026, 1, 5) + timedelta(days=i) for i in range(0, 60)]
+    week = [date(2026, 1, 3) + timedelta(days=7 * i) for i in range(20)]
+    maand = [date(2024 + i // 12, i % 12 + 1, 1) for i in range(30)]
+    assert po.werkelijke_frequentie(dag) == (1, "dagreeks")
+    assert po.werkelijke_frequentie(week) == (2, "weekreeks")
+    assert po.werkelijke_frequentie(maand) == (30, "maandreeks")
+    assert po.werkelijke_frequentie(maand[:4]) is None  # te weinig om te oordelen
+
+
+def test_een_te_korte_vertraging_voor_een_maandreeks_breekt_de_voorbereiding_af(bronnen, tmp_path, monkeypatch):
+    """Precies de fout van 02-10: een maandreeks met een vertraging van 1 dag. De voorbereiding moet dat zelf vangen."""
+    monkeypatch.setitem(po.PUBLICATIE_VERTRAGING_DAGEN, "fed_funds_rate", 1)
+    doel = tmp_path / "kopie.db"
+    with pytest.raises(po.PseudoOosFout, match=r"fed_funds_rate: 1 dagen, maar het is een maandreeks \(minimaal 30 dagen\)"):
+        po.bereid_voor(bronnen, str(doel))
+    assert not doel.exists()
 
 
 def test_de_vertragingen_zijn_aannemelijk_per_frequentie():

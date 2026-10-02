@@ -52,7 +52,10 @@ META_TABEL = "pseudo_oos_meta"
 # dagseries krijgen 1 dag: de run van maandag 07:15 UTC ziet de slotstand van vrijdag, niet die van maandag.
 PUBLICATIE_VERTRAGING_DAGEN: dict[str, int] = {
     # monetary_policy (FRED)
-    "fed_funds_rate": 1,
+    # FEDFUNDS is een MAANDGEMIDDELDE (866 waarnemingen sinds 1954), geen dagreeks: de waarde met datum 1 juli bestaat pas
+    # na afloop van juli. Eerst op 1 dag gezet (aanname dat het de dagreeks was); `audit` op de echte data liet zien dat
+    # op 6 juli de julistand zichtbaar was. Daarom controleert `bereid_voor` nu de werkelijke frequentie (zie hieronder).
+    "fed_funds_rate": 35,
     "fed_funds_target_upper": 1,
     "10y_treasury_yield": 1,
     "2y_treasury_yield": 1,
@@ -78,6 +81,27 @@ PUBLICATIE_VERTRAGING_DAGEN: dict[str, int] = {
     "xly_consumer_discretionary": 1, "xlp_consumer_staples": 1, "xli_industrials": 1, "xlb_materials": 1,
     "xlu_utilities": 1, "xlre_real_estate": 1, "xlc_communication_services": 1, "spy_benchmark": 1,
 }
+
+
+# Minimale vertraging per werkelijke frequentie, afgeleid van de afstand tussen waarnemingen in de data zelf.
+MIN_VERTRAGING_PER_FREQUENTIE = (  # (mediane afstand in dagen, minimale vertraging, naam)
+    (25, 30, "maandreeks"),
+    (6, 2, "weekreeks"),
+    (0, 1, "dagreeks"),
+)
+
+
+def werkelijke_frequentie(waarnemingsdagen: list[date]) -> tuple[int, str] | None:
+    """(minimale vertraging, naam) volgens de mediane afstand tussen de waarnemingsdata, of None bij te weinig data."""
+    dagen = sorted(set(waarnemingsdagen))
+    if len(dagen) < 6:
+        return None
+    afstanden = sorted((b - a).days for a, b in zip(dagen, dagen[1:]))
+    mediaan = afstanden[len(afstanden) // 2]
+    for drempel, minimum, naam in MIN_VERTRAGING_PER_FREQUENTIE:
+        if mediaan >= drempel:
+            return minimum, naam
+    return None
 
 
 class PseudoOosFout(Exception):
@@ -207,6 +231,21 @@ def bereid_voor(bron: str, doel: str, agents=None) -> VoorbereidRapport:
         zonder = sorted(k for k in benodigde_reeksen(agents) & in_gebruik if vertraging_voor(k) is None)
         if zonder:
             raise PseudoOosFout(f"geen publicatievertraging vastgelegd voor: {', '.join(zonder)}")
+
+        # Een aangenomen vertraging kan fout zijn als de reeks een andere frequentie blijkt te hebben dan gedacht (zo ging het
+        # met FEDFUNDS). Daarom wordt elke vertraging getoetst aan de werkelijke afstand tussen de waarnemingen.
+        te_kort = []
+        for key in sorted(in_gebruik):
+            dagen = vertraging_voor(key)
+            if dagen is None or key not in benodigde_reeksen(agents):
+                continue
+            waargenomen = [date.fromisoformat(src[:10]) for (src,) in doel_conn.execute(
+                "SELECT DISTINCT substr(source_time, 1, 10) FROM claims WHERE metric_key = ? AND source_time IS NOT NULL", (key,))]
+            frequentie = werkelijke_frequentie(waargenomen)
+            if frequentie and dagen < frequentie[0]:
+                te_kort.append(f"{key}: {dagen} dagen, maar het is een {frequentie[1]} (minimaal {frequentie[0]} dagen)")
+        if te_kort:
+            raise PseudoOosFout("publicatievertraging te kort voor de werkelijke frequentie van de reeks: " + "; ".join(te_kort))
 
         for key in sorted(in_gebruik):
             dagen = vertraging_voor(key)
