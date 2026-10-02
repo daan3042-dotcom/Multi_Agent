@@ -27,7 +27,7 @@ geldige weg, en dat kost kalendertijd in plaats van werktijd. Alles wat
 geen voorwaarde is voor "de klok kan lopen" schuift naar achteren.
 
 **Herzien op 27-09-2026 (externe review):** twee klokken — T₀ᵃ
-(ingestieklok, streefdatum op zijn vroegst 12-10-2026, herzien op 01-10 van 7-10: zeven SCHONE werkdagen op rij, schoon = alle agents ok én geen volledigheidstrigger) en T₀ᵇ (predictieklok, 10-11-2026);
+(ingestieklok, streefdatum op zijn vroegst 13-10-2026, herzien op 01-10 van 7-10 naar 12-10 en op 02-10 naar 13-10: zeven SCHONE werkdagen op rij, schoon = alle agents ok én geen volledigheidstrigger) en T₀ᵇ (predictieklok, 10-11-2026);
 kwantielen (sinds 01-10 vijf: q10/q25/q50/q75/q90) i.p.v. binaire richting; drie baselines; pseudo-out-of-sample
 vóór T₀ᵇ; economic agent lean vóór T₀; mensen als gescoorde
 voorspellers; `graph_node` optioneel in cohort 0. Alle correcties met
@@ -72,7 +72,7 @@ en `docs/project-state.md`.
 | **De gedeelde Alpha Vantage-aanroep (gelogde reden per mislukte reeks, één herhaalpoging)** | `src/sources/alpha_vantage.py` |
 | **Data die niet terug te halen is: beoordeling en plan (breed archief)** | `docs/data-archive.md` |
 | Bronnen meten voor het archief (alleen lezen) | `probe_sources.py`, `src/sources/probe.py` |
-| **Het dagelijkse ruwe archief (SPY-holdings; eigen proces, geen database)** | `archive_daily.py`, `src/archive/spy_holdings.py` |
+| **Het dagelijkse ruwe archief (SPY-holdings; eigen proces, geen database)** | `archive_daily.py`, `src/archive/spy_holdings.py`; de meting van het verversmoment (alleen lezen): `meet_spy_asof.py`, `src/archive/spy_meting.py` |
 | VPS-inrichting + dry-run-plan (checkpoint 3) | `docs/deployment.md` |
 | Eenmalige historische back-fill | `backfill.py`, `src/runtime/backfill.py` |
 | **De resolver + scoringsregels (4.5)** | `src/scoring/` |

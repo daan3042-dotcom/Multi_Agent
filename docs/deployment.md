@@ -225,7 +225,7 @@ puur "haalt de ingestieklok elke dag zonder tussenkomst echte data op".
 
 **Na 3 schone dagen:** zie het aparte plan hieronder ("Dry-run-plan voor
 `--deep-dives`"). **T₀ᵃ is gehaald** na zeven werkdagen op rij ingestie zonder
-handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober en op 01-10 naar op zijn vroegst 12 oktober, met de strenge definitie van een schone dag: alle agents `ok` én geen volledigheidstrigger). Een eerdere
+handmatige actie (roadmap 1.11, herzien op 30-09 naar 7 oktober, op 01-10 naar 12 oktober en op 02-10 naar op zijn vroegst 13 oktober, met de strenge definitie van een schone dag: alle agents `ok` én geen volledigheidstrigger). Een eerdere
 versie van deze zin koppelde T₀ᵃ aan zeven dagen mét `--deep-dives`; dat is de
 voorspelmeting (T₀ᵇ), niet de ingestieklok, en is rechtgezet.
 
@@ -511,7 +511,7 @@ voorspellingen krijgen LET OP (contract heroverwegen). De dry-run-week-data (27-
 ## Dry-run-plan voor `--deep-dives` (checkpoint 3) — **goedgekeurd door DD op 30-09-2026, nog niet gestart**
 
 Nog niets hiervan is aangezet. `--deep-dives` staat niet in de cron-regel, en dat
-blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op zijn vroegst 12 oktober). DD keurde het plan
+blijft zo tot de voorwaarden hieronder gehaald zijn (T₀ᵃ op zijn vroegst 13 oktober). DD keurde het plan
 goed met één aanpassing: de maandgrens voor LLM-kosten staat op **$200**, niet $20.
 
 ### Wat de vlag aanzet (uit de code, `runtime/daily.py`)
@@ -585,9 +585,9 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
 ### Voorwaarden om te beginnen
 
 - [ ] T₀ᵃ gehaald: zeven schone werkdagen op rij zonder handmatige actie (schoon = alle agents
-      `ok` én geen volledigheidstrigger). Op zijn vroegst **maandag 12 oktober**: de reeks begon op
-      29-09, maar de run van 01-10 was niet schoon (sector 10 van 12 reeksen), dus de telling
-      herstartte op 02-10. **Een handmatige testrun
+      `ok` én geen volledigheidstrigger). Op zijn vroegst **dinsdag 13 oktober**: de reeks begon op
+      29-09, maar de run van 01-10 was niet schoon (sector 10 van 12 reeksen) en die van 02-10 ook niet (11 van 12), dus de telling
+      herstartte op 05-10. **Een handmatige testrun
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
 - [ ] Trigger-versie `v3` in de log en in `trigger_events`.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
@@ -610,7 +610,7 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
       code-rem van hetzelfde bedrag is de tweede lijn).
 - [x] Dit plan goedgekeurd door DD op 30-09, inclusief de codewijzigingen hierboven (gebouwd).
 
-### Fase 1 — één begeleide testrun (voorstel: op zijn vroegst dinsdag 13 oktober, middag; was 8 oktober vóór de verschuiving van T₀ᵃ op 01-10)
+### Fase 1 — één begeleide testrun (voorstel: op zijn vroegst woensdag 14 oktober, middag; was 13 oktober vóór de verschuiving van T₀ᵃ op 02-10)
 
 De cron van 07:15 heeft dan al gedraaid; monitoring wordt bij een tweede run
 overgeslagen (idempotent). Draai met de hand:
@@ -670,11 +670,11 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
 **Stop en meld het** bij: voorspellingen onder een ander cohort dan `dry_run`; een agent zonder
 enkele voorspelling; een run langer dan tien minuten; kosten een factor tien boven de schatting.
 
-### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf woensdag 14 oktober; was 9 oktober)
+### Fase 2 — cron aanzetten, drie weken begeleid (voorstel: vanaf donderdag 15 oktober; was 14 oktober)
 
 Alleen als fase 1 schoon was: `--deep-dives` toevoegen aan de cron-regel (`crontab -e`,
 dezelfde regel als in dit document, plus de vlag). Ronden vallen dan op de maandagen
-19 en 26 oktober en 2 november (plus een inhaalronde op woensdag 14 oktober voor de lopende week). **De drie weken lopen nu tot 4 november en overlappen de dry-run-week (27 oktober tot 9 november).** Dat is een voorstel dat DD moet bevestigen: of de begeleide periode op twee weken zetten, of de dry-run-week laten beginnen zodra de begeleide periode schoon is.
+19 en 26 oktober en 2 november (plus een inhaalronde op donderdag 15 oktober voor de lopende week). **De drie weken lopen nu tot 5 november en overlappen de dry-run-week (27 oktober tot 9 november).** Dat is een voorstel dat DD moet bevestigen: of de begeleide periode op twee weken zetten, of de dry-run-week laten beginnen zodra de begeleide periode schoon is.
 
 **Elke dag, twee minuten:** de laatste regels van `daily.log`. Exit 0, of exit 1 met een
 begrijpelijke reden (de ridge-melding op de rondedag is verwacht).
@@ -742,6 +742,25 @@ cd /opt/multi_agent && .venv/bin/python t0a_status.py
   beslissen we op die reden (andere pauze, een andere aanpak voor die reeks), niet op een gok.
 - Komt er een melding van Alpha Vantage zelf (`meldt (Note)` of `(Information)`) over aanroepen per minuut of per dag, dan is dat het
   gezochte antwoord op de oorzaak.
+
+## SPY-bron: wanneer ververst de `as_of`? — meting (02-10-2026), voorstel, **nog niet in de cron**
+
+**Waarom.** Het archief bewaart per UTC-dag het EERSTE bestand. Op 02-10 stond de `as_of` om 08:30 UTC nog op 30-09, twee handelsdagen achter, en
+`archive_daily.py` kan dat niet verder meten (een tweede aanroep op dezelfde dag doet bewust niets). Ververst de bron later op de dag, dan bewaart de
+cron elke dag een verouderde versie. Dat weten we alleen met metingen over de dag heen.
+
+**`meet_spy_asof.py` (alleen lezen).** Haalt het bestand op en print één regel: tijdstip, `as_of`, grootte, vingerafdruk en wat de bron zelf zegt
+(`Last-Modified`, `ETag`, `Date`). Bewaart niets en raakt het archief, het manifest en de database niet aan. Eenmalig:
+```bash
+cd /opt/multi_agent && .venv/bin/python meet_spy_asof.py
+```
+**Voorstel, door DD te bevestigen (checkpoint 3):** drie dagen lang elk uur laten meten, zodat het niet van DD's aanwezigheid afhangt. Eén verzoek per uur aan
+State Street, naar een eigen logbestand, los van de dagelijkse run en het archief (`crontab -e`, regel toevoegen):
+```
+5 * * * * cd /opt/multi_agent && .venv/bin/python meet_spy_asof.py >> /var/log/mi/spy_asof.log 2>&1
+```
+Na drie dagen: `cat /var/log/mi/spy_asof.log` plakken, en de regel weer uit de crontab halen (`crontab -e`). Wat we dan zien: het uur waarop `as_of` van dag
+wisselt en wat `Last-Modified` zegt. Bij een verversing later dan 08:30 UTC stel ik een nieuw archiefmoment voor (nieuwe checkpoint-3-beslissing).
 
 ## Het ruwe archief (SPY-holdings) — dry-run-plan (checkpoint 3), **goedgekeurd door DD op 01-10-2026, nog NIET in de cron**
 
