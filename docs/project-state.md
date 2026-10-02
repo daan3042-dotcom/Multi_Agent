@@ -1793,3 +1793,5 @@ concrete trigger — post-T₀.
   doel; het kan hooguit de directionele bias en het risicobudget per dag
   kleuren, en zelfs dat pas nadat de scoring engine het aantoont. Zie
   "Scope-afbakening" in `docs/roadmap.md` deel A.
+
+**ATR-proef en besluit (02-10).** `calibrate_triggers.py --atr-proef` (alleen lezen, `src/calibration/atr_proef.py`, 10 tests, 1056 groen) toonde op de echte sector-reeksen: factor 2 geeft ~33 triggers per reeks per jaar, ~5 per jaar komt bij N≈3,5; één N geeft een kleinere spreiding tussen reeksen dan de vaste drempels. **Besluit DD:** cohort 0 begint met de vaste drempels (v4); de ATR-regel komt later als schaduwtelling (roadmap 4.2), niet als invoering. Back-up (nieuwste bestand 02-10, integriteit ok, archief meegekopieerd) en DFEDTARU (6.500 rijen vanaf 2008-12-16) zijn gecontroleerd; geen back-fill nodig.
