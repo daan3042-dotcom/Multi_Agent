@@ -735,8 +735,8 @@ oudere data, nooit nieuwere). `audit` laat per reeks de laatste zichtbare waarne
 het venster al); **geen herziene-versus-eerste-print-correctie** (de back-fill is gereviseerd); **geen tweede run over 2025** (geen passend ouder model gekozen).
 
 **Voorwaarden vóór de echte run**
-1. De FOMC-besluitdagen van juli en september 2026 in `FOMC_MEETING_DATES` (`contract/resolution.py`), door DD gecontroleerd op federalreserve.gov. De run weigert te starten zolang de
-   kalender een gat heeft rond een voorspeldatum. (Mijn herinnering, NIET geverifieerd: 29 juli en 16 september 2026, beide woensdagen; `tests/test_fomc_calendar.py` bewaakt het woensdagpatroon.)
+1. **[02-10 gedaan]** De FOMC-besluitdagen van juli en september 2026 (29 juli en 16 september) staan in `FOMC_MEETING_DATES` (`contract/resolution.py`); bron: de twee persberichten die DD aanleverde
+   (29 juli: ongewijzigd op 3,50-3,75; 16 september: verhoogd naar 3,75-4,00). De run weigert te starten zolang de kalender een gat heeft rond een voorspeldatum.
 2. Graaf v1 (of het besluit dat v0 blijft) staat in de code, zodat de doelen-vingerafdruk niet meer verandert na de run.
 3. De begeleide testrun van 14-10 is geweest (echte tokencijfers, een echte prompt gezien).
 

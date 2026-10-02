@@ -1545,8 +1545,8 @@ kalibratie-deel van 5.2.
       --freeze`, niet terug te draaien), samen met de andere freeze-punten en
       uiterlijk 27 oktober.
 - [x] **FOMC-kalender ingevuld** (zie project-state, "FOMC-kalender ingevuld").
-      Vergaderingen van vóór oktober 2026 ontbreken nog en zijn alleen nodig voor
-      de pseudo-OOS-run.
+      **[02-10] 29 juli en 16 september 2026 toegevoegd** (bron: de twee FOMC-persberichten, door DD
+      aangeleverd) voor de pseudo-OOS-run; vergaderingen van januari tot en met juni 2026 ontbreken nog en zijn daar niet nodig.
 
 ## Beslist op 29-09-2026
 

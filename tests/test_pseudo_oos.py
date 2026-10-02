@@ -396,13 +396,38 @@ def test_een_onparseerbaar_antwoord_telt_volledig_als_gemist(kopie, fomc_kalende
     assert all(a.gemist_aandeel == 1.0 for a in po.rapport(kopie, agents))
 
 
-def test_zonder_de_fomc_besluitdagen_weigert_de_run_te_starten(kopie):
-    """De kalender heeft nu alleen data vanaf 28 oktober: op 6 juli zou de agent de verkeerde vergadering zien."""
+def test_zonder_de_fomc_besluitdagen_weigert_de_run_te_starten(kopie, monkeypatch):
+    """Met een kalender die pas op 28 oktober begint (zoals vóór 02-10) zou de agent op 6 juli de verkeerde vergadering zien."""
+    monkeypatch.setattr(res, "FOMC_MEETING_DATES", tuple(d for d in res.FOMC_MEETING_DATES if d >= date(2026, 10, 1)))
     client = _model_dat_antwoordt()
     with pytest.raises(po.PseudoOosFout, match="FOMC-kalender mist besluitdagen rond 2026-07-06"):
         po.draai(kopie, client, default_agents(), po.voorspeldata())
     client.messages.create.assert_not_called()
     assert kopie.execute("SELECT COUNT(*) FROM predictions").fetchone()[0] == 0
+
+
+def test_de_echte_kalender_dekt_het_hele_venster():
+    """Zonder monkeypatch: met 29 juli en 16 september erin is er voor elke van de dertien maandagen een besluitdag binnen acht weken."""
+    po.controleer_fomc_kalender(po.voorspeldata())
+    assert date(2026, 7, 29) in res.FOMC_MEETING_DATES and date(2026, 9, 16) in res.FOMC_MEETING_DATES
+
+
+def test_de_fomc_doelen_wikkelen_af_op_de_echte_besluitdagen_van_juli_en_september():
+    """Met de uitkomsten uit de persberichten: 29 juli ongewijzigd (3,75), 16 september verhoogd (4,00). Een voorspelling
+    van 6 juli (horizon 1) loopt tot 29 juli, een van 3 augustus (horizon 1) tot 16 september, en horizon 2 vanaf 6 juli ook."""
+    from contract.resolution import Observation, direction_after_fomc
+
+    def obs(dag, waarde, gezien=None):
+        d = _dt(dag)
+        return Observation(source_time=d, value=waarde, first_seen=gezien or d, claim_id=int(d.timestamp()) % 100000)
+
+    reeks = [obs(date(2026, 6, 30), 3.75), obs(date(2026, 7, 30), 3.75), obs(date(2026, 8, 3), 3.75),
+             obs(date(2026, 9, 14), 3.75), obs(date(2026, 9, 17), 4.00)]
+    juli = datetime(2026, 7, 6, 7, 15, tzinfo=UTC)
+    aug = datetime(2026, 8, 3, 7, 15, tzinfo=UTC)
+    assert direction_after_fomc(reeks, juli, 1).value == 0.0  # 29 juli: ongewijzigd telt als niet hoger
+    assert direction_after_fomc(reeks, juli, 2).value == 1.0  # 16 september: verhoogd
+    assert direction_after_fomc(reeks, aug, 1).value == 1.0   # eerstvolgende na 3 augustus is 16 september
 
 
 def test_de_fomc_controle_accepteert_een_gat_van_zeven_weken_en_weigert_negen():

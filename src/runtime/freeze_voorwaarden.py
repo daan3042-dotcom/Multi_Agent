@@ -154,8 +154,8 @@ def _pseudo_oos_regel(conn, db_pad: str | None = None):
     n = n_echt + n_kopie
     if not n:
         return (naam, "nog niet gedraaid", NOG_NIET_AF,
-                "script: `pseudo_oos.py` (draait op een kopie); vraagt FOMC-besluitdagen van juli en september 2026 in "
-                "contract/resolution.py (nu leeg, zie FOMC-kalender hierboven)")
+                "script: `pseudo_oos.py` (draait op een kopie); de FOMC-besluitdagen van juli en september 2026 staan in "
+                "contract/resolution.py; wacht op graaf v1 en de testrun van 14-10")
     waar = f"{n_kopie} in {PSEUDO_OOS_KOPIE}" + (f", {n_echt} in de echte database" if n_echt else "")
     return (naam, f"{n} voorspellingen onder cohort pseudo_oos ({waar})", ZELF_CONTROLEREN,
             "'bevindingen verwerkt' is jouw oordeel; geen bewijs, wel contract- en resolverbugs vinden (`pseudo_oos.py rapport`)")

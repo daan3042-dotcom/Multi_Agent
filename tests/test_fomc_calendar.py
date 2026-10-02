@@ -46,3 +46,11 @@ def test_niet_meer_dan_acht_per_kalenderjaar():
     for d in FOMC_MEETING_DATES:
         per_jaar[d.year] = per_jaar.get(d.year, 0) + 1
     assert all(n <= 8 for n in per_jaar.values()), per_jaar
+
+
+def test_de_besluitdagen_uit_de_persberichten_van_juli_en_september_2026_staan_erin():
+    """Bron: de FOMC-persberichten van 29 juli en 16 september 2026 (door DD aangeleverd). Vastgepind omdat de pseudo-OOS-run
+    (4.4) op deze twee dagen de FOMC-doelen afrekent."""
+    from datetime import date
+
+    assert date(2026, 7, 29) in FOMC_MEETING_DATES and date(2026, 9, 16) in FOMC_MEETING_DATES
