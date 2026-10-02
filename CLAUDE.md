@@ -81,6 +81,7 @@ en `docs/project-state.md`.
 | **De T₀ᵃ-teller (schone dagen, alleen lezen)** | `t0a_status.py`, `src/runtime/t0a_status.py` |
 | **Kalibratie, AUC, effectieve n per agent (4.5), alleen lezen** | `evaluate_scores.py`, `src/scoring/diagnostics.py`, `src/scoring/evaluation_report.py` |
 | **De context die een agent bij zijn forecast-ronde krijgt (evidence-sheet, point-in-time)** | `src/scoring/evidence_sheet.py` |
+| **Aandelensplitsingen in ETF-reeksen: de lijst, de correctie bij het lezen en de waakhond** | `src/contract/corporate_actions.py`, `src/runtime/split_waakhond.py` |
 | **De pseudo-OOS-run (4.4): de agents over juli–september 2026, op een kopie van de database** | `pseudo_oos.py`, `src/scoring/pseudo_oos.py` |
 | **De drie baselines (4.6)** | `src/scoring/baselines.py`, `ridge.py`, `baseline_round.py` |
 | Ridge fitten en bevriezen (VPS, eenmalig) | `fit_baselines.py` |
@@ -182,6 +183,7 @@ van dubbel werk.
   `run_daily.py` te starten als de versie niet bevroren (checkpoint 5) of niet
   ongewijzigd is.
 - **Doelenlijst en evidence-sheet dragen versienummer (01-10-2026).** Verander je een forecast-doel (reeks, horizon, resolutieregel) of de tekst die de evidence-sheet aan het model toont, dan faalt `tests/test_freeze_guard.py` totdat je `TARGETS_VERSION`/`EVIDENCE_SHEET_VERSION` in `contract/freeze_versions.py` ophoogt en de nieuwe vingerafdruk toevoegt; een evidence-wijziging vraagt ook een `FORECAST_PROMPT_VERSION`-bump. `freeze_status.py` toont de stand maar voert de freeze nooit uit.
+- **Aandelensplitsingen staan in een lijst (02-10-2026).** `contract/corporate_actions.py::SPLITSINGEN` corrigeert ETF-koersreeksen bij het lezen; de ruwe claims blijven ongewijzigd. Voeg een splitsing alleen AAN HET EIND toe en wijzig of verwijder nooit een bestaande (dat zou lopende voorspellingen anders afrekenen); de dagelijkse run meldt in het log een sprong die niet in de lijst staat. Een toevoeging is administratie en geen nieuwe regel.
 - **Na T₀ (streefdatum 10-11-2026): niet sleutelen aan de causale graaf
   (1.10), het predictiecontract (4.1), de `resolution_rule`s of de
   trigger-drempels zonder versienummer.** Elke zo'n wijziging start

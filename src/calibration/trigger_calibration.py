@@ -268,15 +268,19 @@ def metric_registry() -> list[tuple[str, str, object]]:
     return [(m.DOMAIN, key, spec) for m in modules for key, spec in m.METRIC_SPECS.items()]
 
 
-def calibrate_all(conn, now: datetime, domain: str | None = None) -> list[MetricCalibration]:
+def calibrate_all(
+    conn, now: datetime, domain: str | None = None, corrigeer_splitsingen: bool = True,
+) -> list[MetricCalibration]:
     """Kalibreert elke geregistreerde reeks tegen wat er in de database staat, tot en met
-    `now`. Point-in-time: een waarneming van na `now` telt niet mee."""
+    `now`. Point-in-time: een waarneming van na `now` telt niet mee. Standaard gecorrigeerd voor
+    aandelensplitsingen (contract/corporate_actions.py); `corrigeer_splitsingen=False` geeft de ruwe
+    reeks, zoals de kalibratie van 29-09 ze zag (alleen voor de vergelijking)."""
     resultaten = []
     for dom, key, spec in metric_registry():
         if domain is not None and dom != domain:
             continue
         prints = [
-            o for o in eerste_prints(observations_for(conn, key))
+            o for o in eerste_prints(observations_for(conn, key, corrigeer_splitsingen=corrigeer_splitsingen))
             if o.source_time <= now and o.first_seen <= now
         ]
         resultaten.append(
@@ -349,6 +353,40 @@ def render_report(resultaten: list[MetricCalibration]) -> str:
 
     regels.append("")
     regels.append(LEESWIJZER)
+    return "\n".join(regels)
+
+
+def render_split_vergelijking(ruw: list[MetricCalibration], gecorrigeerd: list[MetricCalibration]) -> str:
+    """Voor elke reeks met een geregistreerde splitsing: de huidige drempel, hoe vaak hij per jaar vuurt en welke drempel bij 5
+    triggers per jaar hoort, op de RUWE reeks (zoals de kalibratie van 29-09) en op de GECORRIGEERDE reeks. Wijzigt niets."""
+    from contract.corporate_actions import SPLITSINGEN
+
+    sleutels = sorted({s.metric_key for s in SPLITSINGEN})
+    oud = {r.metric_key: r for r in ruw}
+    nieuw = {r.metric_key: r for r in gecorrigeerd}
+    regels = [
+        "VERGELIJKING VOOR REEKSEN MET EEN AANDELENSPLITSING (alleen lezen; wijzigt geen drempel)",
+        f"{'reeks':<28}{'huidig':>9}{'niveau':>9}{'tol%':>6}   {'3j/jr ruw':>10}{'3j/jr corr':>11}   {'5/jr-drempel ruw':>17}{'corr':>9}{'als % niveau':>14}",
+    ]
+    for key in sleutels:
+        o, n = oud.get(key), nieuw.get(key)
+        if o is None or n is None:
+            regels.append(f"{key:<28}(niet in het rapport)")
+            continue
+        pct = "-" if not n.last_value else f"{abs(n.tolerance / n.last_value) * 100:.2g}"
+        q_oud, q_nieuw = o.quantile_thresholds.get(5), n.quantile_thresholds.get(5)
+        nieuw_pct = "-" if not (q_nieuw and n.last_value) else f"{abs(q_nieuw / n.last_value) * 100:.2g}"
+        regels.append(
+            f"{key:<28}{_g(n.tolerance, 9)}{_g(n.last_value, 9)}{pct:>6}   {_rate(o.stats.get('3j')):>10}{_rate(n.stats.get('3j')):>11}   "
+            f"{_g(q_oud, 17)}{_g(q_nieuw, 9)}{nieuw_pct:>14}"
+        )
+    regels.append("")
+    regels.append(
+        "Lezen: 'ruw' is de reeks zoals de back-fill haar leverde (met de halvering van 2025-12-05), 'corr' is dezelfde reeks omgerekend naar de "
+        "huidige aandelen. Vuurt de huidige drempel op de gecorrigeerde reeks veel vaker dan ~5 per jaar, dan was hij te grof voor de huidige koers; "
+        "de kolom '5/jr-drempel corr' toont wat bij 5 per jaar hoort. Een andere drempel is een nieuwe trigger-versie en een beslissing van DD "
+        "(checkpoint 2 en 5)."
+    )
     return "\n".join(regels)
 
 

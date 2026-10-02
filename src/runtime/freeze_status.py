@@ -80,6 +80,20 @@ def _db_tellingen(db_pad: str | None):
         conn.close()
 
 
+def _splitsingen_beoordeling(db_pad: str | None, sw) -> str:
+    """Leeg als de splitsingswaakhond niets te melden heeft (of de database er niet is), anders de samenvatting."""
+    if not db_pad or not Path(db_pad).exists():
+        return ""
+    conn = sqlite3.connect(f"file:{db_pad}?mode=ro", uri=True)
+    try:
+        regels = sw.waarschuwingen(conn)
+    except Exception as e:  # noqa: BLE001
+        return f"splitsingscontrole mislukt: {type(e).__name__}"
+    finally:
+        conn.close()
+    return f"{len(regels)} melding(en) van de splitsingswaakhond: " + " | ".join(regels)[:300] if regels else ""
+
+
 def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt]:
     # Imports bij het aanroepen, zodat een test een module-waarde kan vervangen en het hier terugziet.
     from agents import (
@@ -115,6 +129,14 @@ def bepaal_punten(db_pad: str | None = None, environ=None, nu=None) -> list[Punt
     voeg(G, "Doelenlijst en resolutieregels", f"{fv.TARGETS_VERSION}, {len(fg.doelen_beschrijving())} doelen, afdruk {doelen_fp}",
          "src/agents/*_agent.py", _versie_status(fv.TARGETS_VERSION, fv.TARGETS_FINGERPRINTS, doelen_fp),
          "wijziging na T₀ᵇ = nieuw cohort")
+    from contract import corporate_actions as ca
+    from runtime import split_waakhond as sw
+
+    splits = ", ".join(sorted({f"{s.datum}" for s in ca.SPLITSINGEN}))
+    waak = _splitsingen_beoordeling(db_pad, sw)
+    voeg(G, "Aandelensplitsingen (correctie bij het lezen)", f"{len(ca.SPLITSINGEN)} geregistreerd ({splits})",
+         "src/contract/corporate_actions.py", LET_OP if waak else TE_BEVESTIGEN,
+         waak or "reeksen van vóór een splitsing worden omgerekend naar de huidige aandelen; de ruwe claims blijven ongewijzigd")
     voeg(G, "Resolver-wachttijd", f"{rs.MAX_WACHTTIJD.days} dagen", "src/scoring/resolver.py", TE_BEVESTIGEN,
          "bepaalt mede welke voorspellingen in het cohort belanden; 'te bevestigen bij de freeze' (roadmap 4.5)")
     voeg(G, "Scorer", sc.SCORER_VERSION, "src/scoring/scores.py", TE_BEVESTIGEN, "pinball + CRPS (gelijk gewogen), Brier, log loss")
