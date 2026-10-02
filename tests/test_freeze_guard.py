@@ -163,10 +163,11 @@ def test_zonder_pin_en_zonder_ridge_staat_alles_nog_niet_bevroren_en_de_open_bes
     assert fs.samenvatting(punten)[fs.BEVROREN] == 0  # er is niets bevroren: dit overzicht doet dat nooit zelf
 
 
-@pytest.mark.parametrize("pin, verwacht", [(None, fs.TE_BEVESTIGEN), ("v3", fs.BEVROREN), ("v1", fs.LET_OP)])
+@pytest.mark.parametrize("pin, verwacht", [(None, fs.TE_BEVESTIGEN), ("huidige", fs.BEVROREN), ("v1", fs.LET_OP)])
 def test_de_trigger_pin_wordt_juist_beoordeeld(monkeypatch, pin, verwacht):
     from contract import trigger_version as tv
 
+    pin = tv.TRIGGER_VERSION if pin == "huidige" else pin  # niet hardcoden: de versie gaat omhoog bij elke regelwijziging
     monkeypatch.setattr(tv, "FROZEN_TRIGGER_VERSION", pin)
     assert _punt(fs.bepaal_punten(None), "Trigger-pin (FROZEN_TRIGGER_VERSION)").status == verwacht
 

@@ -747,6 +747,7 @@ fase 2 en 3 lopen erachteraan.
 
 - [x] **[02-10] Alpha Vantage: reden loggen en één herhaalpoging** (`src/sources/alpha_vantage.py`; sector, currency, commodity). Aanleiding: de eerste T₀ᵃ-dag miste `xlp_consumer_staples` zonder dat het log zei waarom. Completeness-check ongewijzigd (een blijvend gat telt nog steeds als niet-schone dag); `TRIGGER_VERSION` blijft v3. **Oorzaak van het gat nog onbekend**: de gelogde redenen van de komende ochtenden moeten dat uitwijzen (plan: `docs/deployment.md`).
 - [x] **[02-10] Splitscorrectie voor de ETF-reeksen** (`contract/corporate_actions.py`, `runtime/split_waakhond.py`): vijf sector-ETF's halveerden op 2025-12-05 door een 2-voor-1-splitsing in een niet-gecorrigeerde reeks; alle leespaden corrigeren nu, de ruwe claims blijven ongewijzigd, een waakhond meldt nieuwe splitsingen. Baseline-versie v3. **Open (DD, checkpoint 2/5):** de triggerdrempels van XLB, XLE, XLK, XLU en XLY zijn op de ongecorrigeerde historie gekalibreerd; vergelijking via `calibrate_triggers.py --vergelijk-splitsingen`, besluit over een nieuwe trigger-versie is aan DD.
+- [x] **[02-10] Trigger-versie v4: de drempels van vijf sector-ETF's** (DD akkoord, checkpoint 2/5; alleen configuratie in `sector_agent.py`, `src/triggers/` ongemoeid): XLK 8,9 → 5,4, XLE 2,6 → 1,6, XLY 6,2 → 3,2, XLB 2,0 → 1,2, XLU 1,8 → 1,0. Op de gecorrigeerde reeks vuurden de oude 0,3 tot 1,7 keer per jaar in plaats van ~5 (kalibratierapport `--vergelijk-splitsingen`, 02-10). Nog te bevestigen op de VPS na de uitrol: `calibrate_triggers.py --domain sector` toont ~5 per jaar. DD's idee voor een volatiliteitsgebonden drempel staat onder 4.2.
 - [ ] **Ingestion uit de sandbox.** Fetch-runner op eigen infra (VPS,
       Pi, of een van onze machines) die alleen ruwe data ophaalt en in de
       SQLite schrijft. Agents en LLM-calls mogen blijven waar ze zijn.
@@ -1200,6 +1201,18 @@ gescoord wordt er al in.
 - [ ] Adaptieve thresholds op basis van kalibratie-resultaten — **pas na
       het T₀+6-maanden-herzieningsmoment**, niet tussendoor (zie de
       bevriezingsafspraak)
+- [ ] **[02-10, idee van DD] Volatiliteitsgebonden drempel: trigger bij een beweging van N keer de gemiddelde dagbeweging (ATR-achtig) van de afgelopen 30 dagen.**
+      *Waarom het aantrekkelijk is:* de drempel schaalt vanzelf mee met de koers en de volatiliteit; de splitsing van 2025-12-05 had de vijf
+      drempels niet scheefgetrokken (trigger-versie v4), en het open punt "niveau-afhankelijke drempels" verdwijnt. Blijft deterministisch en LLM-vrij.
+      *Wat erbij hoort te worden uitgezocht (vóór bouwen):* (1) **we slaan per dag één waarde op (de slotkoers), dus geen echte ATR**
+      (die vraagt hoogste/laagste/slotkoers): de eerlijke tegenhanger is de gemiddelde absolute dagverandering van de slotkoers (of de standaarddeviatie);
+      (2) **de factor 2 geeft veel te veel triggers** (ruwe indicatie, niet gemeten: ~25 per jaar per reeks tegen de ~5 die we willen), dus N moet per reeks
+      gemeten worden, waarschijnlijk 4 tot 5; (3) **gedrag bij rustige en drukke tijden:** na rust triggert een gewone beweging snel, in een crisis stijgt de
+      drempel mee en triggert alleen het buitengewone; dat kan de momenten minder zichtbaar maken waarop aandacht gewenst is; (4) **niet elke reeks past**:
+      stapreeksen (de doelrange van de Fed: gemiddelde nul, dus elke verandering een trigger) en maandreeksen (CPI, banen: één waarneming per maand) vragen
+      een eigen venster en een ondergrens; (5) raakt de trigger-engine (checkpoint 2), vraagt een kalibratie per reeks en een nieuwe trigger-versie.
+      *Voorstel voor de proef (alleen lezen, nog niet gebouwd):* een rapport dat per reeks laat zien hoeveel triggers per jaar "N keer de gemiddelde beweging over 30 dagen"
+      zou geven voor N van 2 tot 6. Dat raakt de engine niet; het vraagt wel DD's akkoord omdat het niet op het kritieke pad naar T₀ ligt.
 
 ### 4.3 Agent Track Records — loopt mee vanaf T₀
 - [ ] Precision/recall/hallucination-rate per agent (QC-kant)

@@ -589,7 +589,7 @@ De log toont daarnaast per run een regel `LLM-verbruik: deze run ... deze maand 
       29-09, maar de run van 01-10 was niet schoon (sector 10 van 12 reeksen) en die van 02-10 ook niet (11 van 12), dus de telling
       herstartte op 05-10. **Een handmatige testrun
       vóór die datum telt als handmatige actie**, dus de smoke test hieronder wacht.
-- [ ] Trigger-versie `v3` in de log en in `trigger_events`.
+- [ ] Trigger-versie in de log en in `trigger_events`: `v3` t/m 05-10 en **`v4` vanaf de uitrol van PR "trigger-versie v4" (02-10-2026, de drempels van vijf sector-ETF's)**; de T₀ᵃ-teller meldt de wissel als LET OP en telt hem niet als niet-schone dag.
 - [ ] `MI_COHORT` leeg of `dry_run` in `.env` (de log zegt `dry_run`).
 - [ ] **Ook de reparatie van de forecast-prompt staat op de VPS** (volgende PR na #25): zonder die zou elke ronde falen op een prompt van ruim een miljoen tokens (zie project-state, 01-10).
 - [ ] **De code van PR #25 staat op de VPS** (vijf kwantielen, `llm_calls`, Sonnet 5.5), `pytest` geeft `880 passed`, en de databasemigratie
@@ -633,7 +633,7 @@ de forecast-ronde voor de lopende week, en de baselines. Controleer daarna:
    ```bash
    sqlite3 market_intelligence.db "SELECT DISTINCT agent, model_id, prompt_version, trigger_version FROM predictions;"
    ```
-   Agents: `claude-sonnet-5-5`, prompt-versie `v3`, trigger-versie `v3`. Baselines: `deterministic`.
+   Agents: `claude-sonnet-5-5`, prompt-versie `v3`, trigger-versie `v3` (dry-run tot de uitrol van v4, daarna `v4`). Baselines: `deterministic`.
 4. **De runs zelf:**
    ```bash
    sqlite3 market_intelligence.db "SELECT domain, mode, success, error FROM agent_runs WHERE mode IN ('forecast','deep_dive') ORDER BY run_at DESC LIMIT 15;"
@@ -731,6 +731,23 @@ niveau. Vuurt de huidige drempel op de gecorrigeerde reeks veel vaker dan 5 per 
 
 **Elke ochtend in het log:** `grep -i "splitsing" /var/log/mi/daily.log | tail`. Geen regels = niets te doen. Een regel `Mogelijke splitsing NIET geregistreerd` betekent dat een ETF-koers meer dan ~35% sprong: controleer of het echt een splitsing is
 (de ETF-aanbieder meldt ze vooraf) en laat de splitsing dan toevoegen aan `SPLITSINGEN`. Eén valse trigger voor die ETF op de dag zelf is verwacht (de live trigger-engine ziet de ruwe koers).
+
+## Trigger-versie v4: de drempels van vijf sector-ETF's (02-10-2026) — dry-run-plan (checkpoint 2 en 3), **goedgekeurd door DD op 02-10-2026**
+
+**Wat.** XLK 8,9 → 5,4, XLE 2,6 → 1,6, XLY 6,2 → 3,2, XLB 2,0 → 1,2, XLU 1,8 → 1,0. Alleen die vijf; de andere zes sector-ETF's, SPY en alle andere agents blijven gelijk. De trigger-engine (`src/triggers/`) en `src/qc/` zijn niet
+aangeraakt: alleen de configuratie in `sector_agent.py`. `TRIGGER_VERSION` is v4 (vingerafdruk `26f1dcf7937e4f86`). Reden: op de gecorrigeerde reeks vuurden de oude drempels 0,3 tot 1,7 keer per jaar in plaats van ~5 (zie "Splitsingscorrectie en de
+triggerdrempels" hierboven); de nieuwe zijn de 5-per-jaar-drempel op de gecorrigeerde laatste drie jaar, afgerond op één decimaal.
+
+**Verwachting.** Samen ongeveer 20 extra triggers per jaar (~0,4 per week) uit sector. Deep-dives kosten alleen iets als `--deep-dives` aanstaat.
+
+**Uitrollen.** Na een ochtendrun: `cd /opt/multi_agent && git pull` (niets te herstarten). Terugdraaien: `git revert` en weer `git pull`.
+
+**Controleren (alleen lezen).**
+```bash
+cd /opt/multi_agent && .venv/bin/python calibrate_triggers.py --domain sector
+```
+De kolom `3j` van XLK, XLE, XLY, XLB en XLU moet nu rond de 5 staan (4 tot 6 is goed); de andere sectoren ongewijzigd (rond de 5). De eerste drie ochtenden: in het log `Trigger-versie: v4` en het aantal `triggers=` bij sector; een enkele extra trigger per week is verwacht.
+**De T₀ᵃ-teller:** meldt de versiewissel (v3 → v4) als LET OP, maar het is geen niet-schone dag (schoon = alle agents ok én geen volledigheidstrigger).
 
 ## De pseudo-OOS-run (roadmap 4.4, fase 3b) — gebouwd op 02-10-2026, **nog niet gedraaid**
 

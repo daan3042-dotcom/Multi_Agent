@@ -40,6 +40,11 @@ VERSIES.
       vóór de freeze). Bestaande drempels zijn niet veranderd. De reeks
       bedient de FOMC-resolutie en vuurt op de besluitdag.
 
+  v4  v3 + de drempels van vijf sector-ETF's gecorrigeerd voor de splitsing van
+      2025-12-05 (02-10-2026, vóór de freeze, DD akkoord): XLK 8,9 -> 5,4,
+      XLE 2,6 -> 1,6, XLY 6,2 -> 3,2, XLB 2,0 -> 1,2, XLU 1,8 -> 1,0. Alleen
+      die vijf; de rest is ongewijzigd. Reden en cijfers: docs/roadmap.md.
+
 ONBEKEND IS GEEN v0. Triggers van vóór deze module hebben `NULL` in
 `trigger_events.trigger_version`: ze zijn gemaakt met drempels die
 ondertussen zijn veranderd (WALCL, sector), en `v0` zou daar te veel
@@ -48,7 +53,7 @@ beloven.
 
 from __future__ import annotations
 
-TRIGGER_VERSION = "v3"
+TRIGGER_VERSION = "v4"
 
 # versie -> vingerafdruk van de regels zoals die bij die versie golden.
 # Alleen de vingerafdruk van TRIGGER_VERSION wordt bewaakt; de oudere blijven
@@ -58,6 +63,7 @@ TRIGGER_FINGERPRINTS: dict[str, str] = {
     "v1": "6d38e5eadaa613b3",
     "v2": "f80c151df5175293",
     "v3": "1d72aeed38fc97ec",
+    "v4": "26f1dcf7937e4f86",
 }
 
 # De versie die bij de freeze vóór T₀ᵇ is bevestigd (CLAUDE.md, checkpoint 5).
