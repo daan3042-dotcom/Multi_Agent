@@ -49,7 +49,7 @@ from contract.prediction import QUANTILE_FIELDS, QUANTILE_LEVELS, HorizonKind, P
 from contract.resolution import Observation, ResolutionMethod, eerste_prints
 from scoring.resolver import observations_for
 
-BASELINE_VERSION = "v2"  # v2 (01-10-2026): vijf kwantielen i.p.v. drie
+BASELINE_VERSION = "v3"  # v3 (02-10-2026): reeksen gecorrigeerd voor aandelensplitsingen; v2 (01-10): vijf kwantielen i.p.v. drie
 """Versie van de baselines. Gaat mee als `prompt_version` (zelfde rol: een
 wijziging binnen een cohort is een covariaat, maar moet achteraf te zien
 zijn). Verander je hier iets aan de rekenwijze, verhoog dit dan."""

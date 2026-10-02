@@ -65,6 +65,7 @@ from runtime.notifications import Notification, Notifier, build_notification, lo
 from scoring.baseline_round import baseline_run_domain, run_baseline_round
 from scoring.baselines import BaselineRoundResult
 from scoring.evidence_sheet import build_evidence_sheet
+from runtime.split_waakhond import waarschuwingen as splitsing_waarschuwingen
 from scoring.resolver import ResolverResult, resolve_due_predictions
 from storage.schema import (
     has_successful_run,
@@ -431,6 +432,13 @@ def run_daily(
     except Exception as e:  # noqa: BLE001
         logger.error("Resolver afgebroken: %s: %s", type(e).__name__, e)
         result.resolver = ResolverResult(errors=[f"resolver afgebroken: {e}"])
+
+    # De splitsingswaakhond (contract/corporate_actions.py): alleen een logregel, en een fout hier laat de run nooit mislukken.
+    try:
+        for regel in splitsing_waarschuwingen(conn):
+            logger.warning(regel)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Splitsingscontrole mislukt: %s: %s", type(e).__name__, e)
 
     try:
         result.missed_days = _missed_days(conn, agents, now)

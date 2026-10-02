@@ -405,7 +405,7 @@ def test_baseline_voorspelt_exact_wat_de_agent_voorspelt(tmp_path):
         assert p.created_at == MAANDAG
         assert p.graph_node is doel.graph_node
         assert p.model_id == "deterministic"
-        assert p.prompt_version == "baseline-v2"
+        assert p.prompt_version == "baseline-v3"  # v3 (02-10-2026): reeksen gecorrigeerd voor splitsingen
         assert p.q10 <= p.q50 <= p.q90
 
 

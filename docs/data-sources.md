@@ -81,6 +81,22 @@ check is nu ook de controle op de betaalde tier hieronder** — komt er na
 de upgrade nog een completeness-trigger voorbij voor currency, sector of
 commodity, dan is het probleem niet opgelost.
 
+## GEMETEN op 02-10-2026 (2): vijf sector-ETF's halveerden op 5 december 2025 door een splitsing
+
+De pseudo-OOS-prompt (`pseudo_oos.py prompt`) toonde voor XLB, XLE, XLK, XLU en XLY een 52-weken-hoog van ongeveer het dubbele van de koers, en een spreiding over het
+laatste jaar die twee keer zo groot was als over vijf jaar. DD draaide een alleen-lezen controle op de echte database: één sprong per ETF, allemaal op **2025-12-05**
+(XLB 88,47 -> 44,09; XLE 92,22 -> 45,92; XLK 291,07 -> 146,60; XLU 87,42 -> 43,30; XLY 238,14 -> 119,73; verhoudingen 0,495 tot 0,504), geen enkele andere ETF en SPY niet. Het zijn
+**2-voor-1-splitsingen** in een reeks die niet voor splitsingen is gecorrigeerd: de back-fill gebruikt `TIME_SERIES_DAILY`, niet de gecorrigeerde variant.
+
+**Wat het besmette:** de spreiding in de evidence-sheet, de baselines (persistence, climatology, ridge), het afrekenen van een voorspelling die over de splitsingsdatum loopt, en het
+kalibratierapport van de triggers (de sectordrempels zijn absolute prijsverschillen en zijn mede op de dubbel zo hoge koersen van vóór de splitsing gekalibreerd). Niet besmet: `predictions` en de
+ruwe claims (die blijven onaangeroerd).
+
+**Gewijzigd (DD akkoord):** `contract/corporate_actions.py` (een expliciete lijst `SPLITSINGEN`), toegepast in het ene leespad `scoring/resolver.py::observations_for`: waarden van vóór een splitsing worden gedeeld
+door de verhouding, zodat de hele historie in huidige aandelen staat. `runtime/split_waakhond.py` meldt in het dagelijkse log (en in `freeze_status.py`) een sprong van meer dan ~35% die niet in de lijst staat, een
+geregistreerde splitsing waarvan de verhouding niet bij de sprong past, en een geregistreerde splitsing die de data niet bevestigt (typefout in de datum). Alleen waarschuwen, nooit wijzigen. Een nieuwe splitsing wordt
+alleen AAN HET EIND van de lijst toegevoegd. Baseline-versie v2 -> v3. De triggerdrempels zijn NIET gewijzigd; de vergelijking staat in `docs/deployment.md`.
+
 ## GEMETEN op 02-10-2026: één reeks miste, het log zei niet waarom — en wat er is veranderd
 
 De eerste T₀ᵃ-dag (02-10, 07:15 UTC) leverde van de twaalf sectorreeksen er elf: `xlp_consumer_staples` ontbrak. Alle agents meldden `ok`;

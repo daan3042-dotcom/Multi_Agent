@@ -746,6 +746,7 @@ Blokkades 1 en 2 uit deel A. Dit is de sectie waaraan nu gewerkt wordt;
 fase 2 en 3 lopen erachteraan.
 
 - [x] **[02-10] Alpha Vantage: reden loggen en één herhaalpoging** (`src/sources/alpha_vantage.py`; sector, currency, commodity). Aanleiding: de eerste T₀ᵃ-dag miste `xlp_consumer_staples` zonder dat het log zei waarom. Completeness-check ongewijzigd (een blijvend gat telt nog steeds als niet-schone dag); `TRIGGER_VERSION` blijft v3. **Oorzaak van het gat nog onbekend**: de gelogde redenen van de komende ochtenden moeten dat uitwijzen (plan: `docs/deployment.md`).
+- [x] **[02-10] Splitscorrectie voor de ETF-reeksen** (`contract/corporate_actions.py`, `runtime/split_waakhond.py`): vijf sector-ETF's halveerden op 2025-12-05 door een 2-voor-1-splitsing in een niet-gecorrigeerde reeks; alle leespaden corrigeren nu, de ruwe claims blijven ongewijzigd, een waakhond meldt nieuwe splitsingen. Baseline-versie v3. **Open (DD, checkpoint 2/5):** de triggerdrempels van XLB, XLE, XLK, XLU en XLY zijn op de ongecorrigeerde historie gekalibreerd; vergelijking via `calibrate_triggers.py --vergelijk-splitsingen`, besluit over een nieuwe trigger-versie is aan DD.
 - [ ] **Ingestion uit de sandbox.** Fetch-runner op eigen infra (VPS,
       Pi, of een van onze machines) die alleen ruwe data ophaalt en in de
       SQLite schrijft. Agents en LLM-calls mogen blijven waar ze zijn.

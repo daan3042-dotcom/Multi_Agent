@@ -512,6 +512,8 @@ per-ticker-namespacing nodig zoals bij equity.
 
 ## Sector agent (`agents/sector_agent.py`)
 
+*Splitsingen (02-10-2026):* vijf ETF's (XLB, XLE, XLK, XLU, XLY) halveerden op 5 december 2025 door een 2-voor-1-splitsing. Alles wat over de historie rekent (evidence-sheet, baselines, afrekenen, kalibratie) leest de reeks gecorrigeerd (`contract/corporate_actions.py`); de ruwe claims blijven ongewijzigd, en een waakhond meldt in het log een nieuwe, nog niet geregistreerde splitsing. De triggerdrempels van deze agent zijn bewust nog niet aangepast (beslissing DD, `docs/deployment.md`).
+
 *Ophalen (02-10-2026):* een mislukte Alpha Vantage-reeks krijgt een gelogde reden en wordt na één pauze van 30 s één keer opnieuw geprobeerd (`sources/alpha_vantage.py`). Een gat dat blijft, blijft een volledigheidstrigger.
 
 **Wat het volgt:** alle 11 SPDR Select Sector-ETF's (de standaard,

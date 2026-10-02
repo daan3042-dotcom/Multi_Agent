@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from calibration.trigger_calibration import calibrate_all, render_report  # noqa: E402
+from calibration.trigger_calibration import calibrate_all, render_report, render_split_vergelijking  # noqa: E402
 from runtime.env import load_env_file  # noqa: E402
 from storage.schema import DEFAULT_DB_PATH, init_db  # noqa: E402
 
@@ -43,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Trigger-kalibratierapport (roadmap 1.5) -- alleen lezen")
     parser.add_argument("--db", default=os.environ.get("MI_DB_PATH", DEFAULT_DB_PATH))
     parser.add_argument("--domain", choices=DOMAINS, default=None, help="beperk het rapport tot één domein")
+    parser.add_argument("--ongecorrigeerd", action="store_true",
+                        help="rapport op de ruwe reeksen, zonder de correctie voor aandelensplitsingen (zoals de kalibratie van 29-09)")
+    parser.add_argument("--vergelijk-splitsingen", action="store_true",
+                        help="alleen de reeksen met een splitsing, ruw naast gecorrigeerd")
     args = parser.parse_args(argv)
 
     try:
@@ -52,7 +56,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        resultaten = calibrate_all(conn, datetime.now(timezone.utc), domain=args.domain)
+        nu = datetime.now(timezone.utc)
+        if args.vergelijk_splitsingen:
+            ruw = calibrate_all(conn, nu, domain="sector", corrigeer_splitsingen=False)
+            gecorrigeerd = calibrate_all(conn, nu, domain="sector", corrigeer_splitsingen=True)
+            print(render_split_vergelijking(ruw, gecorrigeerd))
+            return 0
+        resultaten = calibrate_all(conn, nu, domain=args.domain, corrigeer_splitsingen=not args.ongecorrigeerd)
     finally:
         conn.close()
 

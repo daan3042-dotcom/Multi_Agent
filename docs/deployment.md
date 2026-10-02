@@ -718,6 +718,20 @@ De kennisgrens van juni 2026 is **bevestigd in het Anthropic-modeloverzicht** (0
 - **Het logboek (`llm_calls`)** legt elk verzoek (inclusief de denkinstelling) en elk antwoord vast, zodat de instelling per voorspelling terug te vinden is.
   De denkinstelling staat dus NIET in `model_id`; het is een covariaat die alleen in dit logboek staat.
 
+## Splitsingscorrectie en de triggerdrempels van de sector-ETF's (02-10-2026) — **beslissing voor DD, niets gewijzigd**
+
+Op 5 december 2025 halveerden XLB, XLE, XLK, XLU en XLY door een 2-voor-1-splitsing (zie `docs/data-sources.md`). Alle leespaden corrigeren daar nu voor (`contract/corporate_actions.py`); de triggerdrempels zijn
+absolute prijsverschillen die op de ongecorrigeerde historie zijn gekalibreerd en zijn daarom NIET aangepast. Bekijk eerst de vergelijking (alleen lezen, wijzigt niets):
+```bash
+cd /opt/multi_agent && git pull && .venv/bin/python calibrate_triggers.py --vergelijk-splitsingen
+```
+Per ETF met een splitsing staan er: de huidige drempel, hoe vaak hij per jaar vuurt op de ruwe en op de gecorrigeerde reeks (doel: ~5 per jaar), en welke drempel bij 5 per jaar hoort op de gecorrigeerde reeks, ook als percentage van het
+niveau. Vuurt de huidige drempel op de gecorrigeerde reeks veel vaker dan 5 per jaar, dan was hij te grof (XLK 8,9 en XLY 6,2 zijn rond 5% van de koers, tegen ~2% bij XLF en XLI). Een andere drempel is een nieuwe trigger-versie
+(`TRIGGER_VERSION`) en een beslissing van DD (checkpoint 2 en 5); de trigger-engine zelf blijft ongemoeid. Het volledige gecorrigeerde rapport: `calibrate_triggers.py --domain sector`; het ruwe: `--domain sector --ongecorrigeerd`.
+
+**Elke ochtend in het log:** `grep -i "splitsing" /var/log/mi/daily.log | tail`. Geen regels = niets te doen. Een regel `Mogelijke splitsing NIET geregistreerd` betekent dat een ETF-koers meer dan ~35% sprong: controleer of het echt een splitsing is
+(de ETF-aanbieder meldt ze vooraf) en laat de splitsing dan toevoegen aan `SPLITSINGEN`. Eén valse trigger voor die ETF op de dag zelf is verwacht (de live trigger-engine ziet de ruwe koers).
+
 ## De pseudo-OOS-run (roadmap 4.4, fase 3b) — gebouwd op 02-10-2026, **nog niet gedraaid**
 
 **Wat het is.** De agents doen de wekelijkse forecast-ronde over het verleden: de dertien maandagen van 6 juli t/m 28 september 2026 (na de kennisgrens

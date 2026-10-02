@@ -33,6 +33,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from contract.corporate_actions import pas_splitsingen_toe
 from contract.prediction import QUANTILE_FIELDS, Prediction, PredictionKind
 from contract.resolution import (
     NotYetResolvable,
@@ -98,8 +99,12 @@ class ResolverResult:
         )
 
 
-def observations_for(conn, metric_key: str) -> list[Observation]:
-    return [
+def observations_for(conn, metric_key: str, corrigeer_splitsingen: bool = True) -> list[Observation]:
+    """De waarnemingen van één reeks. Standaard gecorrigeerd voor aandelensplitsingen (`contract/corporate_actions.py`): dit
+    is het ene leespad voor evidence-sheet, baselines, ridge, resolver en kalibratierapport, dus daar zit de correctie. De ruwe
+    claims blijven onaangeroerd; `corrigeer_splitsingen=False` geeft ze zoals de bron ze leverde (alleen voor de splitsingswaakhond
+    en voor een vergelijking in het kalibratierapport)."""
+    waarnemingen = [
         Observation(
             source_time=datetime.fromisoformat(source_time),
             value=waarde,
@@ -108,6 +113,7 @@ def observations_for(conn, metric_key: str) -> list[Observation]:
         )
         for claim_id, source_time, waarde, analysis_time in load_observations(conn, metric_key)
     ]
+    return pas_splitsingen_toe(metric_key, waarnemingen) if corrigeer_splitsingen else waarnemingen
 
 
 def resolve_one(conn, prediction: Prediction) -> Resolution:
